@@ -1,0 +1,87 @@
+@import "tailwindcss";
+
+:root {
+  /* LedgeIt Design Tokens */
+  --ledge-bg:       #0A0A0F;
+  --ledge-surface:  #111116;
+  --ledge-surface2: #18181f;
+  --ledge-border:   #1F1F27;
+  --ledge-accent:   #10B981;
+  --ledge-danger:   #F43F5E;
+  --ledge-muted:    #6B7280;
+  --ledge-data:     #E5E7EB;
+}
+
+@theme inline {
+  --color-ledge-bg:       var(--ledge-bg);
+  --color-ledge-surface:  var(--ledge-surface);
+  --color-ledge-surface2: var(--ledge-surface2);
+  --color-ledge-border:   var(--ledge-border);
+  --color-ledge-accent:   var(--ledge-accent);
+  --color-ledge-danger:   var(--ledge-danger);
+  --color-ledge-muted:    var(--ledge-muted);
+  --color-ledge-data:     var(--ledge-data);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--ledge-bg);
+  color: var(--ledge-data);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior: none;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--ledge-border);
+  border-radius: 2px;
+}
+
+/* Remove tap highlight on mobile */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ─── Skeleton shimmer ───────────────────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position:  400px 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--ledge-surface2) 25%,
+    var(--ledge-border) 50%,
+    var(--ledge-surface2) 75%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+/* Hide scrollbars while keeping scrollability */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
