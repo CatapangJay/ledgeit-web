@@ -44,32 +44,38 @@ export default function BalanceMetric() {
   }, [])
 
   return (
-    <div className="pb-4 pt-8">
-      <p className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-ledge-muted">
-        Total Balance
+    <div className="pb-2 pt-0">
+      <p
+        className="mb-1 text-[12px] font-semibold uppercase tracking-[0.18em]"
+        style={{ color: 'rgba(255,255,255,0.65)' }}
+      >
+        Total Net Worth
       </p>
       <div className="flex items-end gap-3">
-        <span className="font-mono text-[2.6rem] font-semibold leading-none tracking-tight text-ledge-data">
+        <span
+          className="font-mono text-[2.6rem] font-bold leading-none tracking-tight"
+          style={{ color: '#ffffff' }}
+        >
           {formatCurrency(display)}
         </span>
-        <motion.div
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.85, type: 'spring', stiffness: 300, damping: 24 }}
-          className={`mb-0.5 flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-xs ${
-            isPositive
-              ? 'bg-emerald-500/10 text-emerald-400'
-              : 'bg-rose-500/10 text-rose-400'
-          }`}
-        >
-          {isPositive ? (
-            <TrendUp size={12} weight="bold" aria-hidden="true" />
-          ) : (
-            <TrendDown size={12} weight="bold" aria-hidden="true" />
-          )}
-          {formatCurrency(Math.abs(monthlyNet))} this month
-        </motion.div>
       </div>
+      <motion.div
+        initial={{ opacity: 0, y: 4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.85, type: 'spring', stiffness: 300, damping: 24 }}
+        className="mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold"
+        style={{
+          background: isPositive ? 'rgba(255,255,255,0.2)' : 'rgba(255,100,100,0.25)',
+          color: '#ffffff',
+        }}
+      >
+        {isPositive ? (
+          <TrendUp size={12} weight="bold" aria-hidden="true" />
+        ) : (
+          <TrendDown size={12} weight="bold" aria-hidden="true" />
+        )}
+        {formatCurrency(Math.abs(monthlyNet))} this month
+      </motion.div>
     </div>
   )
 }

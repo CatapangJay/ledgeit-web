@@ -19,7 +19,10 @@ export default function SpendDonut({ spent, saved }: Props) {
   const savedDash = circumference * (1 - spentRatio)
 
   return (
-    <div className="flex items-center gap-6 border-t border-ledge-border py-5">
+    <div
+      className="flex items-center gap-6 rounded-2xl p-5"
+      style={{ background: '#ffffff', boxShadow: '0 2px 12px rgba(0,53,46,0.06)' }}
+    >
       {/* SVG ring */}
       <div className="shrink-0">
         <svg
@@ -35,7 +38,7 @@ export default function SpendDonut({ spent, saved }: Props) {
             cy={size / 2}
             r={r}
             fill="none"
-            stroke="#1F1F27"
+            stroke="#f0f4f2"
             strokeWidth={strokeWidth}
           />
           {/* Spent arc */}
@@ -44,7 +47,7 @@ export default function SpendDonut({ spent, saved }: Props) {
             cy={size / 2}
             r={r}
             fill="none"
-            stroke="#F43F5E"
+            stroke="#ba1a1a"
             strokeWidth={strokeWidth}
             strokeLinecap="round"
             strokeDasharray={`${circumference} ${circumference}`}
@@ -58,18 +61,18 @@ export default function SpendDonut({ spent, saved }: Props) {
       {/* Legend */}
       <div className="flex flex-col gap-3 min-w-0">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-widest text-ledge-muted">
+          <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#6e9990' }}>
             Spent
           </p>
-          <p className="font-mono text-xl font-semibold text-rose-400">
+          <p className="font-mono text-xl font-bold" style={{ color: '#ba1a1a' }}>
             {formatCurrency(spent)}
           </p>
         </div>
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-widest text-ledge-muted">
+          <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#6e9990' }}>
             Saved
           </p>
-          <p className="font-mono text-xl font-semibold text-emerald-400">
+          <p className="font-mono text-xl font-bold" style={{ color: '#1f6950' }}>
             {formatCurrency(saved)}
           </p>
         </div>
