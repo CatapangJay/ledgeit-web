@@ -183,7 +183,7 @@ export default function BulkEntryMode({ onAllLogged, onDiscard }: Props) {
         const entry = prev.find((e) => e.id === id)
         if (!entry || entry.amount === null) return prev
         const tx: Transaction = {
-          id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          id: crypto.randomUUID(),
           raw: entry.raw,
           amount: entry.amount,
           merchant: entry.merchant,
@@ -211,7 +211,7 @@ export default function BulkEntryMode({ onAllLogged, onDiscard }: Props) {
       if (toLog.length === 0) return prev
       toLog.forEach((entry, idx) => {
         addTransaction({
-          id: `tx-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
+          id: crypto.randomUUID(),
           raw: entry.raw,
           amount: entry.amount!,
           merchant: entry.merchant,

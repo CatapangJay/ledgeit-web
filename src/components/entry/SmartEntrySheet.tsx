@@ -144,7 +144,7 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
   const handleLog = useCallback(() => {
     if (!parseResult?.draft.amount) return
     const tx: Transaction = {
-      id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      id: crypto.randomUUID(),
       raw: parseResult.draft.raw,
       amount: parseResult.draft.amount,
       merchant: parseResult.draft.merchant,

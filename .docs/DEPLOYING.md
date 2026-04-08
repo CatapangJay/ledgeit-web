@@ -30,7 +30,7 @@ In your Railway project, go to **Settings → Variables** and add the following.
 | Variable | Where to copy from |
 |---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Settings → API → Project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Settings → API → `anon` `public` key |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY` | Supabase → Settings → API → Publishable key |
 | `NEXT_PUBLIC_SITE_URL` | Set to your Railway deploy URL (e.g. `https://ledgeit-web.up.railway.app`) |
 
 > All variable names must match `.env.example` exactly.  

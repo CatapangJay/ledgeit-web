@@ -86,17 +86,15 @@ export const useStore = create<AppStore>()((set, get) => ({
   },
 
   addTransaction(tx) {
-    const { userId } = get()
     // Optimistic: add immediately
     set((state) => ({ transactions: [tx, ...state.transactions] }))
     // Background DB write — rollback on failure
-    if (userId) {
-      insertTransaction(userId, tx).catch(() => {
-        set((state) => ({
-          transactions: state.transactions.filter((t) => t.id !== tx.id),
-        }))
-      })
-    }
+    insertTransaction(tx).catch((err) => {
+      console.error('[store] insertTransaction failed:', err)
+      set((state) => ({
+        transactions: state.transactions.filter((t) => t.id !== tx.id),
+      }))
+    })
   },
 
   deleteTransaction(id) {
@@ -106,7 +104,8 @@ export const useStore = create<AppStore>()((set, get) => ({
       transactions: state.transactions.filter((t) => t.id !== id),
     }))
     // Background DB delete — rollback on failure
-    removeTransaction(id).catch(() => {
+    removeTransaction(id).catch((err) => {
+      console.error('[store] removeTransaction failed:', err)
       set({ transactions: prev })
     })
   },
@@ -120,7 +119,8 @@ export const useStore = create<AppStore>()((set, get) => ({
       ),
     }))
     // Background DB update — rollback on failure
-    patchTransaction(id, patch).catch(() => {
+    patchTransaction(id, patch).catch((err) => {
+      console.error('[store] patchTransaction failed:', err)
       set({ transactions: prev })
     })
   },

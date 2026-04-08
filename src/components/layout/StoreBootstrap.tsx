@@ -15,13 +15,17 @@ export default function StoreBootstrap() {
   const supabase = useRef(createClient()).current
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const user = session?.user ?? null
       if (user) {
         setUserId(user.id)
         loadTransactions(user.id)
         loadBudgetLimits(user.id)
+      } else {
+        setUserId(null)
       }
     })
+    return () => subscription.unsubscribe()
   }, [supabase, setUserId, loadTransactions, loadBudgetLimits])
 
   return null

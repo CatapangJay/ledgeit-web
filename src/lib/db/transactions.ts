@@ -41,6 +41,13 @@ function rowToTransaction(row: TransactionRow): Transaction {
 
 // ── Typed DB functions ────────────────────────────────────────────────────────
 
+async function getCurrentUserId(): Promise<string> {
+  const supabase = createClient()
+  const { data: { user }, error } = await supabase.auth.getUser()
+  if (error || !user) throw new Error('Not authenticated')
+  return user.id
+}
+
 export async function fetchTransactions(userId: string): Promise<Transaction[]> {
   const supabase = createClient()
   const { data, error } = await supabase
@@ -53,11 +60,9 @@ export async function fetchTransactions(userId: string): Promise<Transaction[]> 
   return (data as TransactionRow[]).map(rowToTransaction)
 }
 
-export async function insertTransaction(
-  userId: string,
-  tx: Transaction
-): Promise<void> {
+export async function insertTransaction(tx: Transaction): Promise<void> {
   const supabase = createClient()
+  const userId = await getCurrentUserId()
   const { error } = await supabase.from('transactions').insert({
     id: tx.id,
     user_id: userId,

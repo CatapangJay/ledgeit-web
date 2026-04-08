@@ -17,7 +17,7 @@ const BASE_CHIPS: Chip[] = [
   { value: 'income', label: 'Income' },
 ]
 
-const CATEGORY_CHIPS: Chip[] = CATEGORIES.filter((c) => c.id !== 'other').map((c) => ({
+const CATEGORY_CHIPS: Chip[] = CATEGORIES.filter((c) => c.id !== 'other' && c.id !== 'income').map((c) => ({
   value: c.id as FilterValue,
   label: c.label,
 }))
