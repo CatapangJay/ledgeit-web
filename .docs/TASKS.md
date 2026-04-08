@@ -356,6 +356,122 @@
 
 ---
 
+## Phase 9 — Database & Auth (Supabase + PostgreSQL)
+
+### TASK-019: Supabase Project Setup & Environment Config
+- **Owner:** Frontend Lead
+- **Estimate:** 30m
+- **Description:** Initialize the Supabase project, install the JS client, and wire environment variables for both browser and server contexts. No REST usage — direct PostgreSQL only.
+- **Subtasks:**
+  - [ ] Create Supabase project on supabase.io (choose region closest to Railway deploy target)
+  - [ ] Install `@supabase/supabase-js` and `@supabase/ssr`
+  - [ ] Create `.env.local` with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `DATABASE_URL` (direct Postgres connection string)
+  - [ ] Create `.env.example` with placeholder values — commit this file, never `.env.local`
+  - [ ] Create `lib/supabase/client.ts` — singleton browser client using `createBrowserClient`
+  - [ ] Create `lib/supabase/server.ts` — server client using `createServerClient` with cookie store
+  - [ ] Verify connection by logging `supabase.auth.getSession()` in a server component
+- **Acceptance Criteria:**
+  - `.env.example` committed, `.env.local` in `.gitignore`
+  - Browser and server clients initialize without errors
+  - No `DATABASE_URL` or secrets appear in any committed file
+- **Dependencies:** TASK-001
+
+---
+
+### TASK-020: PostgreSQL Schema & Migrations (`db/migrations/`)
+- **Owner:** Frontend Lead
+- **Estimate:** 1.5h
+- **Description:** Define the canonical schema for all persisted data, write idempotent SQL migration files, and establish Row Level Security (RLS) policies so users only access their own data.
+- **Subtasks:**
+  - [ ] Create `db/migrations/` and `db/seeds/` directories with a `db/README.md` (local setup steps)
+  - [ ] Write `db/migrations/0001_create_transactions.sql`:
+    - `transactions` table: `id UUID PK`, `user_id UUID FK → auth.users`, `amount NUMERIC(12,2)`, `type TEXT CHECK ('income','expense')`, `merchant TEXT`, `category_id TEXT`, `notes TEXT`, `date DATE`, `created_at TIMESTAMPTZ DEFAULT now()`
+  - [ ] Write `db/migrations/0002_create_budget_limits.sql`:
+    - `budget_limits` table: `id UUID PK`, `user_id UUID FK → auth.users`, `category_id TEXT`, `limit_amount NUMERIC(12,2)`, `month TEXT` (format `YYYY-MM`), UNIQUE constraint on `(user_id, category_id, month)`
+  - [ ] Enable RLS on both tables; add `SELECT/INSERT/UPDATE/DELETE` policies restricted to `auth.uid() = user_id`
+  - [ ] Write `db/seeds/dev_seed.sql` — 10 realistic transactions across 5 categories for a test user
+  - [ ] Run migrations via Supabase SQL editor; verify schema with `\d transactions` in psql
+  - [ ] Update `src/types/index.ts` so `Transaction` and `BudgetLimit` field names match DB columns
+- **Acceptance Criteria:**
+  - All migrations are idempotent (`CREATE TABLE IF NOT EXISTS`, `DROP POLICY IF EXISTS`)
+  - RLS blocks cross-user data access (verify with two test accounts)
+  - `src/types/index.ts` types align 1:1 with DB columns — no field name drift
+  - Seed script runs cleanly against a fresh schema
+- **Dependencies:** TASK-019, TASK-002
+
+---
+
+### TASK-021: Migrate Store Persistence to Supabase DB (`lib/store.ts`, `lib/db/`)
+- **Owner:** Frontend Lead
+- **Estimate:** 2h
+- **Description:** Replace the localStorage Zustand persist middleware with Supabase PostgreSQL as the source of truth. Keep Zustand for optimistic UI state; all mutations hit the DB and reconcile on response.
+- **Subtasks:**
+  - [ ] Create `lib/db/transactions.ts` — typed async functions: `fetchTransactions(userId)`, `insertTransaction(draft)`, `deleteTransaction(id)`, `updateTransaction(id, patch)` using the server Supabase client
+  - [ ] Create `lib/db/budgetLimits.ts` — `fetchBudgetLimits(userId, month)`, `upsertBudgetLimit(limit)`
+  - [ ] Remove `persist` middleware from `lib/store.ts`; replace initial seed data with a `loadTransactions()` action that calls `lib/db/transactions.ts`
+  - [ ] Implement optimistic updates: apply state change immediately, rollback on DB error
+  - [ ] Call `loadTransactions()` in root layout after session is confirmed
+  - [ ] All DB functions scope queries with `eq('user_id', userId)` — never unfiltered selects
+  - [ ] Remove the dev seed from `store.ts`; rely on `db/seeds/dev_seed.sql` instead
+- **Acceptance Criteria:**
+  - Transactions survive a hard browser refresh (loaded from DB, not localStorage)
+  - Adding and deleting transactions reflects in DB within one network round-trip
+  - No unfiltered DB queries — every query includes `user_id` predicate
+  - Store hydration completes without layout shift (loading skeleton shown during fetch)
+- **Dependencies:** TASK-019, TASK-020, TASK-005
+
+---
+
+### TASK-022: Supabase Auth Integration
+- **Owner:** Frontend Lead
+- **Estimate:** 2h
+- **Description:** Add email magic-link authentication. Protect all app routes behind a session check. Scope all data to the authenticated user.
+- **Subtasks:**
+  - [ ] Enable "Email (Magic Link)" provider in Supabase Auth dashboard; disable email confirmation requirement for dev
+  - [ ] Create `app/(auth)/login/page.tsx` — single email input, "Send Magic Link" button, success message state
+  - [ ] Create `app/auth/callback/route.ts` — Next.js Route Handler that exchanges the code for a session (`supabase.auth.exchangeCodeForSession`) and redirects to `/`
+  - [ ] Create `middleware.ts` at project root — use `@supabase/ssr` to refresh session cookies on every request; redirect unauthenticated users from protected routes to `/login`
+  - [ ] Define protected route matcher in `middleware.ts`: match `/((?!login|auth).*)` 
+  - [ ] Update `AppShell.tsx` header: show authenticated user email (truncated) + "Sign out" icon button that calls `supabase.auth.signOut()` and redirects to `/login`
+  - [ ] Pass `user.id` from server session to `loadTransactions()` on app boot
+  - [ ] Add `NEXT_PUBLIC_SITE_URL` to `.env.example` for magic link redirect configuration in Supabase dashboard
+- **Acceptance Criteria:**
+  - Unauthenticated visit to `/` redirects to `/login`
+  - Magic link email arrives and clicking it lands the user on `/` with an active session
+  - Signing out clears session and redirects to `/login`
+  - Transactions loaded from DB are scoped to the signed-in user only
+  - No user data accessible in any route without a valid session cookie
+- **Dependencies:** TASK-019, TASK-021, TASK-007
+
+---
+
+## Phase 10 — Deployment
+
+### TASK-023: Railway Deployment Guide (`.docs/DEPLOYING.md`)
+- **Owner:** Frontend Lead
+- **Estimate:** 45m
+- **Description:** Write a step-by-step deployment guide for hosting the Next.js app on Railway, connected to the existing Supabase project. Covers environment variables, build config, and domain setup.
+- **Subtasks:**
+  - [ ] Create `.docs/DEPLOYING.md` with the following sections:
+    - **Prerequisites** — Railway account, Supabase project live, GitHub repo connected
+    - **Create Railway Project** — new project → Deploy from GitHub repo → select `ledgeit-web`
+    - **Environment Variables** — table of all required vars (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `DATABASE_URL`, `NEXT_PUBLIC_SITE_URL`) with instructions to copy from Supabase dashboard → Settings → Database
+    - **Build & Start Commands** — `npm run build` / `npm run start`; note Railway auto-detects Next.js
+    - **Supabase Auth Redirect URL** — add Railway deploy URL to Supabase Auth → URL Configuration → Redirect URLs
+    - **Custom Domain** (optional) — Railway Settings → Domains → add CNAME
+    - **Redeploy on push** — confirm GitHub webhook auto-deploys on push to `main`
+    - **Verifying the deploy** — checklist: app loads, magic link redirects correctly, transactions persist
+  - [ ] Add a `## Rollback` section: re-deploy previous Railway deployment from the Deployments tab
+  - [ ] Add a `## Secrets Checklist` callout: confirm no `.env.local` committed, all secrets set in Railway dashboard only
+- **Acceptance Criteria:**
+  - A developer with no prior Railway experience can deploy successfully by following the guide alone
+  - All Railway environment variable names match `.env.example` exactly
+  - Guide references Supabase dashboard path for each secret it asks the developer to copy
+  - No actual secret values appear anywhere in the document
+- **Dependencies:** TASK-019, TASK-020, TASK-022
+
+---
+
 ## Dependency Graph
 
 ```
@@ -369,6 +485,12 @@ TASK-007
   └─ TASK-010, TASK-013, TASK-014
 
 TASK-015, TASK-016, TASK-017, TASK-018 (parallel, after Phase 5–7)
+
+TASK-019 (Supabase Setup)
+  ├─ TASK-020 (Schema) → TASK-021 (Migrate Store) → TASK-022 (Auth)
+  └─ TASK-022 (Auth)
+
+TASK-023 (Railway Docs) — after TASK-019, TASK-020, TASK-022
 ```
 
 ---
@@ -390,5 +512,10 @@ TASK-015, TASK-016, TASK-017, TASK-018 (parallel, after Phase 5–7)
 | TASK-016 Empty States | P2 Medium | 30m | Polish |
 | TASK-017 Mobile QA | P2 Medium | 1h | QA |
 | TASK-018 A11y | P3 Low | 45m | QA |
+| TASK-019 Supabase Setup | P1 High | 30m | Infra |
+| TASK-020 DB Schema | P1 High | 1.5h | Infra |
+| TASK-021 Store → DB | P1 High | 2h | Infra |
+| TASK-022 Auth | P1 High | 2h | Auth |
+| TASK-023 Railway Docs | P2 Medium | 45m | Deployment |
 
-**Total Estimate: ~20 hours**
+**Total Estimate: ~26.75 hours**

@@ -1,0 +1,110 @@
+import { createClient } from '@/lib/supabase/client'
+import { CATEGORIES } from '@/types'
+import type { Transaction } from '@/types'
+
+// ── DB row shape returned from Supabase ───────────────────────────────────────
+interface TransactionRow {
+  id: string
+  user_id: string
+  amount: number
+  type: string
+  merchant: string
+  category_id: string
+  notes: string | null
+  raw: string
+  confidence: number
+  is_recurring: boolean
+  date: string
+  created_at: string
+}
+
+// ── Mapper: DB row → frontend Transaction ────────────────────────────────────
+function rowToTransaction(row: TransactionRow): Transaction {
+  const category =
+    CATEGORIES.find((c) => c.id === row.category_id) ??
+    CATEGORIES[CATEGORIES.length - 1]
+
+  return {
+    id: row.id,
+    raw: row.raw,
+    amount: Number(row.amount),
+    merchant: row.merchant,
+    category,
+    date: row.date,
+    type: row.type as 'expense' | 'income',
+    confidence: Number(row.confidence),
+    isRecurring: row.is_recurring,
+    note: row.notes ?? undefined,
+    createdAt: row.created_at,
+  }
+}
+
+// ── Typed DB functions ────────────────────────────────────────────────────────
+
+export async function fetchTransactions(userId: string): Promise<Transaction[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+
+  if (error) throw new Error(error.message)
+  return (data as TransactionRow[]).map(rowToTransaction)
+}
+
+export async function insertTransaction(
+  userId: string,
+  tx: Transaction
+): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase.from('transactions').insert({
+    id: tx.id,
+    user_id: userId,
+    amount: tx.amount,
+    type: tx.type,
+    merchant: tx.merchant,
+    category_id: tx.category.id,
+    notes: tx.note ?? null,
+    raw: tx.raw,
+    confidence: tx.confidence,
+    is_recurring: tx.isRecurring ?? false,
+    date: tx.date,
+    created_at: tx.createdAt,
+  })
+  if (error) throw new Error(error.message)
+}
+
+export async function removeTransaction(id: string): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('transactions')
+    .delete()
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+export async function patchTransaction(
+  id: string,
+  patch: Partial<Transaction>
+): Promise<void> {
+  const supabase = createClient()
+  const dbPatch: Record<string, unknown> = {}
+
+  if (patch.amount !== undefined) dbPatch.amount = patch.amount
+  if (patch.type !== undefined) dbPatch.type = patch.type
+  if (patch.merchant !== undefined) dbPatch.merchant = patch.merchant
+  if (patch.category !== undefined) dbPatch.category_id = patch.category.id
+  if (patch.note !== undefined) dbPatch.notes = patch.note
+  if (patch.date !== undefined) dbPatch.date = patch.date
+  if (patch.raw !== undefined) dbPatch.raw = patch.raw
+  if (patch.isRecurring !== undefined) dbPatch.is_recurring = patch.isRecurring
+
+  if (Object.keys(dbPatch).length === 0) return
+
+  const { error } = await supabase
+    .from('transactions')
+    .update(dbPatch)
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+}
