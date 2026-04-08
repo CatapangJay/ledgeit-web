@@ -1,5 +1,5 @@
 import { CATEGORIES } from '@/types'
-import type { Category, TransactionDraft } from '@/types'
+import type { Category, CategoryId, TransactionDraft } from '@/types'
 
 // ─── Keyword Index ────────────────────────────────────────────────────────────
 
@@ -22,6 +22,24 @@ for (const category of CATEGORIES) {
   }
 }
 
+// ─── Merchant Key ─────────────────────────────────────────────────────────────
+
+/**
+ * Returns a stable lower-case key representing the primary entity in a draft.
+ * Used as the key for persisted user-correction overrides.
+ */
+export function getMerchantKey(draft: TransactionDraft): string {
+  if (draft.merchant && draft.merchant !== 'Unknown') {
+    return draft.merchant.toLowerCase().trim()
+  }
+  // Fallback: first non-numeric, non-currency token from raw text
+  const tokens = draft.raw
+    .toLowerCase()
+    .split(/[\s,.\-\/;]+/)
+    .filter((t) => t && !/^[\d₱$.,]+$/.test(t))
+  return tokens[0] ?? draft.raw.slice(0, 20).toLowerCase().trim()
+}
+
 // ─── Categorize ───────────────────────────────────────────────────────────────
 
 export interface CategorizationResult {
@@ -29,7 +47,10 @@ export interface CategorizationResult {
   confidence: number
 }
 
-export function categorize(draft: TransactionDraft): CategorizationResult {
+export function categorize(
+  draft: TransactionDraft,
+  learnedOverrides?: Record<string, CategoryId>,
+): CategorizationResult {
   const fallback: CategorizationResult = {
     category: CATEGORIES.find((c) => c.id === 'other')!,
     confidence: 0.5,
@@ -40,6 +61,27 @@ export function categorize(draft: TransactionDraft): CategorizationResult {
     return {
       category: CATEGORIES.find((c) => c.id === 'income')!,
       confidence: 0.99,
+    }
+  }
+
+  // ── User-learned override (highest priority) ──────────────────────────────
+  if (learnedOverrides && Object.keys(learnedOverrides).length > 0) {
+    const key = getMerchantKey(draft)
+    const learnedId = learnedOverrides[key]
+    if (learnedId) {
+      const learnedCategory = CATEGORIES.find((c) => c.id === learnedId)
+      if (learnedCategory) {
+        return { category: learnedCategory, confidence: 0.99 }
+      }
+    }
+    // Also check every word in the raw text against overrides
+    const words = draft.raw.toLowerCase().split(/[\s,.\-\/;]+/).filter(Boolean)
+    for (const word of words) {
+      const wordId = learnedOverrides[word]
+      if (wordId) {
+        const wordCategory = CATEGORIES.find((c) => c.id === wordId)
+        if (wordCategory) return { category: wordCategory, confidence: 0.97 }
+      }
     }
   }
 

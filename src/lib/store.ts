@@ -138,6 +138,8 @@ const SEED_BUDGETS: BudgetLimit[] = [
 interface StoreState {
   transactions: Transaction[]
   budgetLimits: BudgetLimit[]
+  /** Merchant key → CategoryId learned from user corrections */
+  learnedMerchants: Record<string, CategoryId>
   _seeded: boolean
 }
 
@@ -145,6 +147,8 @@ interface StoreActions {
   addTransaction: (tx: Transaction) => void
   deleteTransaction: (id: string) => void
   updateTransaction: (id: string, patch: Partial<Transaction>) => void
+  /** Persist a user-corrected category for a merchant/keyword. */
+  learnCategory: (merchantKey: string, categoryId: CategoryId) => void
   getByCategory: (categoryId: CategoryId) => Transaction[]
   getByDate: (date: string) => Transaction[]
   getMonthlyTotal: (type: 'expense' | 'income') => number
@@ -160,6 +164,7 @@ export const useStore = create<AppStore>()(
     (set, get) => ({
       transactions: SEED_TRANSACTIONS,
       budgetLimits: SEED_BUDGETS,
+      learnedMerchants: {},
       _seeded: true,
 
       addTransaction(tx) {
@@ -179,6 +184,16 @@ export const useStore = create<AppStore>()(
           transactions: state.transactions.map((t) =>
             t.id === id ? { ...t, ...patch } : t
           ),
+        }))
+      },
+
+      learnCategory(merchantKey, categoryId) {
+        if (!merchantKey) return
+        set((state) => ({
+          learnedMerchants: {
+            ...state.learnedMerchants,
+            [merchantKey.toLowerCase().trim()]: categoryId,
+          },
         }))
       },
 
@@ -224,6 +239,7 @@ export const useStore = create<AppStore>()(
       partialize: (state) => ({
         transactions: state.transactions,
         budgetLimits: state.budgetLimits,
+        learnedMerchants: state.learnedMerchants,
         _seeded: state._seeded,
       }),
     }
