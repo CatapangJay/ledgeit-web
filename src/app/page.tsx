@@ -1,7 +1,6 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { Gear } from '@phosphor-icons/react'
 import BalanceMetric from '@/components/dashboard/BalanceMetric'
 import SpendStrip from '@/components/dashboard/SpendStrip'
 import RecentFeed from '@/components/dashboard/RecentFeed'
@@ -23,9 +22,6 @@ export default function DashboardPage() {
         <span className="font-mono text-lg font-semibold tracking-tighter text-ledge-data">
           LedgeIt
         </span>
-        <button aria-label="Settings" className="flex h-8 w-8 items-center justify-center rounded-full text-ledge-muted active:scale-90">
-          <Gear size={18} weight="regular" aria-hidden="true" />
-        </button>
       </div>
 
       <motion.div variants={stagger} initial="hidden" animate="show">

@@ -1,129 +1,17 @@
 import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
 import type { Transaction, BudgetLimit, CategoryId } from '@/types'
-import { CATEGORIES } from '@/types'
+import {
+  fetchTransactions,
+  insertTransaction,
+  removeTransaction,
+  patchTransaction,
+} from '@/lib/db/transactions'
+import { fetchBudgetLimits } from '@/lib/db/budgetLimits'
 
-// ─── Seed Data ────────────────────────────────────────────────────────────────
+// ─── Default budget limits ────────────────────────────────────────────────────
+// Applied immediately on app boot; replaced by DB limits once loaded.
 
-function today(): string {
-  return new Date().toISOString().split('T')[0]
-}
-
-function daysAgo(n: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() - n)
-  return d.toISOString().split('T')[0]
-}
-
-function nowISO(): string {
-  return new Date().toISOString()
-}
-
-function nowISOOffset(hoursAgo: number): string {
-  return new Date(Date.now() - hoursAgo * 3_600_000).toISOString()
-}
-
-const restaurantsCategory = CATEGORIES.find((c) => c.id === 'restaurants')!
-const transportCategory = CATEGORIES.find((c) => c.id === 'transport')!
-const groceriesCategory = CATEGORIES.find((c) => c.id === 'groceries')!
-const entertainmentCategory = CATEGORIES.find((c) => c.id === 'entertainment')!
-const utilitiesCategory = CATEGORIES.find((c) => c.id === 'utilities')!
-const incomeCategory = CATEGORIES.find((c) => c.id === 'income')!
-const shoppingCategory = CATEGORIES.find((c) => c.id === 'shopping')!
-
-const SEED_TRANSACTIONS: Transaction[] = [
-  {
-    id: 'seed-001',
-    raw: 'received 42500 salary',
-    amount: 42500,
-    merchant: 'Salary',
-    category: incomeCategory,
-    date: daysAgo(6),
-    type: 'income',
-    confidence: 0.99,
-    createdAt: nowISOOffset(144),
-  },
-  {
-    id: 'seed-002',
-    raw: '$85 grab eats dinner',
-    amount: 85,
-    merchant: 'Grab',
-    category: restaurantsCategory,
-    date: daysAgo(5),
-    type: 'expense',
-    confidence: 0.93,
-    createdAt: nowISOOffset(120),
-  },
-  {
-    id: 'seed-003',
-    raw: '2800 sm grocery run',
-    amount: 2800,
-    merchant: 'SM',
-    category: groceriesCategory,
-    date: daysAgo(4),
-    type: 'expense',
-    confidence: 0.88,
-    createdAt: nowISOOffset(96),
-  },
-  {
-    id: 'seed-004',
-    raw: 'netflix monthly 649',
-    amount: 649,
-    merchant: 'Netflix',
-    category: entertainmentCategory,
-    date: daysAgo(3),
-    type: 'expense',
-    confidence: 0.97,
-    isRecurring: true,
-    createdAt: nowISOOffset(72),
-  },
-  {
-    id: 'seed-005',
-    raw: 'meralco bill 1840',
-    amount: 1840,
-    merchant: 'Meralco',
-    category: utilitiesCategory,
-    date: daysAgo(2),
-    type: 'expense',
-    confidence: 0.96,
-    createdAt: nowISOOffset(48),
-  },
-  {
-    id: 'seed-006',
-    raw: 'grab 120 morning commute',
-    amount: 120,
-    merchant: 'Grab',
-    category: transportCategory,
-    date: daysAgo(1),
-    type: 'expense',
-    confidence: 0.94,
-    createdAt: nowISOOffset(26),
-  },
-  {
-    id: 'seed-007',
-    raw: 'jollibee lunch 215',
-    amount: 215,
-    merchant: 'Jollibee',
-    category: restaurantsCategory,
-    date: today(),
-    type: 'expense',
-    confidence: 0.95,
-    createdAt: nowISOOffset(5),
-  },
-  {
-    id: 'seed-008',
-    raw: 'shopee haul 1375',
-    amount: 1375,
-    merchant: 'Shopee',
-    category: shoppingCategory,
-    date: today(),
-    type: 'expense',
-    confidence: 0.91,
-    createdAt: nowISOOffset(2),
-  },
-]
-
-const SEED_BUDGETS: BudgetLimit[] = [
+const DEFAULT_BUDGETS: BudgetLimit[] = [
   { categoryId: 'restaurants', limit: 5000, cycle: 'monthly' },
   { categoryId: 'groceries', limit: 8000, cycle: 'monthly' },
   { categoryId: 'transport', limit: 3000, cycle: 'monthly' },
@@ -140,10 +28,14 @@ interface StoreState {
   budgetLimits: BudgetLimit[]
   /** Merchant key → CategoryId learned from user corrections */
   learnedMerchants: Record<string, CategoryId>
-  _seeded: boolean
+  isLoading: boolean
+  userId: string | null
 }
 
 interface StoreActions {
+  setUserId: (userId: string | null) => void
+  loadTransactions: (userId: string) => Promise<void>
+  loadBudgetLimits: (userId: string) => Promise<void>
   addTransaction: (tx: Transaction) => void
   deleteTransaction: (id: string) => void
   updateTransaction: (id: string, patch: Partial<Transaction>) => void
@@ -159,89 +51,113 @@ export type AppStore = StoreState & StoreActions
 
 // ─── Store ────────────────────────────────────────────────────────────────────
 
-export const useStore = create<AppStore>()(
-  persist(
-    (set, get) => ({
-      transactions: SEED_TRANSACTIONS,
-      budgetLimits: SEED_BUDGETS,
-      learnedMerchants: {},
-      _seeded: true,
+export const useStore = create<AppStore>()((set, get) => ({
+  transactions: [],
+  budgetLimits: DEFAULT_BUDGETS,
+  learnedMerchants: {},
+  isLoading: false,
+  userId: null,
 
-      addTransaction(tx) {
-        set((state) => ({
-          transactions: [tx, ...state.transactions],
-        }))
-      },
+  setUserId(userId) {
+    set({ userId })
+  },
 
-      deleteTransaction(id) {
-        set((state) => ({
-          transactions: state.transactions.filter((t) => t.id !== id),
-        }))
-      },
-
-      updateTransaction(id, patch) {
-        set((state) => ({
-          transactions: state.transactions.map((t) =>
-            t.id === id ? { ...t, ...patch } : t
-          ),
-        }))
-      },
-
-      learnCategory(merchantKey, categoryId) {
-        if (!merchantKey) return
-        set((state) => ({
-          learnedMerchants: {
-            ...state.learnedMerchants,
-            [merchantKey.toLowerCase().trim()]: categoryId,
-          },
-        }))
-      },
-
-      getByCategory(categoryId) {
-        return get().transactions.filter((t) => t.category.id === categoryId)
-      },
-
-      getByDate(date) {
-        return get().transactions.filter((t) => t.date === date)
-      },
-
-      getMonthlyTotal(type) {
-        const now = new Date()
-        const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-        return get()
-          .transactions.filter(
-            (t) => t.type === type && t.date.startsWith(yearMonth)
-          )
-          .reduce((sum, t) => sum + t.amount, 0)
-      },
-
-      getDailyTotal(date, type) {
-        return get()
-          .transactions.filter(
-            (t) => t.date === date && (type ? t.type === type : true)
-          )
-          .reduce((sum, t) => sum + (t.type === 'expense' ? -t.amount : t.amount), 0)
-      },
-    }),
-    {
-      name: 'ledgeit-store',
-      storage: createJSONStorage(() => {
-        // SSR safety guard — localStorage is not available on the server
-        if (typeof window === 'undefined') {
-          return {
-            getItem: () => null,
-            setItem: () => undefined,
-            removeItem: () => undefined,
-          }
-        }
-        return localStorage
-      }),
-      partialize: (state) => ({
-        transactions: state.transactions,
-        budgetLimits: state.budgetLimits,
-        learnedMerchants: state.learnedMerchants,
-        _seeded: state._seeded,
-      }),
+  async loadTransactions(userId) {
+    set({ isLoading: true })
+    try {
+      const transactions = await fetchTransactions(userId)
+      set({ transactions, isLoading: false })
+    } catch {
+      set({ isLoading: false })
     }
-  )
-)
+  },
+
+  async loadBudgetLimits(userId) {
+    const now = new Date()
+    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    try {
+      const limits = await fetchBudgetLimits(userId, month)
+      if (limits.length > 0) {
+        set({ budgetLimits: limits })
+      }
+    } catch {
+      // Keep default budget limits on error
+    }
+  },
+
+  addTransaction(tx) {
+    const { userId } = get()
+    // Optimistic: add immediately
+    set((state) => ({ transactions: [tx, ...state.transactions] }))
+    // Background DB write — rollback on failure
+    if (userId) {
+      insertTransaction(userId, tx).catch(() => {
+        set((state) => ({
+          transactions: state.transactions.filter((t) => t.id !== tx.id),
+        }))
+      })
+    }
+  },
+
+  deleteTransaction(id) {
+    const prev = get().transactions
+    // Optimistic: remove immediately
+    set((state) => ({
+      transactions: state.transactions.filter((t) => t.id !== id),
+    }))
+    // Background DB delete — rollback on failure
+    removeTransaction(id).catch(() => {
+      set({ transactions: prev })
+    })
+  },
+
+  updateTransaction(id, patch) {
+    const prev = get().transactions
+    // Optimistic: apply patch immediately
+    set((state) => ({
+      transactions: state.transactions.map((t) =>
+        t.id === id ? { ...t, ...patch } : t
+      ),
+    }))
+    // Background DB update — rollback on failure
+    patchTransaction(id, patch).catch(() => {
+      set({ transactions: prev })
+    })
+  },
+
+  learnCategory(merchantKey, categoryId) {
+    if (!merchantKey) return
+    set((state) => ({
+      learnedMerchants: {
+        ...state.learnedMerchants,
+        [merchantKey.toLowerCase().trim()]: categoryId,
+      },
+    }))
+  },
+
+  getByCategory(categoryId) {
+    return get().transactions.filter((t) => t.category.id === categoryId)
+  },
+
+  getByDate(date) {
+    return get().transactions.filter((t) => t.date === date)
+  },
+
+  getMonthlyTotal(type) {
+    const now = new Date()
+    const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    return get()
+      .transactions.filter(
+        (t) => t.type === type && t.date.startsWith(yearMonth)
+      )
+      .reduce((sum, t) => sum + t.amount, 0)
+  },
+
+  getDailyTotal(date, type) {
+    return get()
+      .transactions.filter(
+        (t) => t.date === date && (type ? t.type === type : true)
+      )
+      .reduce((sum, t) => sum + (t.type === 'expense' ? -t.amount : t.amount), 0)
+  },
+}))

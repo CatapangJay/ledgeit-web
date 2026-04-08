@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import AppShell from "@/components/layout/AppShell";
+import StoreBootstrap from "@/components/layout/StoreBootstrap";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -46,6 +47,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable}`}
     >
       <body className="min-h-[100dvh] bg-ledge-bg text-ledge-data antialiased">
+        <StoreBootstrap />
         <AppShell>{children}</AppShell>
       </body>
     </html>
