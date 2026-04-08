@@ -174,7 +174,7 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
           {/* Backdrop */}
           <motion.div
             key="sheet-backdrop"
-            className="fixed inset-0 z-40 bg-black/65"
+            className="fixed inset-0 z-40 bg-black/30"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -189,8 +189,8 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
             role="dialog"
             aria-modal="true"
             aria-labelledby={labelId}
-            className="fixed bottom-0 left-0 right-0 z-50 flex max-h-[88dvh] flex-col rounded-t-[28px] border-t border-ledge-border bg-ledge-surface"
-            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+            className="fixed bottom-0 left-0 right-0 z-50 flex max-h-[88dvh] flex-col rounded-t-3xl overflow-hidden"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom)', background: 'rgba(248,250,249,0.96)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', boxShadow: '0 -8px 48px rgba(0,53,46,0.12)' }}
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
@@ -198,7 +198,7 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
           >
             {/* Drag handle bar */}
             <div className="flex justify-center pb-1 pt-3">
-              <div className="h-1 w-10 rounded-full bg-ledge-border" />
+              <div className="h-1 w-10 rounded-full" style={{ background: '#cde0db' }} />
             </div>
 
             <div className="flex-1 overflow-y-auto px-5 pb-8 pt-2">
@@ -206,14 +206,16 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
               <div className="mb-4 flex items-center justify-between">
                 <span
                   id={labelId}
-                  className="font-mono text-[11px] uppercase tracking-[0.18em] text-ledge-muted"
+                  className="text-[15px] font-bold"
+                  style={{ color: '#00352e' }}
                 >
-                  Log Transaction
+                  Smart Log
                 </span>
                 <motion.button
                   onClick={onClose}
                   aria-label="Close"
-                  className="flex h-7 w-7 items-center justify-center rounded-full bg-ledge-surface2 text-ledge-muted"
+                  className="flex h-8 w-8 items-center justify-center rounded-full"
+                  style={{ background: '#f0f4f2', color: '#3f4946' }}
                   whileTap={{ scale: 0.88 }}
                   transition={{ type: 'spring', stiffness: 400, damping: 20 }}
                 >
@@ -222,16 +224,17 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
               </div>
 
               {/* Mode toggle */}
-              <div className="mb-5 flex overflow-hidden rounded-2xl border border-ledge-border">
+              <div className="mb-5 flex rounded-xl p-1" style={{ background: '#f0f4f2' }}>
                 {(['quick', 'bulk'] as const).map((m) => (
                   <button
                     key={m}
                     onClick={() => handleModeChange(m)}
-                    className={`flex-1 py-2.5 text-xs font-medium transition-colors ${
+                    className="flex-1 py-2 text-[12px] font-semibold tracking-wide transition-all rounded-lg"
+                    style={
                       mode === m
-                        ? 'bg-ledge-surface2 text-ledge-data'
-                        : 'text-ledge-muted hover:text-ledge-data'
-                    }`}
+                        ? { background: '#ffffff', color: '#00352e', boxShadow: '0 2px 8px rgba(0,53,46,0.1)' }
+                        : { background: 'transparent', color: '#6e9990' }
+                    }
                   >
                     {m === 'quick' ? 'Quick Entry' : 'Multi-Entry'}
                   </button>
@@ -253,7 +256,8 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0 }}
                   transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-                  className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 py-6 text-sm font-medium text-emerald-400"
+                  className="flex items-center justify-center gap-2 rounded-2xl py-6 text-sm font-semibold"
+                  style={{ background: 'rgba(31,105,93,0.1)', color: '#1f6950' }}
                 >
                   <CheckCircle size={18} weight="fill" aria-hidden="true" />
                   All transactions logged
@@ -271,7 +275,8 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
                     placeholder={`try: ${EXAMPLES[exampleIndex]}`}
                     aria-label="Describe your transaction in plain language"
                     rows={2}
-                    className="w-full resize-none bg-transparent text-[1.6rem] font-light leading-snug text-ledge-data caret-ledge-accent outline-none placeholder:text-ledge-border"
+                    className="w-full resize-none bg-transparent text-[1.6rem] font-light leading-snug outline-none"
+                    style={{ color: '#191c1c', caretColor: '#1f695d' }}
                   />
 
                   {/* Analyzing pulse */}
@@ -283,7 +288,8 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
                         animate={{ opacity: [0.3, 0.9, 0.3] }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
-                        className="mt-2 font-mono text-xs text-ledge-muted"
+                        className="mt-2 text-xs font-medium"
+                        style={{ color: '#6e9990' }}
                       >
                         Analyzing…
                       </motion.p>
@@ -304,7 +310,7 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
                         {/* "Use original" chip — shown when fuzzy correction was applied */}
                         {rawMerchant && (
                           <>
-                            <span className="font-mono text-[10px] text-ledge-muted">Not right?</span>
+                            <span className="text-[11px] font-medium" style={{ color: '#6e9990' }}>Not right?</span>
                             <motion.button
                               key="use-original"
                               onClick={() => {
@@ -313,7 +319,8 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
                                 )
                                 setRawMerchant(null)
                               }}
-                              className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 font-mono text-[10px] text-amber-400 transition-colors hover:bg-amber-500/20 active:scale-[0.95]"
+                              className="px-3 py-0.5 text-[11px] font-semibold rounded-full transition-colors active:scale-[0.95]"
+                              style={{ background: 'rgba(31,105,93,0.1)', color: '#1f695d', border: '1px solid rgba(31,105,93,0.2)' }}
                               whileTap={{ scale: 0.93 }}
                               transition={{ type: 'spring', stiffness: 400, damping: 20 }}
                             >
@@ -323,7 +330,7 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
                         )}
                         {/* Alt suggestions */}
                         {merchantSuggestions.length > 0 && (
-                          <span className="font-mono text-[10px] text-ledge-muted">
+                          <span className="text-[11px] font-medium" style={{ color: '#6e9990' }}>
                             {rawMerchant ? 'or:' : 'Also:'}
                           </span>
                         )}
@@ -337,7 +344,8 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
                                   : prev,
                               )
                             }
-                            className="rounded-full border border-ledge-border bg-ledge-surface2 px-2 py-0.5 font-mono text-[10px] text-ledge-muted transition-colors hover:border-ledge-accent/50 hover:text-ledge-data active:scale-[0.95]"
+                            className="px-3 py-0.5 text-[11px] font-semibold rounded-full transition-colors active:scale-[0.95]"
+                            style={{ background: '#f0f4f2', color: '#3f4946', border: '1px solid #e7edeb' }}
                             whileTap={{ scale: 0.93 }}
                             transition={{ type: 'spring', stiffness: 400, damping: 20 }}
                           >
@@ -393,7 +401,8 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0 }}
                         transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-                        className="mt-4 flex items-center justify-center gap-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 py-4 text-sm font-medium text-emerald-400"
+                        className="mt-4 flex items-center justify-center gap-2 rounded-2xl py-4 text-sm font-semibold"
+                        style={{ background: 'rgba(31,105,93,0.1)', color: '#1f6950' }}
                       >
                         <CheckCircle size={18} weight="fill" aria-hidden="true" />
                         Transaction logged
@@ -406,7 +415,8 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
                     <div className="mt-5 flex gap-3">
                       <button
                         onClick={onClose}
-                        className="flex-1 rounded-2xl border border-ledge-border py-4 text-sm text-ledge-muted transition-colors hover:border-ledge-muted hover:text-ledge-data active:scale-[0.97]"
+                        className="flex-1 rounded-2xl py-4 text-sm font-semibold transition-colors active:scale-[0.97]"
+                        style={{ color: '#6e9990', background: '#f0f4f2' }}
                       >
                         Discard
                       </button>
@@ -414,7 +424,8 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
                         onClick={handleLog}
                         disabled={!canLog}
                         aria-label="Log transaction"
-                        className="flex-1 rounded-2xl bg-ledge-accent py-4 text-sm font-semibold text-[#0A0A0F] disabled:opacity-30"
+                        className="flex-1 rounded-2xl py-4 text-sm font-bold tracking-wide disabled:opacity-30"
+                        style={{ background: 'linear-gradient(135deg, #1f695d 0%, #00352e 100%)', color: '#ffffff' }}
                         whileTap={{ scale: 0.97 }}
                         transition={{ type: 'spring', stiffness: 400, damping: 20 }}
                       >

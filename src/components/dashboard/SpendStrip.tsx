@@ -5,15 +5,15 @@ import { formatCurrency } from '@/lib/formatters'
 import { CATEGORIES } from '@/types'
 
 const CATEGORY_HEX: Record<string, string> = {
-  restaurants: '#fb923c',
-  groceries:   '#a3e635',
-  transport:   '#38bdf8',
-  shopping:    '#a78bfa',
-  utilities:   '#facc15',
-  entertainment:'#f472b6',
-  health:      '#f87171',
-  income:      '#34d399',
-  other:       '#9ca3af',
+  restaurants:   '#1f695d',
+  groceries:     '#2d9a6a',
+  transport:     '#0284c7',
+  shopping:      '#7c3aed',
+  utilities:     '#d97706',
+  entertainment: '#db2777',
+  health:        '#059669',
+  income:        '#1f6950',
+  other:         '#6e9990',
 }
 
 export default function SpendStrip() {
@@ -30,22 +30,26 @@ export default function SpendStrip() {
     return acc
   }, {})
 
-  const catCount = Object.keys(breakdown).length
-
   return (
-    <div className="border-t border-ledge-border py-4">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="font-mono text-[11px] uppercase tracking-[0.15em] text-ledge-muted">
+    <div
+      className="rounded-2xl px-5 py-4"
+      style={{
+        background: '#ffffff',
+        boxShadow: '0 4px 24px rgba(0,53,46,0.07)',
+      }}
+    >
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-[12px] font-bold uppercase tracking-[0.12em]" style={{ color: '#00352e' }}>
           Today
         </span>
-        <span className="font-mono text-sm font-medium text-rose-400">
+        <span className="font-mono text-sm font-bold" style={{ color: '#ba1a1a' }}>
           −{formatCurrency(total)}
         </span>
       </div>
 
-      {/* Category breakdown bar */}
-      <div className="flex h-1.5 w-full overflow-hidden rounded-full gap-[2px]">
-        {Object.entries(breakdown).map(([catId, amount], i) => {
+      {/* Category breakdown bar — rounded pill */}
+      <div className="flex h-2 w-full overflow-hidden rounded-full gap-0.5">
+        {Object.entries(breakdown).map(([catId, amount]) => {
           const cat = CATEGORIES.find((c) => c.id === catId)
           return (
             <div
@@ -53,11 +57,7 @@ export default function SpendStrip() {
               title={`${cat?.label ?? catId}: ${formatCurrency(amount)}`}
               style={{
                 width: `${(amount / total) * 100}%`,
-                backgroundColor: CATEGORY_HEX[catId] ?? '#9ca3af',
-                borderRadius:
-                  i === 0 ? '9999px 0 0 9999px'
-                  : i === catCount - 1 ? '0 9999px 9999px 0'
-                  : '0',
+                backgroundColor: CATEGORY_HEX[catId] ?? '#6e9990',
               }}
             />
           )

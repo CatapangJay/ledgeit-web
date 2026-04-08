@@ -46,11 +46,12 @@ export default function FilterChips({ active, onChange }: Props) {
             aria-pressed={isActive}
             whileTap={{ scale: 0.94 }}
             transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-            className={`relative shrink-0 rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-wide transition-colors ${
+            className="relative shrink-0 rounded-full px-4 py-1.5 text-[12px] font-semibold transition-colors"
+            style={
               isActive
-                ? 'bg-ledge-accent text-[#0A0A0F]'
-                : 'border border-ledge-border bg-ledge-surface text-ledge-muted hover:border-ledge-muted hover:text-ledge-data'
-            }`}
+                ? { background: '#00352e', color: '#ffffff', boxShadow: '0 2px 8px rgba(0,53,46,0.2)' }
+                : { background: '#f0f4f2', color: '#3f4946' }
+            }
           >
             {chip.label}
           </motion.button>

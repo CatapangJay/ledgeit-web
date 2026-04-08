@@ -7,9 +7,9 @@ interface AppShellProps {
 
 export default function AppShell({ children }: AppShellProps) {
   return (
-    <div className="relative min-h-[100dvh] bg-ledge-bg">
+    <div className="relative min-h-[100dvh]" style={{ background: '#f8faf9' }}>
       {/* Page content — padded so nothing hides behind bottom nav */}
-      <main className="pb-24 pt-0">{children}</main>
+      <main className="pb-28 pt-0">{children}</main>
       <BottomNav />
     </div>
   )

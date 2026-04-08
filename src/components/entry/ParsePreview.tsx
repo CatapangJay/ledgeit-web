@@ -27,15 +27,17 @@ function InlineCategoryPicker({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -4, scale: 0.97 }}
       transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-      className="mb-3 rounded-2xl border border-ledge-border bg-ledge-surface p-3"
+      className="mb-3 rounded-2xl p-3"
+      style={{ background: '#f0f4f2', border: '1px solid #e7edeb' }}
     >
       <div className="mb-2 flex items-center justify-between">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-ledge-muted">
+          <span className="text-[11px] font-semibold" style={{ color: '#3f4946' }}>
           Correct category
         </span>
         <button
           onClick={onClose}
-          className="flex h-5 w-5 items-center justify-center rounded-full text-ledge-muted transition-colors hover:bg-ledge-surface2 hover:text-ledge-data"
+          className="flex h-5 w-5 items-center justify-center transition-colors"
+          style={{ color: '#6e9990' }}
           aria-label="Close category picker"
         >
           <X size={11} weight="bold" />
@@ -49,7 +51,7 @@ function InlineCategoryPicker({
             <button
               key={cat.id}
               onClick={() => onSelect(cat)}
-              className={`flex flex-col items-center gap-1 rounded-xl py-2.5 text-[10px] font-medium transition-colors ${
+              className={`flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors ${
                 active
                   ? `${cat.bgColor} ${cat.color}`
                   : 'text-ledge-muted hover:bg-ledge-surface2 hover:text-ledge-data'
@@ -120,26 +122,29 @@ export default function ParsePreview({ draft, category, confidence, onCategoryCh
       initial="hidden"
       animate="show"
       exit={{ opacity: 0, y: 6, transition: { duration: 0.15 } }}
-      className={`mt-4 rounded-2xl border p-4 ${
-        isIncome
-          ? 'border-emerald-500/30 bg-emerald-950/20'
-          : 'border-rose-500/20 bg-ledge-surface2'
-      }`}
+      className="mt-4 rounded-2xl p-5"
+      style={{
+        background: isIncome ? 'rgba(31,105,93,0.06)' : '#ffffff',
+        boxShadow: '0 2px 16px rgba(0,53,46,0.08)',
+        border: isIncome ? '1px solid rgba(31,105,93,0.2)' : '1px solid #e7edeb',
+      }}
     >
       {/* Amount + direction */}
       <motion.div variants={itemVariants} className="mb-3 flex items-baseline justify-between">
         <span
-          className={`font-mono text-3xl font-semibold tracking-tight ${
-            isIncome ? 'text-emerald-400' : 'text-ledge-data'
-          }`}
+          className="font-mono text-3xl font-bold tracking-tight"
+          style={{ color: isIncome ? '#1f6950' : '#191c1c' }}
         >
           {draft.amount !== null ? (
             formatCurrency(draft.amount)
           ) : (
-            <span className="text-xl text-ledge-muted">no amount</span>
+            <span className="text-xl" style={{ color: '#6e9990' }}>no amount</span>
           )}
         </span>
-        <span className="font-mono text-[11px] uppercase tracking-widest text-ledge-muted">
+        <span
+          className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+          style={{ background: isIncome ? 'rgba(31,105,93,0.1)' : 'rgba(186,26,26,0.08)', color: isIncome ? '#1f6950' : '#ba1a1a' }}
+        >
           {isIncome ? '+ income' : '− expense'}
         </span>
       </motion.div>
@@ -150,8 +155,8 @@ export default function ParsePreview({ draft, category, confidence, onCategoryCh
           <button
             onClick={() => setPickerOpen((o) => !o)}
             aria-label={`Category: ${category.label}. Tap to change`}
-            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium transition-all ${category.bgColor} ${category.color} ${
-              pickerOpen ? 'ring-1 ring-ledge-accent/60' : ''
+            className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium transition-all ${category.bgColor} ${category.color} ${
+              pickerOpen ? 'outline outline-1 outline-[#1f695d]/40' : ''
             }`}
           >
             {(() => {
@@ -164,7 +169,7 @@ export default function ParsePreview({ draft, category, confidence, onCategoryCh
         ) : (
           <CategoryBadge category={category} size="sm" />
         )}
-        <span className="font-mono text-xs text-ledge-muted">{formatDate(draft.date)}</span>
+          <span className="text-[12px] font-medium" style={{ color: '#6e9990' }}>{formatDate(draft.date)}</span>
       </motion.div>
 
       {/* Inline category picker */}
@@ -195,7 +200,8 @@ export default function ParsePreview({ draft, category, confidence, onCategoryCh
                 if (e.key === 'Escape') setEditingMerchant(false)
               }}
               autoFocus
-              className="w-full rounded-lg border border-ledge-accent/40 bg-ledge-surface px-2 py-1 text-sm text-ledge-data caret-ledge-accent outline-none"
+            className="w-full border-b bg-transparent px-2 py-1 text-sm outline-none"
+            style={{ borderColor: '#1f695d', color: '#191c1c', caretColor: '#1f695d' }}
               placeholder="Enter merchant name"
               aria-label="Edit merchant name"
             />
@@ -208,13 +214,13 @@ export default function ParsePreview({ draft, category, confidence, onCategoryCh
                 onMerchantChange ? 'cursor-pointer' : 'cursor-default'
               }`}
             >
-              <span className="text-sm text-ledge-data">
+              <span className="text-sm font-medium" style={{ color: '#191c1c' }}>
                 {draft.merchant && draft.merchant !== 'Unknown' ? draft.merchant : (
-                  <span className="text-ledge-muted">Unknown merchant — tap to set</span>
+                  <span style={{ color: '#6e9990' }}>Unknown merchant — tap to set</span>
                 )}
               </span>
               {onMerchantChange && (
-                <span className="opacity-0 transition-opacity group-hover:opacity-40 text-[10px] text-ledge-muted">
+                <span className="opacity-0 transition-opacity group-hover:opacity-40 text-[10px]" style={{ color: '#6e9990' }}>
                   edit
                 </span>
               )}
@@ -226,16 +232,15 @@ export default function ParsePreview({ draft, category, confidence, onCategoryCh
       {/* Confidence strip */}
       <motion.div variants={itemVariants}>
         <div className="mb-1 flex items-center justify-between">
-          <span className="text-[10px] uppercase tracking-widest text-ledge-muted">Confidence</span>
-          <span className="font-mono text-[10px] text-ledge-muted">
+          <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: '#6e9990' }}>Confidence</span>
+          <span className="font-mono text-[10px] font-medium" style={{ color: '#3f4946' }}>
             {Math.round(confidence * 100)}%
           </span>
         </div>
-        <div className="relative h-[2px] w-full overflow-hidden rounded-full bg-ledge-border">
+        <div className="relative h-[4px] w-full overflow-hidden rounded-full" style={{ background: '#e7edeb' }}>
           <motion.div
-            className={`absolute left-0 top-0 h-full rounded-full ${
-              isIncome ? 'bg-emerald-500' : 'bg-ledge-accent'
-            }`}
+            className="absolute left-0 top-0 h-full rounded-full"
+            style={{ background: isIncome ? '#1f6950' : '#1f695d' }}
             initial={{ width: 0 }}
             animate={{ width: `${confidence * 100}%` }}
             transition={{ type: 'spring', stiffness: 80, damping: 20, delay: 0.25 }}

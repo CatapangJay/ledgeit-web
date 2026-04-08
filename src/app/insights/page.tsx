@@ -77,7 +77,7 @@ export default function InsightsPage() {
     {
       label: 'Net Cashflow',
       value: formatCurrency(Math.abs(netCashflow)),
-      color: netCashflow >= 0 ? 'text-emerald-400' : 'text-rose-400',
+      color: netCashflow >= 0 ? '#1f6950' : '#ba1a1a',
       sub: netCashflow >= 0 ? 'positive' : 'negative',
     },
     {
@@ -97,11 +97,11 @@ export default function InsightsPage() {
   )
 
   return (
-    <div className="px-5">
+    <div className="px-5 pb-4" style={{ background: '#f8faf9', minHeight: '100dvh' }}>
       {/* Header */}
       <div className="flex items-center justify-between pb-2 pt-12">
-        <h1 className="font-mono text-lg font-semibold tracking-tighter text-ledge-data">
-          Insights
+        <h1 className="text-base font-bold tracking-tight" style={{ color: '#00352e' }}>
+          Your Financial Breath
         </h1>
         <div className="flex items-center gap-3">
           <motion.button
@@ -109,11 +109,12 @@ export default function InsightsPage() {
             onClick={() => setMonthOffset((o) => o - 1)}
             whileTap={{ scale: 0.88 }}
             transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-            className="flex h-7 w-7 items-center justify-center rounded-full border border-ledge-border text-ledge-muted"
+            className="flex h-8 w-8 items-center justify-center rounded-full"
+            style={{ background: '#f0f4f2', color: '#3f4946' }}
           >
             <CaretLeft size={13} weight="bold" aria-hidden="true" />
           </motion.button>
-          <span className="font-mono text-[11px] text-ledge-muted uppercase tracking-wide min-w-[96px] text-center">
+          <span className="text-[11px] font-semibold min-w-[96px] text-center" style={{ color: '#3f4946' }}>
             {label}
           </span>
           <motion.button
@@ -122,7 +123,8 @@ export default function InsightsPage() {
             disabled={monthOffset >= 0}
             whileTap={{ scale: 0.88 }}
             transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-            className="flex h-7 w-7 items-center justify-center rounded-full border border-ledge-border text-ledge-muted disabled:opacity-30"
+            className="flex h-8 w-8 items-center justify-center rounded-full disabled:opacity-30"
+            style={{ background: '#f0f4f2', color: '#3f4946' }}
           >
             <CaretRight size={13} weight="bold" aria-hidden="true" />
           </motion.button>
@@ -130,15 +132,19 @@ export default function InsightsPage() {
       </div>
 
       {/* Metric strip */}
-      <MetricStrip metrics={metrics} />
+      <div className="mt-4">
+        <MetricStrip metrics={metrics} />
+      </div>
 
       {/* Spend vs Saved donut */}
-      <SpendDonut spent={totalExpense} saved={Math.max(totalIncome - totalExpense, 0)} />
+      <div className="mt-4">
+        <SpendDonut spent={totalExpense} saved={Math.max(totalIncome - totalExpense, 0)} />
+      </div>
 
       {/* Section label */}
-      <div className="border-t border-ledge-border py-3">
-        <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-ledge-muted">
-          Budget Tracker
+      <div className="py-4 mt-2">
+        <span className="text-[12px] font-bold uppercase tracking-[0.12em]" style={{ color: '#00352e' }}>
+          Budget Flow
         </span>
       </div>
 
@@ -160,8 +166,8 @@ export default function InsightsPage() {
       {/* Empty state */}
       {Object.keys(categorySpend).length === 0 && (
         <div className="flex flex-col items-start gap-2 py-10">
-          <p className="text-sm text-ledge-muted">No spending data for this period.</p>
-          <p className="text-xs text-ledge-border">Add transactions to see your patterns.</p>
+          <p className="text-sm font-medium" style={{ color: '#6e9990' }}>No spending data for this period.</p>
+          <p className="text-xs" style={{ color: '#cde0db' }}>Add transactions to see your patterns.</p>
         </div>
       )}
     </div>

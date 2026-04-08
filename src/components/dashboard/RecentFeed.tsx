@@ -1,12 +1,23 @@
 'use client'
 
-import { useRef } from 'react'
 import { motion, AnimatePresence, useMotionValue, useTransform, animate } from 'framer-motion'
 import { Trash } from '@phosphor-icons/react'
 import { PHOSPHOR_ICON_MAP } from '@/lib/iconMap'
 import { useStore } from '@/lib/store'
 import { formatDate, formatCurrency, formatTime } from '@/lib/formatters'
 import type { Transaction } from '@/types'
+
+const ICON_BG: Record<string, string> = {
+  restaurants:   '#c2410c',
+  groceries:     '#4d7c0f',
+  transport:     '#0369a1',
+  shopping:      '#7c3aed',
+  utilities:     '#b45309',
+  entertainment: '#be185d',
+  health:        '#be123c',
+  income:        '#1f6950',
+  other:         '#64748b',
+}
 
 // ─── Group by date ────────────────────────────────────────────────────────────
 
@@ -39,15 +50,15 @@ function TxRow({ tx, onDelete }: { tx: Transaction; onDelete: (id: string) => vo
       className="relative overflow-hidden"
     >
       {/* Delete swipe backdrop */}
-      <div className="absolute inset-0 flex items-center justify-end pr-5 bg-rose-500/8">
+      <div className="absolute inset-0 flex items-center justify-end pr-5" style={{ background: 'rgba(186,26,26,0.06)' }}>
         <motion.div style={{ opacity: deleteOpacity }}>
-          <Trash size={17} weight="fill" className="text-rose-400" aria-hidden="true" />
+          <Trash size={17} weight="fill" style={{ color: '#ba1a1a' }} aria-hidden="true" />
         </motion.div>
       </div>
 
       {/* Draggable row content */}
       <motion.div
-        style={{ x }}
+        style={{ x, background: '#ffffff' }}
         drag="x"
         dragConstraints={{ right: 0, left: -80 }}
         dragElastic={{ right: 0, left: 0.25 }}
@@ -58,34 +69,34 @@ function TxRow({ tx, onDelete }: { tx: Transaction; onDelete: (id: string) => vo
             animate(x, 0, { type: 'spring', stiffness: 300, damping: 26 })
           }
         }}
-        className="relative flex cursor-grab items-center gap-3 bg-ledge-bg py-3 active:cursor-grabbing"
+        className="relative flex cursor-grab items-center gap-3 py-3 active:cursor-grabbing"
       >
-        {/* Category icon circle */}
+        {/* Category icon — rounded-xl */}
         <div
-          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${tx.category.bgColor}`}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+          style={{ background: ICON_BG[tx.category.id] ?? '#6e9990' }}
         >
           {Icon && (
-            <Icon size={16} weight="fill" className={tx.category.color} aria-hidden="true" />
+            <Icon size={16} weight="fill" color="#ffffff" aria-hidden="true" />
           )}
         </div>
 
         {/* Text */}
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-2">
-            <span className="truncate text-sm font-medium text-ledge-data">{tx.merchant}</span>
+            <span className="truncate text-sm font-semibold" style={{ color: '#191c1c' }}>{tx.merchant}</span>
             <span
-              className={`shrink-0 font-mono text-sm font-medium ${
-                isIncome ? 'text-emerald-400' : 'text-rose-400'
-              }`}
+              className="shrink-0 font-mono text-sm font-medium"
+              style={{ color: isIncome ? '#1f6950' : '#ba1a1a' }}
             >
               {isIncome ? '+' : '−'}
               {formatCurrency(tx.amount)}
             </span>
           </div>
           <div className="mt-0.5 flex items-center gap-1.5">
-            <span className="text-xs text-ledge-muted">{tx.category.label}</span>
-            <span className="text-ledge-border">·</span>
-            <span className="font-mono text-xs text-ledge-muted">{formatTime(tx.createdAt)}</span>
+            <span className="text-xs font-medium" style={{ color: ICON_BG[tx.category.id] ?? '#6e9990' }}>{tx.category.label}</span>
+            <span style={{ color: '#cde0db' }}>·</span>
+            <span className="font-mono text-xs" style={{ color: '#6e9990' }}>{formatTime(tx.createdAt)}</span>
           </div>
         </div>
       </motion.div>
@@ -102,14 +113,13 @@ function DateHeader({ date, transactions }: { date: string; transactions: Transa
   )
   const isNet = subtotal >= 0
   return (
-    <div className="flex items-center justify-between border-t border-ledge-border pt-4 pb-1">
-      <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-ledge-muted">
+    <div className="flex items-center justify-between pt-4 pb-1" style={{ borderTop: '1px solid #e7edeb' }}>
+      <span className="text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: '#6e9990' }}>
         {formatDate(date)}
       </span>
       <span
-        className={`font-mono text-xs font-medium ${
-          isNet ? 'text-emerald-400' : 'text-rose-400'
-        }`}
+        className="font-mono text-xs font-medium"
+        style={{ color: isNet ? '#1f6950' : '#ba1a1a' }}
       >
         {subtotal >= 0 ? '+' : '−'}
         {formatCurrency(Math.abs(subtotal))}
@@ -129,13 +139,13 @@ function EmptyFeed() {
         viewBox="0 0 32 32"
         fill="none"
         aria-hidden="true"
-        className="text-ledge-border"
+        style={{ color: '#e7edeb' }}
       >
-        <rect x="6" y="4" width="20" height="24" rx="3" stroke="currentColor" strokeWidth="1.5" />
+        <rect x="6" y="4" width="20" height="24" stroke="currentColor" strokeWidth="1.5" />
         <path d="M11 10h10M11 15h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
       </svg>
-      <p className="text-sm text-ledge-muted">Nothing yet.</p>
-      <p className="text-xs text-ledge-border">Tap + to log your first entry.</p>
+      <p className="text-sm font-medium" style={{ color: '#6e9990' }}>Nothing yet.</p>
+      <p className="text-xs" style={{ color: '#cde0db' }}>Tap + to log your first entry.</p>
     </div>
   )
 }

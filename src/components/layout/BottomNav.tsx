@@ -29,14 +29,15 @@ export default function BottomNav() {
         className="fixed bottom-0 left-0 right-0 z-40"
         aria-label="Primary navigation"
       >
-        {/* Frosted glass bar */}
+        {/* Glassmorphism surface — light, blurred */}
         <div
           className="flex items-center justify-around px-2 pb-[env(safe-area-inset-bottom)]"
           style={{
-            background: 'rgba(17,17,22,0.92)',
-            backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
-            borderTop: '1px solid rgba(31,31,39,0.8)',
+            background: 'rgba(248,250,249,0.85)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            borderTop: '1px solid rgba(205,224,219,0.6)',
+            boxShadow: '0 -8px 32px rgba(0,53,46,0.06)',
           }}
         >
           {TABS.map((tab) => {
@@ -49,12 +50,18 @@ export default function BottomNav() {
                   key="add"
                   aria-label="Log transaction"
                   onClick={() => setSheetOpen(true)}
-                  className="flex flex-col items-center justify-center py-3 px-5"
-                  whileTap={{ scale: 0.88 }}
+                  className="flex flex-col items-center justify-center py-3 px-4"
+                  whileTap={{ scale: 0.9 }}
                   transition={{ type: 'spring', stiffness: 400, damping: 20 }}
                 >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-ledge-accent shadow-[0_0_16px_rgba(16,185,129,0.3)]">
-                    <tab.icon size={22} weight="bold" color="#0A0A0F" aria-hidden="true" />
+                  <div
+                    className="flex h-10 w-10 items-center justify-center rounded-full"
+                    style={{
+                      background: 'linear-gradient(135deg, #1f695d 0%, #00352e 100%)',
+                      boxShadow: '0 4px 16px rgba(0,53,46,0.28)',
+                    }}
+                  >
+                    <tab.icon size={20} weight="bold" color="#ffffff" aria-hidden="true" />
                   </div>
                 </motion.button>
               )
@@ -66,26 +73,27 @@ export default function BottomNav() {
                 aria-label={tab.label}
                 aria-current={isActive ? 'page' : undefined}
                 onClick={() => router.push(tab.href!)}
-                className="relative flex flex-col items-center justify-center gap-1 py-3 px-5"
+                className="relative flex flex-col items-center justify-center gap-1 py-3 px-4"
                 whileTap={{ scale: 0.92 }}
                 transition={{ type: 'spring', stiffness: 400, damping: 20 }}
               >
                 <tab.icon
-                  size={22}
+                  size={20}
                   weight={isActive ? 'fill' : 'regular'}
-                  color={isActive ? '#10B981' : '#6B7280'}
+                  color={isActive ? '#00352e' : '#6e9990'}
                   aria-hidden="true"
                 />
                 <span
-                  className="text-[10px] tracking-wide"
-                  style={{ color: isActive ? '#10B981' : '#6B7280' }}
+                  className="text-[10px] font-semibold tracking-wide"
+                  style={{ color: isActive ? '#00352e' : '#6e9990' }}
                 >
                   {tab.label}
                 </span>
                 {isActive && (
                   <motion.div
                     layoutId="nav-indicator"
-                    className="absolute top-0 left-1/2 h-[2px] w-6 -translate-x-1/2 rounded-full bg-ledge-accent"
+                    className="absolute bottom-0 left-1/2 h-[3px] w-6 -translate-x-1/2 rounded-full"
+                    style={{ background: '#00352e' }}
                     transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                   />
                 )}

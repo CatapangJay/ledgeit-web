@@ -62,15 +62,17 @@ function CategoryPicker({ currentId, onSelect, onClose }: CategoryPickerProps) {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 6, scale: 0.97 }}
       transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-      className="rounded-2xl border border-ledge-border bg-ledge-surface p-3"
+      className="p-4 rounded-2xl"
+      style={{ background: '#f0f4f2', border: '1px solid #e7edeb' }}
     >
       <div className="mb-2.5 flex items-center justify-between">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-ledge-muted">
+        <span className="text-[11px] font-semibold" style={{ color: '#3f4946' }}>
           Change category
         </span>
         <button
           onClick={onClose}
-          className="flex h-5 w-5 items-center justify-center rounded-full text-ledge-muted transition-colors hover:bg-ledge-surface2 hover:text-ledge-data"
+          className="flex h-5 w-5 items-center justify-center transition-colors"
+          style={{ color: '#6e9990' }}
           aria-label="Close category picker"
         >
           <X size={11} weight="bold" />
@@ -84,7 +86,7 @@ function CategoryPicker({ currentId, onSelect, onClose }: CategoryPickerProps) {
             <button
               key={cat.id}
               onClick={() => onSelect(cat)}
-              className={`flex flex-col items-center gap-1 rounded-xl py-2.5 text-[10px] font-medium transition-colors ${
+              className={`flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors ${
                 active
                   ? `${cat.bgColor} ${cat.color}`
                   : 'text-ledge-muted hover:bg-ledge-surface2 hover:text-ledge-data'
@@ -261,12 +263,13 @@ export default function BulkEntryMode({ onAllLogged, onDiscard }: Props) {
           placeholder={BULK_PLACEHOLDER}
           aria-label="Enter multiple transactions, one per line"
           rows={4}
-          className="w-full resize-none rounded-2xl border border-ledge-border bg-ledge-surface2 px-4 py-3 text-sm leading-relaxed text-ledge-data caret-ledge-accent outline-none transition-colors placeholder:text-ledge-border focus:border-ledge-muted"
+          className="w-full resize-none px-4 py-3 text-sm leading-relaxed outline-none transition-colors"
+          style={{ background: '#f0f4f2', color: '#191c1c', caretColor: '#1f695d', borderBottom: '2px solid #cde0db', borderRadius: '12px 12px 0 0' }}
         />
-        <p className="mt-1 font-mono text-[10px] text-ledge-muted">
+        <p className="mt-1 text-[11px] font-medium" style={{ color: '#6e9990' }}>
           Separate entries with a new line,{' '}
-          <code className="rounded bg-ledge-surface2 px-0.5 text-ledge-data">;</code> or{' '}
-          <code className="rounded bg-ledge-surface2 px-0.5 text-ledge-data">,</code>
+          <code className="px-0.5 rounded" style={{ background: '#e7edeb', color: '#3f4946' }}>;</code> or{' '}
+          <code className="px-0.5 rounded" style={{ background: '#e7edeb', color: '#3f4946' }}>,</code>
           {' '}— format: description + amount
         </p>
       </div>
@@ -280,7 +283,8 @@ export default function BulkEntryMode({ onAllLogged, onDiscard }: Props) {
             animate={{ opacity: [0.3, 0.9, 0.3] }}
             exit={{ opacity: 0 }}
             transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
-            className="font-mono text-xs text-ledge-muted"
+            className="font-mono text-xs font-medium"
+            style={{ color: '#6e9990' }}
           >
             Identifying entries…
           </motion.p>
@@ -299,7 +303,7 @@ export default function BulkEntryMode({ onAllLogged, onDiscard }: Props) {
           >
             {/* Count header */}
             <div className="flex items-center justify-between">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-ledge-muted">
+              <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: '#3f4946' }}>
                 {entries.length} {entries.length === 1 ? 'entry' : 'entries'} found
               </span>
               <AnimatePresence>
@@ -309,7 +313,8 @@ export default function BulkEntryMode({ onAllLogged, onDiscard }: Props) {
                     initial={{ opacity: 0, x: 4 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0 }}
-                    className="flex items-center gap-1 font-mono text-[10px] text-emerald-400"
+                    className="flex items-center gap-1 text-[11px] font-semibold"
+                    style={{ color: '#1f6950' }}
                   >
                     <CheckCircle size={11} weight="fill" aria-hidden="true" />
                     {loggedCount} logged
@@ -331,29 +336,23 @@ export default function BulkEntryMode({ onAllLogged, onDiscard }: Props) {
                     animate={{ opacity: entry.logged ? 0.5 : 1, x: 0 }}
                     exit={{ opacity: 0, x: 10, transition: { duration: 0.15 } }}
                     transition={{ type: 'spring', stiffness: 300, damping: 26 }}
-                    className={`flex items-center gap-2 rounded-2xl border px-3 py-2.5 transition-colors ${
-                      entry.logged
-                        ? 'border-emerald-500/20 bg-emerald-950/15'
-                        : isEditingCat
-                        ? 'border-ledge-accent/40 bg-ledge-surface2'
-                        : 'border-ledge-border bg-ledge-surface2'
-                    }`}
+                    className="flex items-center gap-2 rounded-xl px-3 py-2.5 transition-colors"
+                    style={{
+                      background: entry.logged ? 'rgba(31,105,93,0.06)' : '#ffffff',
+                      border: isEditingCat ? '1px solid #1f695d' : entry.logged ? '1px solid rgba(31,105,93,0.2)' : '1px solid #e7edeb',
+                      boxShadow: entry.logged ? 'none' : '0 1px 6px rgba(0,53,46,0.05)',
+                    }}
                   >
                     {/* Amount */}
                     <span
-                      className={`shrink-0 font-mono text-[13px] font-semibold tabular-nums ${
-                        entry.type === 'income' || entry.logged
-                          ? 'text-emerald-400'
-                          : isValid
-                          ? 'text-ledge-data'
-                          : 'text-ledge-muted'
-                      }`}
+                      className="shrink-0 font-mono text-[13px] font-semibold tabular-nums"
+                      style={{ color: entry.type === 'income' || entry.logged ? '#1f6950' : isValid ? '#191c1c' : '#6e9990' }}
                     >
                       {isValid ? formatCurrency(entry.amount!) : '—'}
                     </span>
 
                     {/* Merchant / description */}
-                    <span className="min-w-0 flex-1 truncate text-xs text-ledge-data">
+                    <span className="min-w-0 flex-1 truncate text-xs font-medium" style={{ color: '#3f4946' }}>
                       {entry.merchant && entry.merchant !== 'Unknown'
                         ? entry.merchant
                         : entry.raw}
@@ -368,9 +367,7 @@ export default function BulkEntryMode({ onAllLogged, onDiscard }: Props) {
                         }
                         disabled={!isValid}
                         aria-label={`Category: ${entry.category.label}. Tap to change`}
-                        className={`inline-flex shrink-0 items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-medium leading-none transition-all disabled:opacity-30 ${entry.category.bgColor} ${entry.category.color} ${
-                          isEditingCat ? 'ring-1 ring-ledge-accent/60' : ''
-                        }`}
+                        className={`inline-flex shrink-0 items-center gap-0.5 px-2 py-0.5 text-[10px] font-medium leading-none transition-all disabled:opacity-30 ${entry.category.bgColor} ${entry.category.color}`}
                       >
                         {entry.category.label.split(/[\s&]/)[0]}
                         <span className="ml-0.5 opacity-50">▾</span>
@@ -382,7 +379,7 @@ export default function BulkEntryMode({ onAllLogged, onDiscard }: Props) {
                       <CheckCircle
                         size={14}
                         weight="fill"
-                        className="shrink-0 text-emerald-400"
+                        style={{ color: '#1f6950' }}
                         aria-label="Logged"
                       />
                     )}
@@ -393,7 +390,8 @@ export default function BulkEntryMode({ onAllLogged, onDiscard }: Props) {
                         onClick={() => isValid && logEntry(entry.id)}
                         disabled={!isValid}
                         aria-label="Confirm and log entry"
-                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ledge-accent text-[#0A0A0F] disabled:opacity-25"
+                        className="flex h-6 w-6 shrink-0 items-center justify-center disabled:opacity-25"
+                        style={{ background: 'linear-gradient(135deg, #1f695d 0%, #00352e 100%)', color: '#ffffff' }}
                         whileTap={{ scale: 0.85 }}
                         transition={{ type: 'spring', stiffness: 400, damping: 20 }}
                       >
@@ -406,7 +404,8 @@ export default function BulkEntryMode({ onAllLogged, onDiscard }: Props) {
                       <motion.button
                         onClick={() => removeEntry(entry.id)}
                         aria-label="Remove this entry"
-                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-ledge-muted transition-colors hover:bg-ledge-surface hover:text-ledge-data"
+                        className="flex h-6 w-6 shrink-0 items-center justify-center transition-colors"
+                        style={{ color: '#6e9990' }}
                         whileTap={{ scale: 0.85 }}
                         transition={{ type: 'spring', stiffness: 400, damping: 20 }}
                       >
@@ -440,7 +439,8 @@ export default function BulkEntryMode({ onAllLogged, onDiscard }: Props) {
                   exit={{ opacity: 0, y: 4 }}
                   transition={{ type: 'spring', stiffness: 300, damping: 26 }}
                   onClick={logAll}
-                  className="mt-1 w-full rounded-2xl bg-ledge-accent py-3.5 text-sm font-semibold text-[#0A0A0F]"
+                  className="mt-1 w-full rounded-2xl py-3.5 text-sm font-bold tracking-wide"
+                  style={{ background: 'linear-gradient(135deg, #1f695d 0%, #00352e 100%)', color: '#ffffff' }}
                   whileTap={{ scale: 0.97 }}
                 >
                   Log All {validPending.length} Entries
@@ -454,7 +454,8 @@ export default function BulkEntryMode({ onAllLogged, onDiscard }: Props) {
       {/* Discard */}
       <button
         onClick={onDiscard}
-        className="w-full rounded-2xl border border-ledge-border py-4 text-sm text-ledge-muted transition-colors hover:border-ledge-muted hover:text-ledge-data active:scale-[0.97]"
+        className="w-full rounded-2xl py-4 text-sm font-semibold transition-colors active:scale-[0.97]"
+        style={{ color: '#6e9990', background: '#f0f4f2' }}
       >
         Discard
       </button>
