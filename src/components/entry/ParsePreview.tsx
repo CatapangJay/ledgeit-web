@@ -5,21 +5,35 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X } from '@phosphor-icons/react'
 import CategoryBadge from './CategoryBadge'
 import { formatCurrency, formatDate } from '@/lib/formatters'
-import { PHOSPHOR_ICON_MAP } from '@/lib/iconMap'
+import { PHOSPHOR_ICON_MAP, getIconComponent } from '@/lib/iconMap'
 import { CATEGORIES } from '@/types'
-import type { Category, CategoryId, TransactionDraft } from '@/types'
+import type { Category, TransactionDraft, CustomCategory } from '@/types'
 
 // ─── Re-used inline category picker ──────────────────────────────────────────
 
 function InlineCategoryPicker({
   currentId,
+  customCategories,
   onSelect,
   onClose,
 }: {
-  currentId: CategoryId
+  currentId: string
+  customCategories: CustomCategory[]
   onSelect: (cat: Category) => void
   onClose: () => void
 }) {
+  // Build full category list: presets + custom
+  const allCategories: Category[] = [
+    ...CATEGORIES,
+    ...customCategories.map((c) => ({
+      id: c.id,
+      label: c.name,
+      icon: c.icon,
+      color: c.textColor,
+      bgColor: c.bgColor,
+      keywords: [] as string[],
+    })),
+  ]
   return (
     <motion.div
       key="cat-picker"
@@ -44,20 +58,27 @@ function InlineCategoryPicker({
         </button>
       </div>
       <div className="grid grid-cols-3 gap-1.5">
-        {CATEGORIES.map((cat) => {
-          const Icon = PHOSPHOR_ICON_MAP[cat.icon]
+        {allCategories.map((cat) => {
+          const Icon = getIconComponent(cat.icon)
           const active = cat.id === currentId
           return (
             <button
               key={cat.id}
               onClick={() => onSelect(cat)}
-              className={`flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors ${
+              className={`flex flex-col items-center gap-1 rounded-xl py-2.5 text-[10px] font-medium transition-colors ${
                 active
                   ? `${cat.bgColor} ${cat.color}`
                   : 'text-ledge-muted hover:bg-ledge-surface2 hover:text-ledge-data'
               }`}
             >
               {Icon && (
+                <Icon size={15} weight={active ? 'fill' : 'regular'} aria-hidden="true" />
+              )}
+              <span className="leading-none">{cat.label.split(/[\s&]/)[0]}</span>
+            </button>
+          )
+        })}
+      </div>
                 <Icon size={15} weight={active ? 'fill' : 'regular'} aria-hidden="true" />
               )}
               <span className="leading-none">{cat.label.split(/[\s&]/)[0]}</span>
@@ -73,6 +94,7 @@ interface Props {
   draft: TransactionDraft
   category: Category
   confidence: number
+  customCategories?: CustomCategory[]
   /** Called when user manually selects a different category */
   onCategoryChange?: (cat: Category) => void
   /** Called when user edits the merchant name inline */
@@ -96,7 +118,7 @@ const itemVariants = {
   },
 }
 
-export default function ParsePreview({ draft, category, confidence, onCategoryChange, onMerchantChange }: Props) {
+export default function ParsePreview({ draft, category, confidence, customCategories = [], onCategoryChange, onMerchantChange }: Props) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [editingMerchant, setEditingMerchant] = useState(false)
   const [merchantInput, setMerchantInput] = useState('')
@@ -177,6 +199,7 @@ export default function ParsePreview({ draft, category, confidence, onCategoryCh
         {pickerOpen && onCategoryChange && (
           <InlineCategoryPicker
             currentId={category.id}
+            customCategories={customCategories}
             onSelect={(cat) => {
               onCategoryChange(cat)
               setPickerOpen(false)

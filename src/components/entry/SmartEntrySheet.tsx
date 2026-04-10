@@ -48,6 +48,7 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
   const learnCategory = useStore((s) => s.learnCategory)
   const learnedMerchants = useStore((s) => s.learnedMerchants)
   const transactions = useStore((s) => s.transactions)
+  const customCategories = useStore((s) => s.customCategories)
 
   // Derive history merchants (name + frequency) from logged transactions
   const historyMerchants = useMemo(() => {
@@ -367,6 +368,7 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
                         draft={parseResult.draft}
                         category={parseResult.category}
                         confidence={parseResult.confidence}
+                        customCategories={customCategories}
                         onMerchantChange={(name) =>
                           setParseResult((prev) =>
                             prev ? { ...prev, draft: { ...prev.draft, merchant: name } } : prev

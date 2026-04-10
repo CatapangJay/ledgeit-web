@@ -472,6 +472,137 @@
 
 ---
 
+---
+
+## Phase 11 — Budget Allocations (Named Budget Plans)
+
+### TASK-024: Budget Allocations DB Schema (`db/migrations/`)
+- **Owner:** Frontend Lead
+- **Estimate:** 1h
+- **Description:** Add two new tables to support named, switchable budget plans. Each plan (allocation) holds a set of per-category limits. Only one allocation may be active per user at a time.
+- **Subtasks:**
+  - [ ] Write `db/migrations/0003_create_budget_allocations.sql`:
+    - `budget_allocations`: `id UUID PK`, `user_id UUID FK → auth.users`, `name TEXT NOT NULL`, `is_active BOOLEAN NOT NULL DEFAULT FALSE`, `created_at TIMESTAMPTZ DEFAULT now()`
+    - `budget_allocation_items`: `id UUID PK`, `allocation_id UUID FK → budget_allocations ON DELETE CASCADE`, `category_id TEXT NOT NULL`, `limit_amount NUMERIC(12,2) NOT NULL DEFAULT 0`, UNIQUE(`allocation_id, category_id`)
+  - [ ] Enable RLS on both tables with full CRUD policies scoped to `auth.uid() = user_id` (join through `budget_allocations` for items)
+  - [ ] Ensure all statements are idempotent (`CREATE TABLE IF NOT EXISTS`, `DROP POLICY IF EXISTS`)
+  - [ ] Update `src/types/index.ts` with `BudgetAllocationItem` and `BudgetAllocation` interfaces
+- **Acceptance Criteria:**
+  - Migration runs cleanly on a fresh schema
+  - RLS prevents cross-user access
+  - `BudgetAllocation` type includes `id`, `name`, `isActive`, `items: BudgetAllocationItem[]`, `createdAt`
+- **Dependencies:** TASK-019, TASK-020
+
+---
+
+### TASK-025: Budget Allocations DB Layer (`lib/db/budgetAllocations.ts`)
+- **Owner:** Frontend Lead
+- **Estimate:** 1h
+- **Description:** Typed async functions covering the full CRUD lifecycle for budget allocations, including atomic activation (deactivate all → activate one).
+- **Subtasks:**
+  - [ ] `fetchBudgetAllocations(userId)` — returns all allocations with nested items, ordered by `created_at`
+  - [ ] `createBudgetAllocation(userId, name, items)` — inserts allocation row + items; sets `is_active = TRUE` if it is the user's first allocation
+  - [ ] `updateBudgetAllocation(id, name, items)` — updates name; replaces all items via delete-then-insert
+  - [ ] `activateBudgetAllocation(userId, allocationId)` — sets all user allocations to `is_active = FALSE`, then sets target to `TRUE`
+  - [ ] `deleteBudgetAllocation(id)` — deletes allocation (items cascade); if it was active, activates the most recently created remaining allocation
+  - [ ] All queries include `user_id` predicate; never unfiltered selects
+- **Acceptance Criteria:**
+  - No unfiltered DB queries
+  - Activation is self-consistent (exactly one active at all times, or none if no allocations exist)
+  - Items replace correctly on update (no orphan rows)
+- **Dependencies:** TASK-024
+
+---
+
+### TASK-026: Store — Budget Allocations State (`lib/store.ts`)
+- **Owner:** Frontend Lead
+- **Estimate:** 1h
+- **Description:** Extend the Zustand store to manage budget allocations. Derive `budgetLimits` from the active allocation so all existing Insights/BudgetBar components continue to work with zero changes.
+- **Subtasks:**
+  - [ ] Add `budgetAllocations: BudgetAllocation[]` to store state
+  - [ ] Add `loadBudgetAllocations(userId)` action — calls `fetchBudgetAllocations`, syncs state, derives `budgetLimits` from the active allocation
+  - [ ] Add `saveBudgetAllocation({ id?, name, items })` action — optimistic create/update, calls DB layer, reconciles on response
+  - [ ] Add `activateAllocation(allocationId)` action — optimistic flag flip, calls `activateBudgetAllocation` in DB, re-derives `budgetLimits`
+  - [ ] Add `deleteAllocation(allocationId)` action — optimistic remove, calls `deleteBudgetAllocation`, re-derives `budgetLimits`
+  - [ ] Deprecate `loadBudgetLimits` (keep for backward compat but have it delegate to `loadBudgetAllocations`)
+  - [ ] Add `hasSetupBudget` boolean selector (true if `budgetAllocations.length > 0`)
+- **Acceptance Criteria:**
+  - `budgetLimits` always reflects active allocation's items
+  - `hasSetupBudget` is `false` for brand-new users until first allocation is saved
+  - All actions include optimistic rollback on DB error
+- **Dependencies:** TASK-025, TASK-005
+
+---
+
+### TASK-027: BudgetAllocationSheet Component (`components/budget/BudgetAllocationSheet.tsx`)
+- **Owner:** Frontend Lead
+- **Estimate:** 2.5h
+- **Description:** Full-screen bottom sheet for managing budget plans. Two views inside the same sheet: the **Plan List** (browseable, switchable) and the **Plan Editor** (name + per-category limit inputs).
+- **Subtasks:**
+  - [ ] Sheet opens/closes with Framer Motion spring slide-up (same pattern as `SmartEntrySheet`)
+  - [ ] **Plan List view:**
+    - Header: "Budget Plans" + close button
+    - Each row: plan name, active badge (emerald pill "Active"), tap row to activate, edit icon to open editor for that plan
+    - "New Plan" ghost button at bottom
+    - Active plan row gets a left-border accent + subtle bg tint
+  - [ ] **Plan Editor view (create + edit):**
+    - Back arrow to return to list
+    - Name input at top (autofocused on create)
+    - Per-category rows: category icon, label, `₱` number input — one row per expense category (exclude income)
+    - "Save Plan" primary button + "Cancel" ghost button
+    - On save: calls `saveBudgetAllocation` from store; auto-activates if it is the first plan
+  - [ ] Animated transition between list and editor views (x-axis slide using `AnimatePresence`)
+  - [ ] No `useState` for animation values — Framer Motion `useMotionValue` / `variants` only
+- **Acceptance Criteria:**
+  - Plan list → editor transition is smooth (spring x-axis slide)
+  - Activating a plan updates insights immediately (store re-derives `budgetLimits`)
+  - Deleting a plan with swipe-left gesture removes it from list
+  - Cannot delete the only remaining plan (button disabled with tooltip)
+  - Name input has `maxLength={48}` and shows character counter
+- **Dependencies:** TASK-026
+
+---
+
+### TASK-028: OnboardingBudgetSetup Component (`components/budget/OnboardingBudgetSetup.tsx`)
+- **Owner:** Frontend Lead
+- **Estimate:** 1.5h
+- **Description:** Full-screen onboarding overlay shown to new users (no existing allocations) on first app access after login. Guides them to name and configure their first budget plan.
+- **Subtasks:**
+  - [ ] Full-screen overlay (`position: fixed, z-index: 60`) with spring fade-in
+  - [ ] Step 1 — Welcome: LedgeIt wordmark, headline "Set your spending limits", one-liner subtext, "Get Started" button
+  - [ ] Step 2 — Name your plan: single name input, placeholder "E.g. Regular Month", suggested names as tap chips ("Regular Month", "Tight Month", "Vacation Mode"), "Continue" button (disabled if blank)
+  - [ ] Step 3 — Set limits: scrollable per-category rows with `₱` number inputs; pre-populated with sensible defaults from `DEFAULT_BUDGETS` constant
+  - [ ] "Save & Start Tracking" CTA at bottom of step 3 — calls `saveBudgetAllocation`, dismisses overlay with spring exit
+  - [ ] Skip link at top-right — saves the plan with defaults and dismisses
+  - [ ] Step indicator: 3 dots at top center
+  - [ ] Step-to-step transitions: Spring x-axis slide (`variants` with `enter`, `center`, `exit`)
+- **Acceptance Criteria:**
+  - Overlay is only shown when `!hasSetupBudget` (from store) after auth
+  - Completing the flow saves an allocation and sets it as active
+  - Skipping the flow saves with defaults (user can edit later via Insights)
+  - Smooth multi-step slide animation; never feels like a page reload
+- **Dependencies:** TASK-026, TASK-027
+
+---
+
+### TASK-029: Wire Allocations into Insights + StoreBootstrap
+- **Owner:** Frontend Lead
+- **Estimate:** 45m
+- **Description:** Surface the active budget plan name in the Insights page header and expose an entry point to manage plans. Show the onboarding overlay on first access.
+- **Subtasks:**
+  - [ ] `StoreBootstrap.tsx` — call `loadBudgetAllocations(userId)` after auth (replace `loadBudgetLimits`)
+  - [ ] `AppShell.tsx` — conditionally render `<OnboardingBudgetSetup />` when `!hasSetupBudget` (pass `open` prop driven by store)
+  - [ ] `app/insights/page.tsx` — below the month headers, add a tappable row: `[Sliders icon] Plan name · "Change"` that opens `BudgetAllocationSheet`
+  - [ ] Import and mount `BudgetAllocationSheet` in the Insights page with `open/onClose` state
+  - [ ] Ensure `budgetLimits` in scope always reads from active allocation (no direct DEFAULT_BUDGETS fallback needed after first setup)
+- **Acceptance Criteria:**
+  - New user flow: login → onboarding appears → complete → Insights shows plan name
+  - Existing user: Insights header shows current plan name; tap "Change" → sheet opens
+  - Switching plans in the sheet immediately updates budget bars without page reload
+- **Dependencies:** TASK-026, TASK-027, TASK-028
+
+---
+
 ## Dependency Graph
 
 ```
@@ -491,6 +622,9 @@ TASK-019 (Supabase Setup)
   └─ TASK-022 (Auth)
 
 TASK-023 (Railway Docs) — after TASK-019, TASK-020, TASK-022
+
+TASK-024 (Allocation Schema)
+  └─ TASK-025 (Allocation DB Layer) → TASK-026 (Store) → TASK-027 (Sheet) → TASK-028 (Onboarding) → TASK-029 (Wire)
 ```
 
 ---
@@ -517,5 +651,11 @@ TASK-023 (Railway Docs) — after TASK-019, TASK-020, TASK-022
 | TASK-021 Store → DB | P1 High | 2h | Infra |
 | TASK-022 Auth | P1 High | 2h | Auth |
 | TASK-023 Railway Docs | P2 Medium | 45m | Deployment |
+| TASK-024 Allocation Schema | P1 High | 1h | Infra |
+| TASK-025 Allocation DB Layer | P1 High | 1h | Infra |
+| TASK-026 Store Allocations | P1 High | 1h | State |
+| TASK-027 BudgetAllocationSheet | P1 High | 2.5h | UI |
+| TASK-028 OnboardingBudgetSetup | P1 High | 1.5h | UI |
+| TASK-029 Wire Allocations | P1 High | 45m | Integration |
 
 **Total Estimate: ~26.75 hours**

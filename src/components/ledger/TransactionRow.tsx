@@ -2,11 +2,12 @@
 
 import { useMotionValue, motion, animate } from 'framer-motion'
 import { Trash } from '@phosphor-icons/react'
-import { PHOSPHOR_ICON_MAP } from '@/lib/iconMap'
+import { PHOSPHOR_ICON_MAP, CUSTOM_COLOR_OPTIONS } from '@/lib/iconMap'
 import { formatCurrency, formatTime } from '@/lib/formatters'
 import type { Transaction } from '@/types'
 
-const ICON_BG: Record<string, string> = {
+// Preset icon background colors (saturated shade of each category color)
+const PRESET_ICON_BG: Record<string, string> = {
   restaurants:   '#c2410c',
   groceries:     '#4d7c0f',
   transport:     '#0369a1',
@@ -16,6 +17,14 @@ const ICON_BG: Record<string, string> = {
   health:        '#be123c',
   income:        '#1f6950',
   other:         '#64748b',
+}
+
+function getCategoryIconBg(cat: Transaction['category']): string {
+  const preset = PRESET_ICON_BG[cat.id]
+  if (preset) return preset
+  // Custom category — derive swatch from its textColor Tailwind class
+  const opt = CUSTOM_COLOR_OPTIONS.find((c) => c.textColor === cat.color)
+  return opt?.swatch ?? '#64748b'
 }
 
 interface Props {
@@ -60,7 +69,7 @@ export default function TransactionRow({ tx, onDelete }: Props) {
         {/* Icon — rounded-xl */}
         <div
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-          style={{ background: ICON_BG[tx.category.id] ?? '#6e9990' }}
+          style={{ background: getCategoryIconBg(tx.category) }}
         >
           {Icon && (
             <Icon size={16} weight="fill" color="#ffffff" aria-hidden="true" />
@@ -80,7 +89,7 @@ export default function TransactionRow({ tx, onDelete }: Props) {
             </span>
           </div>
           <div className="mt-0.5 flex items-center gap-1.5">
-            <span className="text-xs" style={{ color: ICON_BG[tx.category.id] ?? '#6e9990', opacity: 0.9 }}>{tx.category.label}</span>
+            <span className="text-xs" style={{ color: getCategoryIconBg(tx.category), opacity: 0.9 }}>{tx.category.label}</span>
             <span className="text-xs" style={{ color: '#cde0db' }}>·</span>
             <span className="font-mono text-xs" style={{ color: '#6e9990' }}>{formatTime(tx.createdAt)}</span>
           </div>

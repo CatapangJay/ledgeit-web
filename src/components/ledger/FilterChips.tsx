@@ -2,9 +2,8 @@
 
 import { motion } from 'framer-motion'
 import { CATEGORIES } from '@/types'
-import type { CategoryId } from '@/types'
 
-export type FilterValue = 'all' | 'expense' | 'income' | CategoryId
+export type FilterValue = 'all' | 'expense' | 'income' | string
 
 interface Chip {
   value: FilterValue
@@ -17,19 +16,21 @@ const BASE_CHIPS: Chip[] = [
   { value: 'income', label: 'Income' },
 ]
 
-const CATEGORY_CHIPS: Chip[] = CATEGORIES.filter((c) => c.id !== 'other' && c.id !== 'income').map((c) => ({
+const PRESET_CATEGORY_CHIPS: Chip[] = CATEGORIES.filter((c) => c.id !== 'other' && c.id !== 'income').map((c) => ({
   value: c.id as FilterValue,
   label: c.label,
 }))
 
-const ALL_CHIPS = [...BASE_CHIPS, ...CATEGORY_CHIPS]
-
 interface Props {
   active: FilterValue
   onChange: (val: FilterValue) => void
+  /** Extra chips from user-created custom categories */
+  customChips?: Chip[]
 }
 
-export default function FilterChips({ active, onChange }: Props) {
+export default function FilterChips({ active, onChange, customChips = [] }: Props) {
+  const allChips = [...BASE_CHIPS, ...PRESET_CATEGORY_CHIPS, ...customChips]
+
   return (
     <div
       className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide"
@@ -37,7 +38,7 @@ export default function FilterChips({ active, onChange }: Props) {
       role="group"
       aria-label="Filter transactions"
     >
-      {ALL_CHIPS.map((chip) => {
+      {allChips.map((chip) => {
         const isActive = chip.value === active
         return (
           <motion.button

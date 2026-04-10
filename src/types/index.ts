@@ -12,7 +12,7 @@ export type CategoryId =
   | 'other'
 
 export interface Category {
-  id: CategoryId
+  id: string            // CategoryId for presets, UUID for custom categories
   label: string
   icon: string          // Phosphor icon name
   color: string         // Tailwind text color class
@@ -159,9 +159,59 @@ export interface TransactionDraft {
 // ─── Budget ───────────────────────────────────────────────────────────────────
 
 export interface BudgetLimit {
-  categoryId: CategoryId
+  categoryId: string    // CategoryId for presets, UUID for custom categories
   limit: number
   cycle: 'monthly' | 'weekly'
+}
+
+// ─── Budget Allocations ───────────────────────────────────────────────────────
+
+export interface BudgetAllocationItem {
+  categoryId: string    // CategoryId for presets, UUID for custom categories
+  limit: number
+}
+
+// ─── Custom Category ──────────────────────────────────────────────────────────
+
+export interface CustomCategory {
+  id: string            // UUID from custom_categories table
+  name: string
+  icon: string          // Phosphor icon name
+  textColor: string     // Tailwind text color class e.g. 'text-blue-700'
+  bgColor: string       // Tailwind bg color class e.g. 'bg-blue-50'
+  createdAt: string
+}
+
+/**
+ * Resolve a category object by ID, falling back to custom categories,
+ * then to 'other'.
+ */
+export function resolveCategory(
+  id: string,
+  customCats: CustomCategory[] = []
+): Category {
+  const preset = CATEGORIES.find((c) => c.id === id)
+  if (preset) return preset
+  const custom = customCats.find((c) => c.id === id)
+  if (custom) {
+    return {
+      id: custom.id,
+      label: custom.name,
+      icon: custom.icon,
+      color: custom.textColor,
+      bgColor: custom.bgColor,
+      keywords: [],
+    }
+  }
+  return CATEGORIES[CATEGORIES.length - 1] // 'other'
+}
+
+export interface BudgetAllocation {
+  id: string
+  name: string
+  isActive: boolean
+  items: BudgetAllocationItem[]
+  createdAt: string
 }
 
 // ─── Store Shape ──────────────────────────────────────────────────────────────

@@ -33,6 +33,9 @@ export default function LedgerPage() {
   const [filter, setFilter] = useState<FilterValue>('all')
   const transactions = useStore((s) => s.transactions)
   const deleteTransaction = useStore((s) => s.deleteTransaction)
+  const customCategories = useStore((s) => s.customCategories)
+
+  const customChips = customCategories.map((c) => ({ value: c.id, label: c.name }))
 
   const filtered = useMemo(() => {
     if (filter === 'all') return transactions
@@ -57,7 +60,7 @@ export default function LedgerPage() {
 
       {/* Filter chips */}
       <div className="mb-4">
-        <FilterChips active={filter} onChange={setFilter} />
+        <FilterChips active={filter} onChange={setFilter} customChips={customChips} />
       </div>
 
       {/* Category breakdown bar */}

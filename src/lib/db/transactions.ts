@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
-import { CATEGORIES } from '@/types'
-import type { Transaction } from '@/types'
+import { resolveCategory } from '@/types'
+import type { Transaction, CustomCategory } from '@/types'
 
 // ── DB row shape returned from Supabase ───────────────────────────────────────
 interface TransactionRow {
@@ -19,17 +19,13 @@ interface TransactionRow {
 }
 
 // ── Mapper: DB row → frontend Transaction ────────────────────────────────────
-function rowToTransaction(row: TransactionRow): Transaction {
-  const category =
-    CATEGORIES.find((c) => c.id === row.category_id) ??
-    CATEGORIES[CATEGORIES.length - 1]
-
+function rowToTransaction(row: TransactionRow, customCats: CustomCategory[] = []): Transaction {
   return {
     id: row.id,
     raw: row.raw,
     amount: Number(row.amount),
     merchant: row.merchant,
-    category,
+    category: resolveCategory(row.category_id, customCats),
     date: row.date,
     type: row.type as 'expense' | 'income',
     confidence: Number(row.confidence),
@@ -48,7 +44,10 @@ async function getCurrentUserId(): Promise<string> {
   return user.id
 }
 
-export async function fetchTransactions(userId: string): Promise<Transaction[]> {
+export async function fetchTransactions(
+  userId: string,
+  customCats: CustomCategory[] = []
+): Promise<Transaction[]> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('transactions')
@@ -57,7 +56,7 @@ export async function fetchTransactions(userId: string): Promise<Transaction[]> 
     .order('created_at', { ascending: false })
 
   if (error) throw new Error(error.message)
-  return (data as TransactionRow[]).map(rowToTransaction)
+  return (data as TransactionRow[]).map((row) => rowToTransaction(row, customCats))
 }
 
 export async function insertTransaction(tx: Transaction): Promise<void> {

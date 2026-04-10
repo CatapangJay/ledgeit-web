@@ -2,10 +2,11 @@
 
 import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { CaretLeft, CaretRight } from '@phosphor-icons/react'
+import { CaretLeft, CaretRight, Sliders } from '@phosphor-icons/react'
 import MetricStrip from '@/components/insights/MetricStrip'
 import BudgetBar from '@/components/insights/BudgetBar'
 import SpendDonut from '@/components/insights/SpendDonut'
+import BudgetAllocationSheet from '@/components/budget/BudgetAllocationSheet'
 import { useStore } from '@/lib/store'
 import { formatCurrency, formatMonthLabel } from '@/lib/formatters'
 import { CATEGORIES } from '@/types'
@@ -24,8 +25,13 @@ function getMonthBounds(offset: number): { start: string; end: string; label: st
 
 export default function InsightsPage() {
   const [monthOffset, setMonthOffset] = useState(0)
+  const [allocationSheetOpen, setAllocationSheetOpen] = useState(false)
   const transactions = useStore((s) => s.transactions)
   const budgetLimits = useStore((s) => s.budgetLimits)
+  const budgetAllocations = useStore((s) => s.budgetAllocations)
+  const customCategories = useStore((s) => s.customCategories)
+
+  const activePlan = budgetAllocations.find((a) => a.isActive)
 
   const { start, end, label } = useMemo(() => getMonthBounds(monthOffset), [monthOffset])
 
@@ -92,8 +98,19 @@ export default function InsightsPage() {
     },
   ]
 
-  const budgetCategories = CATEGORIES.filter(
-    (c) => c.id !== 'income' && c.id !== 'other'
+  const budgetCategories = useMemo(
+    () => [
+      ...CATEGORIES.filter((c) => c.id !== 'income' && c.id !== 'other'),
+      ...customCategories.map((c) => ({
+        id: c.id,
+        label: c.name,
+        icon: c.icon,
+        color: c.textColor,
+        bgColor: c.bgColor,
+        keywords: [] as string[],
+      })),
+    ],
+    [customCategories]
   )
 
   return (
@@ -114,7 +131,7 @@ export default function InsightsPage() {
           >
             <CaretLeft size={13} weight="bold" aria-hidden="true" />
           </motion.button>
-          <span className="text-[11px] font-semibold min-w-[96px] text-center" style={{ color: '#3f4946' }}>
+          <span className="min-w-24 text-center text-[11px] font-semibold" style={{ color: '#3f4946' }}>
             {label}
           </span>
           <motion.button
@@ -130,6 +147,23 @@ export default function InsightsPage() {
           </motion.button>
         </div>
       </div>
+
+      {/* Active budget plan row */}
+      <motion.button
+        aria-label={activePlan ? `Budget plan: ${activePlan.name}. Tap to change.` : 'Set up a budget plan'}
+        whileTap={{ scale: 0.97 }}
+        onClick={() => setAllocationSheetOpen(true)}
+        className="mb-3 flex w-full items-center gap-2 rounded-xl px-3 py-2"
+        style={{ background: '#f0f4f2' }}
+      >
+        <Sliders size={13} weight="bold" style={{ color: '#1f695d' }} aria-hidden="true" />
+        <span className="flex-1 text-left text-xs font-semibold" style={{ color: '#191c1c' }}>
+          {activePlan ? activePlan.name : 'No active plan'}
+        </span>
+        <span className="text-[11px] font-semibold" style={{ color: '#1f695d' }}>
+          Change
+        </span>
+      </motion.button>
 
       {/* Metric strip */}
       <div className="mt-4">
@@ -170,6 +204,12 @@ export default function InsightsPage() {
           <p className="text-xs" style={{ color: '#cde0db' }}>Add transactions to see your patterns.</p>
         </div>
       )}
+
+      {/* Budget allocation sheet */}
+      <BudgetAllocationSheet
+        open={allocationSheetOpen}
+        onClose={() => setAllocationSheetOpen(false)}
+      />
     </div>
   )
 }

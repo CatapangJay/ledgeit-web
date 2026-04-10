@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Transaction, BudgetLimit, CategoryId } from '@/types'
+import type { Transaction, BudgetLimit, BudgetAllocation, BudgetAllocationItem, CustomCategory, CategoryId } from '@/types'
 import {
   fetchTransactions,
   insertTransaction,
@@ -7,11 +7,23 @@ import {
   patchTransaction,
 } from '@/lib/db/transactions'
 import { fetchBudgetLimits } from '@/lib/db/budgetLimits'
+import {
+  fetchBudgetAllocations,
+  createBudgetAllocation,
+  updateBudgetAllocation,
+  activateBudgetAllocation,
+  deleteBudgetAllocation,
+} from '@/lib/db/budgetAllocations'
+import {
+  fetchCustomCategories,
+  createCustomCategory,
+  deleteCustomCategory,
+} from '@/lib/db/customCategories'
 
 // ─── Default budget limits ────────────────────────────────────────────────────
-// Applied immediately on app boot; replaced by DB limits once loaded.
+// Applied as fallback when no active allocation is loaded.
 
-const DEFAULT_BUDGETS: BudgetLimit[] = [
+export const DEFAULT_BUDGETS: BudgetLimit[] = [
   { categoryId: 'restaurants', limit: 5000, cycle: 'monthly' },
   { categoryId: 'groceries', limit: 8000, cycle: 'monthly' },
   { categoryId: 'transport', limit: 3000, cycle: 'monthly' },
@@ -21,11 +33,21 @@ const DEFAULT_BUDGETS: BudgetLimit[] = [
   { categoryId: 'health', limit: 2000, cycle: 'monthly' },
 ]
 
+function allocationToLimits(allocation: BudgetAllocation): BudgetLimit[] {
+  return allocation.items.map((item) => ({
+    categoryId: item.categoryId,
+    limit: item.limit,
+    cycle: 'monthly' as const,
+  }))
+}
+
 // ─── Store Definition ─────────────────────────────────────────────────────────
 
 interface StoreState {
   transactions: Transaction[]
   budgetLimits: BudgetLimit[]
+  budgetAllocations: BudgetAllocation[]
+  customCategories: CustomCategory[]
   /** Merchant key → CategoryId learned from user corrections */
   learnedMerchants: Record<string, CategoryId>
   isLoading: boolean
@@ -35,7 +57,15 @@ interface StoreState {
 interface StoreActions {
   setUserId: (userId: string | null) => void
   loadTransactions: (userId: string) => Promise<void>
+  /** @deprecated Delegates to loadBudgetAllocations */
   loadBudgetLimits: (userId: string) => Promise<void>
+  loadBudgetAllocations: (userId: string) => Promise<void>
+  saveBudgetAllocation: (payload: { id?: string; name: string; items: BudgetAllocationItem[] }) => Promise<void>
+  activateAllocation: (allocationId: string) => Promise<void>
+  deleteAllocation: (allocationId: string) => Promise<void>
+  loadCustomCategories: (userId: string) => Promise<void>
+  addCustomCategory: (userId: string, name: string, icon: string, textColor: string, bgColor: string) => Promise<CustomCategory>
+  removeCustomCategory: (id: string) => Promise<void>
   addTransaction: (tx: Transaction) => void
   deleteTransaction: (id: string) => void
   updateTransaction: (id: string, patch: Partial<Transaction>) => void
@@ -45,6 +75,8 @@ interface StoreActions {
   getByDate: (date: string) => Transaction[]
   getMonthlyTotal: (type: 'expense' | 'income') => number
   getDailyTotal: (date: string, type?: 'expense' | 'income') => number
+  /** True once the user has at least one saved allocation. */
+  hasSetupBudget: () => boolean
 }
 
 export type AppStore = StoreState & StoreActions
@@ -54,6 +86,8 @@ export type AppStore = StoreState & StoreActions
 export const useStore = create<AppStore>()((set, get) => ({
   transactions: [],
   budgetLimits: DEFAULT_BUDGETS,
+  budgetAllocations: [],
+  customCategories: [],
   learnedMerchants: {},
   isLoading: false,
   userId: null,
@@ -65,23 +99,149 @@ export const useStore = create<AppStore>()((set, get) => ({
   async loadTransactions(userId) {
     set({ isLoading: true })
     try {
-      const transactions = await fetchTransactions(userId)
+      const transactions = await fetchTransactions(userId, get().customCategories)
       set({ transactions, isLoading: false })
     } catch {
       set({ isLoading: false })
     }
   },
 
-  async loadBudgetLimits(userId) {
-    const now = new Date()
-    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  // ─── Budget Allocations ───────────────────────────────────────────────────
+
+  async loadBudgetAllocations(userId) {
     try {
-      const limits = await fetchBudgetLimits(userId, month)
-      if (limits.length > 0) {
-        set({ budgetLimits: limits })
-      }
+      const allocations = await fetchBudgetAllocations(userId)
+      const active = allocations.find((a) => a.isActive)
+      set({
+        budgetAllocations: allocations,
+        budgetLimits: active ? allocationToLimits(active) : DEFAULT_BUDGETS,
+      })
     } catch {
-      // Keep default budget limits on error
+      // Keep defaults on error
+    }
+  },
+
+  /** @deprecated Delegates to loadBudgetAllocations */
+  async loadBudgetLimits(userId) {
+    return get().loadBudgetAllocations(userId)
+  },
+
+  async saveBudgetAllocation({ id, name, items }) {
+    const userId = get().userId
+    if (!userId) return
+
+    const prev = get().budgetAllocations
+
+    if (id) {
+      // ── Update existing ────────────────────────────────────────────────────
+      const optimistic = prev.map((a) =>
+        a.id === id ? { ...a, name, items } : a
+      )
+      const active = optimistic.find((a) => a.isActive)
+      set({
+        budgetAllocations: optimistic,
+        budgetLimits: active ? allocationToLimits(active) : DEFAULT_BUDGETS,
+      })
+      try {
+        await updateBudgetAllocation(id, name, items)
+      } catch (err) {
+        console.error('[store] updateBudgetAllocation failed:', err)
+        set({ budgetAllocations: prev })
+      }
+    } else {
+      // ── Create new ────────────────────────────────────────────────────────
+      try {
+        const created = await createBudgetAllocation(userId, name, items)
+        const next = [created, ...prev.map((a) => ({ ...a, isActive: created.isActive ? false : a.isActive }))]
+        const active = next.find((a) => a.isActive)
+        set({
+          budgetAllocations: next,
+          budgetLimits: active ? allocationToLimits(active) : DEFAULT_BUDGETS,
+        })
+      } catch (err) {
+        console.error('[store] createBudgetAllocation failed:', err)
+      }
+    }
+  },
+
+  async activateAllocation(allocationId) {
+    const userId = get().userId
+    if (!userId) return
+
+    const prev = get().budgetAllocations
+    const optimistic = prev.map((a) => ({ ...a, isActive: a.id === allocationId }))
+    const active = optimistic.find((a) => a.isActive)
+    set({
+      budgetAllocations: optimistic,
+      budgetLimits: active ? allocationToLimits(active) : DEFAULT_BUDGETS,
+    })
+    try {
+      await activateBudgetAllocation(userId, allocationId)
+    } catch (err) {
+      console.error('[store] activateBudgetAllocation failed:', err)
+      set({ budgetAllocations: prev })
+    }
+  },
+
+  async deleteAllocation(allocationId) {
+    const userId = get().userId
+    if (!userId) return
+
+    const prev = get().budgetAllocations
+    const target = prev.find((a) => a.id === allocationId)
+    if (!target) return
+
+    // Cannot delete the only allocation
+    if (prev.length === 1) return
+
+    const remaining = prev.filter((a) => a.id !== allocationId)
+    // If we deleted the active one, promote the first remaining
+    const shouldPromote = target.isActive
+    const promoted = shouldPromote
+      ? remaining.map((a, i) => ({ ...a, isActive: i === 0 }))
+      : remaining
+    const active = promoted.find((a) => a.isActive)
+    set({
+      budgetAllocations: promoted,
+      budgetLimits: active ? allocationToLimits(active) : DEFAULT_BUDGETS,
+    })
+    try {
+      await deleteBudgetAllocation(userId, allocationId, target.isActive)
+    } catch (err) {
+      console.error('[store] deleteBudgetAllocation failed:', err)
+      set({ budgetAllocations: prev })
+    }
+  },
+
+  hasSetupBudget() {
+    return get().budgetAllocations.length > 0
+  },
+
+  // ─── Custom Categories ────────────────────────────────────────────────────
+
+  async loadCustomCategories(userId) {
+    try {
+      const customCategories = await fetchCustomCategories(userId)
+      set({ customCategories })
+    } catch {
+      // Keep empty on error
+    }
+  },
+
+  async addCustomCategory(userId, name, icon, textColor, bgColor) {
+    const created = await createCustomCategory(userId, name, icon, textColor, bgColor)
+    set((state) => ({ customCategories: [...state.customCategories, created] }))
+    return created
+  },
+
+  async removeCustomCategory(id) {
+    const prev = get().customCategories
+    set((state) => ({ customCategories: state.customCategories.filter((c) => c.id !== id) }))
+    try {
+      await deleteCustomCategory(id)
+    } catch (err) {
+      console.error('[store] deleteCustomCategory failed:', err)
+      set({ customCategories: prev })
     }
   },
 
