@@ -7,10 +7,10 @@ import { parseTransaction } from '@/lib/parser'
 import { categorize, getMerchantKey } from '@/lib/categorizer'
 import { resolveMerchant } from '@/lib/fuzzy'
 import { useStore } from '@/lib/store'
-import { PHOSPHOR_ICON_MAP } from '@/lib/iconMap'
+import { PHOSPHOR_ICON_MAP, getIconComponent } from '@/lib/iconMap'
 import { formatCurrency } from '@/lib/formatters'
 import { CATEGORIES } from '@/types'
-import type { Transaction, Category, CategoryId } from '@/types'
+import type { Transaction, Category, CategoryId, CustomCategory } from '@/types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -50,11 +50,23 @@ function splitEntries(text: string): string[] {
 
 interface CategoryPickerProps {
   currentId: string
+  customCategories: CustomCategory[]
   onSelect: (cat: Category) => void
   onClose: () => void
 }
 
-function CategoryPicker({ currentId, onSelect, onClose }: CategoryPickerProps) {
+function CategoryPicker({ currentId, customCategories, onSelect, onClose }: CategoryPickerProps) {
+  const allCategories: Category[] = [
+    ...CATEGORIES,
+    ...customCategories.map((c) => ({
+      id: c.id,
+      label: c.name,
+      icon: c.icon,
+      color: c.textColor,
+      bgColor: c.bgColor,
+      keywords: [] as string[],
+    })),
+  ]
   return (
     <motion.div
       key="cat-picker"
@@ -79,14 +91,14 @@ function CategoryPicker({ currentId, onSelect, onClose }: CategoryPickerProps) {
         </button>
       </div>
       <div className="grid grid-cols-3 gap-1.5">
-        {CATEGORIES.map((cat) => {
-          const Icon = PHOSPHOR_ICON_MAP[cat.icon]
+        {allCategories.map((cat) => {
+          const Icon = getIconComponent(cat.icon)
           const active = cat.id === currentId
           return (
             <button
               key={cat.id}
               onClick={() => onSelect(cat)}
-              className={`flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors ${
+              className={`flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors rounded-xl ${
                 active
                   ? `${cat.bgColor} ${cat.color}`
                   : 'text-ledge-muted hover:bg-ledge-surface2 hover:text-ledge-data'
@@ -118,6 +130,7 @@ export default function BulkEntryMode({ onAllLogged, onDiscard }: Props) {
   const learnCategory = useStore((s) => s.learnCategory)
   const learnedMerchants = useStore((s) => s.learnedMerchants)
   const transactions = useStore((s) => s.transactions)
+  const customCategories = useStore((s) => s.customCategories)
 
   // History merchants for fuzzy resolution
   const historyMerchants = useMemo(() => {
@@ -423,6 +436,7 @@ export default function BulkEntryMode({ onAllLogged, onDiscard }: Props) {
                 <CategoryPicker
                   key={`picker-${categoryEditId}`}
                   currentId={activeCatEntry.category.id}
+                  customCategories={customCategories}
                   onSelect={(cat) => changeCategory(categoryEditId, cat)}
                   onClose={() => setCategoryEditId(null)}
                 />

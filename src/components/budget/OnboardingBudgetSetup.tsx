@@ -67,6 +67,7 @@ export default function OnboardingBudgetSetup() {
   const [saving, setSaving] = useState(false)
   const [showAddCatForm, setShowAddCatForm] = useState(false)
   const [savingCustomCat, setSavingCustomCat] = useState(false)
+  const [addCatError, setAddCatError] = useState<string | null>(null)
   const [totalBudget, setTotalBudget] = useState(0)
   const [allocationMode, setAllocationMode] = useState<'amount' | 'percent'>('amount')
   const [percents, setPercents] = useState<Record<string, number>>({})
@@ -102,13 +103,22 @@ export default function OnboardingBudgetSetup() {
     textColor: string,
     bgColor: string
   ) {
-    if (!userId) return
+    setAddCatError(null)
+    let uid = userId
+    if (!uid) {
+      const { createClient: mkClient } = await import('@/lib/supabase/client')
+      const { data } = await mkClient().auth.getUser()
+      uid = data.user?.id ?? null
+    }
+    if (!uid) { setAddCatError('Not signed in. Please refresh and try again.'); return }
     setSavingCustomCat(true)
     try {
-      const newCat = await storeAddCustomCategory(userId, name, icon, textColor, bgColor)
+      const newCat = await storeAddCustomCategory(uid, name, icon, textColor, bgColor)
       setItems((prev) => [...prev, { categoryId: newCat.id, limit: 0 }])
       setPercents((prev) => ({ ...prev, [newCat.id]: 0 }))
       setShowAddCatForm(false)
+    } catch (err) {
+      setAddCatError(err instanceof Error ? err.message : 'Failed to add category')
     } finally {
       setSavingCustomCat(false)
     }
@@ -506,12 +516,19 @@ export default function OnboardingBudgetSetup() {
                 {/* Add custom category */}
                 <AnimatePresence mode="wait">
                   {showAddCatForm ? (
-                    <AddCategoryForm
-                      key="form"
-                      onConfirm={handleAddCustomCategory}
-                      onCancel={() => setShowAddCatForm(false)}
-                      saving={savingCustomCat}
-                    />
+                    <>
+                      <AddCategoryForm
+                        key="form"
+                        onConfirm={handleAddCustomCategory}
+                        onCancel={() => { setShowAddCatForm(false); setAddCatError(null) }}
+                        saving={savingCustomCat}
+                      />
+                      {addCatError && (
+                        <p className="mt-2 rounded-xl px-3 py-2 text-[11px] font-semibold" style={{ background: '#ffeaea', color: '#ba1a1a' }}>
+                          {addCatError}
+                        </p>
+                      )}
+                    </>
                   ) : (
                     <motion.button
                       key="btn"
