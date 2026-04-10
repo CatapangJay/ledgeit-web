@@ -49,7 +49,7 @@ function splitEntries(text: string): string[] {
 // ─── Category Picker (inline panel) ──────────────────────────────────────────
 
 interface CategoryPickerProps {
-  currentId: CategoryId
+  currentId: string
   onSelect: (cat: Category) => void
   onClose: () => void
 }

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Transaction, BudgetLimit, BudgetAllocation, BudgetAllocationItem, CustomCategory, CategoryId } from '@/types'
+import type { Transaction, BudgetLimit, BudgetAllocation, BudgetAllocationItem, CustomCategory } from '@/types'
 import {
   fetchTransactions,
   insertTransaction,
@@ -48,8 +48,8 @@ interface StoreState {
   budgetLimits: BudgetLimit[]
   budgetAllocations: BudgetAllocation[]
   customCategories: CustomCategory[]
-  /** Merchant key → CategoryId learned from user corrections */
-  learnedMerchants: Record<string, CategoryId>
+  /** Merchant key → category id (preset or custom) learned from user corrections */
+  learnedMerchants: Record<string, string>
   isLoading: boolean
   userId: string | null
 }
@@ -70,8 +70,8 @@ interface StoreActions {
   deleteTransaction: (id: string) => void
   updateTransaction: (id: string, patch: Partial<Transaction>) => void
   /** Persist a user-corrected category for a merchant/keyword. */
-  learnCategory: (merchantKey: string, categoryId: CategoryId) => void
-  getByCategory: (categoryId: CategoryId) => Transaction[]
+  learnCategory: (merchantKey: string, categoryId: string) => void
+  getByCategory: (categoryId: string) => Transaction[]
   getByDate: (date: string) => Transaction[]
   getMonthlyTotal: (type: 'expense' | 'income') => number
   getDailyTotal: (date: string, type?: 'expense' | 'income') => number

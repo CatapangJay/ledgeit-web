@@ -49,7 +49,7 @@ export interface CategorizationResult {
 
 export function categorize(
   draft: TransactionDraft,
-  learnedOverrides?: Record<string, CategoryId>,
+  learnedOverrides?: Record<string, string>,
 ): CategorizationResult {
   const fallback: CategorizationResult = {
     category: CATEGORIES.find((c) => c.id === 'other')!,
