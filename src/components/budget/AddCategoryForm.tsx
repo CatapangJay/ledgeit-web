@@ -14,7 +14,7 @@ interface Props {
 export default function AddCategoryForm({ onConfirm, onCancel, saving }: Props) {
   const [name, setName] = useState('')
   const [selectedIcon, setSelectedIcon] = useState(CUSTOM_ICON_OPTIONS[0])
-  const [selectedColor, setSelectedColor] = useState(CUSTOM_COLOR_OPTIONS[0])
+  const [selectedColor, setSelectedColor] = useState<typeof CUSTOM_COLOR_OPTIONS[number]>(CUSTOM_COLOR_OPTIONS[0])
 
   function handleConfirm() {
     if (!name.trim()) return
