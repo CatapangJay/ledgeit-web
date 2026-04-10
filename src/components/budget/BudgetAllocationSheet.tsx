@@ -104,19 +104,35 @@ export default function BudgetAllocationSheet({ open, onClose }: Props) {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [showAddCatForm, setShowAddCatForm] = useState(false)
   const [savingCustomCat, setSavingCustomCat] = useState(false)
+  const [totalBudget, setTotalBudget] = useState(0)
+  const [allocationMode, setAllocationMode] = useState<'amount' | 'percent'>('amount')
+  const [percents, setPercents] = useState<Record<string, number>>({})
 
   function openEditor(id?: string) {
+    let newItems: BudgetAllocationItem[]
     if (id) {
       const alloc = allocations.find((a) => a.id === id)
       if (!alloc) return
       setPlanName(alloc.name)
-      setItems(buildEditorItems(alloc.items, customCategories))
+      newItems = buildEditorItems(alloc.items, customCategories)
       setEditId(id)
     } else {
       setPlanName('')
-      setItems(buildEditorItems([], customCategories))
+      newItems = buildEditorItems([], customCategories)
       setEditId(undefined)
     }
+    setItems(newItems)
+    const total = newItems.reduce((s, i) => s + i.limit, 0)
+    setTotalBudget(total)
+    setAllocationMode('amount')
+    setPercents(
+      Object.fromEntries(
+        newItems.map((i) => [
+          i.categoryId,
+          total > 0 ? Math.round((i.limit / total) * 100) : 0,
+        ])
+      )
+    )
     setShowAddCatForm(false)
     setDirection(1)
     setView('editor')
@@ -156,6 +172,7 @@ export default function BudgetAllocationSheet({ open, onClose }: Props) {
     try {
       const newCat = await storeAddCustomCategory(userId, name, icon, textColor, bgColor)
       setItems((prev) => [...prev, { categoryId: newCat.id, limit: 0 }])
+      setPercents((prev) => ({ ...prev, [newCat.id]: 0 }))
       setShowAddCatForm(false)
     } finally {
       setSavingCustomCat(false)
@@ -164,6 +181,50 @@ export default function BudgetAllocationSheet({ open, onClose }: Props) {
 
   function removeFromItems(categoryId: string) {
     setItems((prev) => prev.filter((i) => i.categoryId !== categoryId))
+    setPercents((prev) => {
+      const next = { ...prev }
+      delete next[categoryId]
+      return next
+    })
+  }
+
+  function handleTotalBudgetChange(raw: string) {
+    const num = parseFloat(raw.replace(/[^0-9.]/g, '')) || 0
+    setTotalBudget(num)
+    if (allocationMode === 'percent') {
+      setItems((prev) =>
+        prev.map((item) => ({
+          ...item,
+          limit: Math.round(((percents[item.categoryId] ?? 0) / 100) * num),
+        }))
+      )
+    }
+  }
+
+  function handleModeToggle(mode: 'amount' | 'percent') {
+    if (mode === allocationMode) return
+    if (mode === 'percent') {
+      const base = totalBudget > 0 ? totalBudget : items.reduce((s, i) => s + i.limit, 0)
+      if (totalBudget === 0) setTotalBudget(base)
+      setPercents(
+        Object.fromEntries(
+          items.map((i) => [i.categoryId, base > 0 ? Math.round((i.limit / base) * 100) : 0])
+        )
+      )
+    }
+    setAllocationMode(mode)
+  }
+
+  function handlePercentChange(categoryId: string, raw: string) {
+    const num = Math.max(0, Math.min(100, Math.round(parseFloat(raw.replace(/[^0-9.]/g, '')) || 0)))
+    setPercents((prev) => ({ ...prev, [categoryId]: num }))
+    setItems((prev) =>
+      prev.map((item) =>
+        item.categoryId === categoryId
+          ? { ...item, limit: Math.round((num / 100) * totalBudget) }
+          : item
+      )
+    )
   }
 
   async function handleDelete(id: string) {
@@ -415,14 +476,90 @@ export default function BudgetAllocationSheet({ open, onClose }: Props) {
                         </div>
                       </div>
 
-                      {/* Category limits — preset + custom */}
-                      <p className="mb-3 text-[11px] font-bold uppercase tracking-widest" style={{ color: '#6e9990' }}>
-                        Monthly Limits
-                      </p>
+                      {/* Total monthly budget */}
+                      <div className="mb-4">
+                        <label
+                          htmlFor="total-budget"
+                          className="mb-1.5 block text-[11px] font-bold uppercase tracking-widest"
+                          style={{ color: '#6e9990' }}
+                        >
+                          Total Monthly Budget
+                        </label>
+                        <div
+                          className="flex items-center gap-2 rounded-xl px-4 py-3"
+                          style={{ background: '#f0f4f2' }}
+                        >
+                          <span className="font-mono text-sm font-semibold" style={{ color: '#6e9990' }}>₱</span>
+                          <input
+                            id="total-budget"
+                            type="number"
+                            inputMode="numeric"
+                            min={0}
+                            step={1000}
+                            value={totalBudget === 0 ? '' : totalBudget}
+                            onChange={(e) => handleTotalBudgetChange(e.target.value)}
+                            placeholder="e.g. 30000"
+                            className="flex-1 bg-transparent font-mono text-sm font-semibold outline-none"
+                            style={{ color: '#191c1c' }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Allocation mode toggle */}
+                      <div
+                        className="mb-4 flex rounded-xl p-1"
+                        style={{ background: '#f0f4f2' }}
+                      >
+                        {(['amount', 'percent'] as const).map((mode) => (
+                          <button
+                            key={mode}
+                            onClick={() => handleModeToggle(mode)}
+                            className="flex-1 rounded-lg py-2 text-xs font-bold transition-colors"
+                            style={{
+                              background: allocationMode === mode ? '#ffffff' : 'transparent',
+                              color: allocationMode === mode ? '#00352e' : '#6e9990',
+                              boxShadow: allocationMode === mode ? '0 1px 4px rgba(0,53,46,0.10)' : 'none',
+                            }}
+                          >
+                            {mode === 'amount' ? '₱ Amount' : '% Percent'}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Category limits header + allocation summary */}
+                      {(() => {
+                        const totalAllocated =
+                          allocationMode === 'percent'
+                            ? Object.values(percents).reduce((s, p) => s + p, 0)
+                            : items.reduce((s, i) => s + i.limit, 0)
+                        const isOver =
+                          allocationMode === 'percent'
+                            ? totalAllocated > 100
+                            : totalBudget > 0 && totalAllocated > totalBudget
+                        return (
+                          <div className="mb-3 flex items-center justify-between">
+                            <p className="text-[11px] font-bold uppercase tracking-widest" style={{ color: '#6e9990' }}>
+                              Monthly Limits
+                            </p>
+                            <span
+                              className="font-mono text-[11px] font-semibold"
+                              style={{ color: isOver ? '#ba1a1a' : '#1f695d' }}
+                            >
+                              {allocationMode === 'percent'
+                                ? `${totalAllocated}% allocated`
+                                : totalBudget > 0
+                                  ? `${formatCurrency(totalAllocated)} / ${formatCurrency(totalBudget)}`
+                                  : formatCurrency(totalAllocated)}
+                            </span>
+                          </div>
+                        )
+                      })()}
+
                       <div className="flex flex-col gap-2">
                         {items.map((item) => {
                           const { label, icon, colorClass, isCustom } = getCatDisplay(item.categoryId, customCategories)
                           const Icon = getIconComponent(icon)
+                          const pct = percents[item.categoryId] ?? 0
                           return (
                             <div
                               key={item.categoryId}
@@ -435,28 +572,57 @@ export default function BudgetAllocationSheet({ open, onClose }: Props) {
                               >
                                 <Icon size={15} weight="duotone" className={colorClass} aria-hidden="true" />
                               </div>
-                              <span className="flex-1 text-xs font-semibold" style={{ color: '#191c1c' }}>
+                              <span className="min-w-0 flex-1 truncate text-xs font-semibold" style={{ color: '#191c1c' }}>
                                 {label}
                               </span>
-                              <div className="flex items-center gap-1">
-                                <span className="font-mono text-xs font-semibold" style={{ color: '#6e9990' }}>₱</span>
-                                <input
-                                  type="number"
-                                  inputMode="numeric"
-                                  min={0}
-                                  step={100}
-                                  aria-label={`${label} monthly limit`}
-                                  value={item.limit === 0 ? '' : item.limit}
-                                  onChange={(e) => handleLimitChange(item.categoryId, e.target.value)}
-                                  placeholder="0"
-                                  className="w-24 rounded-lg px-2 py-1.5 text-right font-mono text-sm font-semibold outline-none"
-                                  style={{
-                                    background: '#ffffff',
-                                    color: '#191c1c',
-                                    border: '1px solid #cde0db',
-                                  }}
-                                />
-                              </div>
+                              {allocationMode === 'amount' ? (
+                                <div className="flex shrink-0 items-center gap-1">
+                                  <span className="font-mono text-xs font-semibold" style={{ color: '#6e9990' }}>₱</span>
+                                  <input
+                                    type="number"
+                                    inputMode="numeric"
+                                    min={0}
+                                    step={100}
+                                    aria-label={`${label} monthly limit`}
+                                    value={item.limit === 0 ? '' : item.limit}
+                                    onChange={(e) => handleLimitChange(item.categoryId, e.target.value)}
+                                    placeholder="0"
+                                    className="w-24 rounded-lg px-2 py-1.5 text-right font-mono text-sm font-semibold outline-none"
+                                    style={{
+                                      background: '#ffffff',
+                                      color: '#191c1c',
+                                      border: '1px solid #cde0db',
+                                    }}
+                                  />
+                                </div>
+                              ) : (
+                                <div className="flex shrink-0 flex-col items-end gap-0.5">
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="number"
+                                      inputMode="numeric"
+                                      min={0}
+                                      max={100}
+                                      aria-label={`${label} budget percentage`}
+                                      value={pct === 0 ? '' : pct}
+                                      onChange={(e) => handlePercentChange(item.categoryId, e.target.value)}
+                                      placeholder="0"
+                                      className="w-16 rounded-lg px-2 py-1.5 text-right font-mono text-sm font-semibold outline-none"
+                                      style={{
+                                        background: '#ffffff',
+                                        color: '#191c1c',
+                                        border: '1px solid #cde0db',
+                                      }}
+                                    />
+                                    <span className="font-mono text-xs font-semibold" style={{ color: '#6e9990' }}>%</span>
+                                  </div>
+                                  {totalBudget > 0 && (
+                                    <span className="font-mono text-[10px]" style={{ color: '#6e9990' }}>
+                                      ≈ {formatCurrency(item.limit)}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                               {/* Remove custom category from this allocation */}
                               {isCustom && (
                                 <motion.button
