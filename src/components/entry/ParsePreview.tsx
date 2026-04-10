@@ -79,13 +79,6 @@ function InlineCategoryPicker({
           )
         })}
       </div>
-                <Icon size={15} weight={active ? 'fill' : 'regular'} aria-hidden="true" />
-              )}
-              <span className="leading-none">{cat.label.split(/[\s&]/)[0]}</span>
-            </button>
-          )
-        })}
-      </div>
     </motion.div>
   )
 }
