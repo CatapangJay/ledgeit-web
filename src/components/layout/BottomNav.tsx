@@ -6,6 +6,7 @@ import {
   House,
   List,
   PlusCircle,
+  UserCircle,
 } from '@phosphor-icons/react'
 import { motion } from 'framer-motion'
 import { useState } from 'react'
@@ -16,6 +17,7 @@ const TABS = [
   { label: 'Ledger', icon: List, href: '/ledger' },
   { label: 'Add', icon: PlusCircle, href: null }, // FAB — center, opens sheet
   { label: 'Insights', icon: ChartPieSlice, href: '/insights' },
+  { label: 'Account', icon: UserCircle, href: '/account' },
 ]
 
 export default function BottomNav() {

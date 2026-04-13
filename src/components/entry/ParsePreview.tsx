@@ -2,10 +2,10 @@
 
 import { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X } from '@phosphor-icons/react'
+import { X, CalendarBlank, CheckCircle, Circle } from '@phosphor-icons/react'
 import CategoryBadge from './CategoryBadge'
 import { formatCurrency, formatDate } from '@/lib/formatters'
-import { PHOSPHOR_ICON_MAP, getIconComponent } from '@/lib/iconMap'
+import { getIconComponent } from '@/lib/iconMap'
 import { CATEGORIES } from '@/types'
 import type { Category, TransactionDraft, CustomCategory } from '@/types'
 
@@ -88,10 +88,14 @@ interface Props {
   category: Category
   confidence: number
   customCategories?: CustomCategory[]
-  /** Called when user manually selects a different category */
   onCategoryChange?: (cat: Category) => void
-  /** Called when user edits the merchant name inline */
   onMerchantChange?: (name: string) => void
+  onDateChange?: (date: string) => void
+  /** Bulk mode: whether this entry is selected for logging */
+  selected?: boolean
+  onToggleSelect?: () => void
+  /** Bulk mode: entry already logged */
+  logged?: boolean
 }
 
 const containerVariants = {
@@ -111,12 +115,14 @@ const itemVariants = {
   },
 }
 
-export default function ParsePreview({ draft, category, confidence, customCategories = [], onCategoryChange, onMerchantChange }: Props) {
+export default function ParsePreview({ draft, category, confidence, customCategories = [], onCategoryChange, onMerchantChange, onDateChange, selected, onToggleSelect, logged = false }: Props) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [editingMerchant, setEditingMerchant] = useState(false)
   const [merchantInput, setMerchantInput] = useState('')
   const merchantInputRef = useRef<HTMLInputElement>(null)
+  const dateInputRef = useRef<HTMLInputElement>(null)
   const isIncome = draft.type === 'income'
+  const isBulk = onToggleSelect !== undefined
 
   function startEditMerchant() {
     if (!onMerchantChange) return
@@ -137,74 +143,84 @@ export default function ParsePreview({ draft, category, confidence, customCatego
       initial="hidden"
       animate="show"
       exit={{ opacity: 0, y: 6, transition: { duration: 0.15 } }}
-      className="mt-4 rounded-2xl p-5"
+      className="mt-3 rounded-2xl p-4"
       style={{
-        background: isIncome ? 'rgba(31,105,93,0.06)' : '#ffffff',
-        boxShadow: '0 2px 16px rgba(0,53,46,0.08)',
-        border: isIncome ? '1px solid rgba(31,105,93,0.2)' : '1px solid #e7edeb',
+        background: logged
+          ? 'rgba(31,105,93,0.05)'
+          : isIncome
+            ? 'rgba(31,105,93,0.06)'
+            : '#ffffff',
+        boxShadow: logged ? 'none' : '0 1px 12px rgba(0,53,46,0.08)',
+        border: logged
+          ? '1px solid rgba(31,105,93,0.18)'
+          : pickerOpen
+            ? '1px solid #1f695d'
+            : isIncome
+              ? '1px solid rgba(31,105,93,0.2)'
+              : '1px solid #e7edeb',
+        opacity: logged ? 0.55 : 1,
       }}
     >
-      {/* Amount + direction */}
-      <motion.div variants={itemVariants} className="mb-3 flex items-baseline justify-between">
-        <span
-          className="font-mono text-3xl font-bold tracking-tight"
-          style={{ color: isIncome ? '#1f6950' : '#191c1c' }}
-        >
-          {draft.amount !== null ? (
-            formatCurrency(draft.amount)
+      {/* Row 1: Amount + category pill + bulk checkbox */}
+      <motion.div variants={itemVariants} className="flex items-center gap-2">
+        {/* Amount — shrinks font for large numbers */}
+        {(() => {
+          const formatted = draft.amount !== null ? formatCurrency(draft.amount) : null
+          const sizeClass = !formatted
+            ? 'text-2xl'
+            : formatted.length > 16
+              ? 'text-base'
+              : formatted.length > 13
+                ? 'text-lg'
+                : 'text-2xl'
+          return (
+            <span
+              className={`font-mono ${sizeClass} font-bold tracking-tight leading-tight shrink-0 max-w-[48%] truncate`}
+              style={{ color: draft.amount === null ? '#6e9990' : isIncome ? '#1f6950' : '#191c1c' }}
+            >
+              {formatted ?? <span className="text-base">no amount</span>}
+            </span>
+          )
+        })()}
+
+        {/* Category pill */}
+        <div className="flex-1 min-w-0">
+          {onCategoryChange && !logged ? (
+            <button
+              onClick={() => { setPickerOpen((o) => !o) }}
+              aria-label={`Category: ${category.label}. Tap to change`}
+              className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium transition-all ${category.bgColor} ${category.color} ${pickerOpen ? 'ring-1 ring-[#1f695d]/40' : ''}`}
+            >
+              {category.label}
+              <span className="opacity-50">▾</span>
+            </button>
           ) : (
-            <span className="text-xl" style={{ color: '#6e9990' }}>no amount</span>
+            <CategoryBadge category={category} size="sm" />
           )}
-        </span>
-        <span
-          className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
-          style={{ background: isIncome ? 'rgba(31,105,93,0.1)' : 'rgba(186,26,26,0.08)', color: isIncome ? '#1f6950' : '#ba1a1a' }}
-        >
-          {isIncome ? '+ income' : '− expense'}
-        </span>
-      </motion.div>
+        </div>
 
-      {/* Category + date */}
-      <motion.div variants={itemVariants} className="mb-3 flex items-center justify-between">
-        {onCategoryChange ? (
-          <button
-            onClick={() => setPickerOpen((o) => !o)}
-            aria-label={`Category: ${category.label}. Tap to change`}
-            className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium transition-all ${category.bgColor} ${category.color} ${
-              pickerOpen ? 'outline outline-1 outline-[#1f695d]/40' : ''
-            }`}
+        {/* Bulk: checkbox only */}
+        {isBulk && !logged && (
+          <motion.button
+            onClick={onToggleSelect}
+            aria-label={selected ? 'Deselect entry' : 'Select entry'}
+            whileTap={{ scale: 0.85 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+            className="flex h-6 w-6 shrink-0 items-center justify-center"
           >
-            {(() => {
-              const Icon = PHOSPHOR_ICON_MAP[category.icon]
-              return Icon ? <Icon size={11} weight="fill" aria-hidden="true" /> : null
-            })()}
-            {category.label}
-            <span className="ml-0.5 opacity-50">▾</span>
-          </button>
-        ) : (
-          <CategoryBadge category={category} size="sm" />
+            {selected
+              ? <CheckCircle size={20} weight="fill" color="#1f695d" aria-hidden="true" />
+              : <Circle size={20} weight="regular" color="#cde0db" aria-hidden="true" />}
+          </motion.button>
         )}
-          <span className="text-[12px] font-medium" style={{ color: '#6e9990' }}>{formatDate(draft.date)}</span>
+        {isBulk && logged && (
+          <CheckCircle size={18} weight="fill" color="#1f6950" aria-label="Logged" className="shrink-0" />
+        )}
       </motion.div>
 
-      {/* Inline category picker */}
-      <AnimatePresence>
-        {pickerOpen && onCategoryChange && (
-          <InlineCategoryPicker
-            currentId={category.id}
-            customCategories={customCategories}
-            onSelect={(cat) => {
-              onCategoryChange(cat)
-              setPickerOpen(false)
-            }}
-            onClose={() => setPickerOpen(false)}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Merchant */}
-      {(draft.merchant && draft.merchant !== 'Unknown') || onMerchantChange ? (
-        <motion.div variants={itemVariants} className="mb-4">
+      {/* Row 2: Merchant name (left) + Date (right) */}
+      <motion.div variants={itemVariants} className="mt-2 flex items-center justify-between gap-2">
+        <div className="min-w-0 flex-1">
           {editingMerchant ? (
             <input
               ref={merchantInputRef}
@@ -216,53 +232,64 @@ export default function ParsePreview({ draft, category, confidence, customCatego
                 if (e.key === 'Escape') setEditingMerchant(false)
               }}
               autoFocus
-            className="w-full border-b bg-transparent px-2 py-1 text-sm outline-none"
-            style={{ borderColor: '#1f695d', color: '#191c1c', caretColor: '#1f695d' }}
+              className="w-full border-b bg-transparent py-0.5 text-[13px] font-semibold outline-none"
+              style={{ borderColor: '#1f695d', color: '#191c1c', caretColor: '#1f695d' }}
               placeholder="Enter merchant name"
               aria-label="Edit merchant name"
             />
           ) : (
             <button
               onClick={startEditMerchant}
-              disabled={!onMerchantChange}
-              aria-label={onMerchantChange ? 'Edit merchant name' : undefined}
-              className={`group flex items-center gap-1.5 text-left ${
-                onMerchantChange ? 'cursor-pointer' : 'cursor-default'
-              }`}
+              disabled={!onMerchantChange || logged}
+              aria-label={onMerchantChange ? 'Tap to edit merchant name' : undefined}
+              className={`min-w-0 max-w-full text-left ${onMerchantChange && !logged ? 'cursor-pointer' : 'cursor-default'}`}
             >
-              <span className="text-sm font-medium" style={{ color: '#191c1c' }}>
-                {draft.merchant && draft.merchant !== 'Unknown' ? draft.merchant : (
-                  <span style={{ color: '#6e9990' }}>Unknown merchant — tap to set</span>
-                )}
+              <span className="block truncate text-[13px] font-semibold" style={{ color: '#191c1c' }}>
+                {draft.merchant && draft.merchant !== 'Unknown'
+                  ? draft.merchant
+                  : <span style={{ color: '#6e9990' }}>Unknown — tap to set</span>}
               </span>
-              {onMerchantChange && (
-                <span className="opacity-0 transition-opacity group-hover:opacity-40 text-[10px]" style={{ color: '#6e9990' }}>
-                  edit
-                </span>
-              )}
             </button>
           )}
-        </motion.div>
-      ) : null}
-
-      {/* Confidence strip */}
-      <motion.div variants={itemVariants}>
-        <div className="mb-1 flex items-center justify-between">
-          <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: '#6e9990' }}>Confidence</span>
-          <span className="font-mono text-[10px] font-medium" style={{ color: '#3f4946' }}>
-            {Math.round(confidence * 100)}%
-          </span>
         </div>
-        <div className="relative h-[4px] w-full overflow-hidden rounded-full" style={{ background: '#e7edeb' }}>
-          <motion.div
-            className="absolute left-0 top-0 h-full rounded-full"
-            style={{ background: isIncome ? '#1f6950' : '#1f695d' }}
-            initial={{ width: 0 }}
-            animate={{ width: `${confidence * 100}%` }}
-            transition={{ type: 'spring', stiffness: 80, damping: 20, delay: 0.25 }}
+        <button
+          onClick={() => { if (!logged && onDateChange) dateInputRef.current?.showPicker() }}
+          disabled={logged || !onDateChange}
+          aria-label="Change date"
+          className="flex shrink-0 items-center gap-1 text-[11px] font-medium transition-colors"
+          style={{ color: '#6e9990' }}
+        >
+          <CalendarBlank size={11} weight="regular" aria-hidden="true" />
+          {formatDate(draft.date)}
+        </button>
+        {/* Hidden native date input — triggered programmatically */}
+        {onDateChange && (
+          <input
+            ref={dateInputRef}
+            type="date"
+            value={draft.date}
+            max={new Date().toISOString().split('T')[0]}
+            onChange={(e) => { if (e.target.value) onDateChange(e.target.value) }}
+            className="sr-only"
+            aria-hidden="true"
+            tabIndex={-1}
           />
-        </div>
+        )}
       </motion.div>
+
+      {/* Inline category picker */}
+      <AnimatePresence>
+        {pickerOpen && onCategoryChange && (
+          <div className="mt-2">
+            <InlineCategoryPicker
+              currentId={category.id}
+              customCategories={customCategories}
+              onSelect={(cat) => { onCategoryChange(cat); setPickerOpen(false) }}
+              onClose={() => setPickerOpen(false)}
+            />
+          </div>
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }

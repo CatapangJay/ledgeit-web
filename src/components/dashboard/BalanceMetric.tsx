@@ -2,79 +2,95 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { TrendUp, TrendDown } from '@phosphor-icons/react'
+import { ArrowFatLineUp, ArrowFatLineDown } from '@phosphor-icons/react'
 import { formatCurrency } from '@/lib/formatters'
 import { useStore } from '@/lib/store'
 
+function useCountUp(target: number, duration = 1000) {
+  const [display, setDisplay] = useState(0)
+  const rafRef = useRef<number | null>(null)
+  const prevTarget = useRef(0)
+
+  useEffect(() => {
+    const from = prevTarget.current
+    prevTarget.current = target
+    const start = Date.now()
+
+    const tick = () => {
+      const progress = Math.min((Date.now() - start) / duration, 1)
+      const eased = 1 - Math.pow(1 - progress, 3)
+      setDisplay(from + (target - from) * eased)
+      if (progress < 1) rafRef.current = requestAnimationFrame(tick)
+    }
+    rafRef.current = requestAnimationFrame(tick)
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
+  }, [target, duration])
+
+  return display
+}
+
 export default function BalanceMetric() {
-  const transactions = useStore((s) => s.transactions)
   const getMonthlyTotal = useStore((s) => s.getMonthlyTotal)
 
-  const totalBalance = transactions.reduce(
-    (sum, t) => sum + (t.type === 'income' ? t.amount : -t.amount),
-    0
-  )
   const monthlyIncome = getMonthlyTotal('income')
   const monthlyExpense = getMonthlyTotal('expense')
   const monthlyNet = monthlyIncome - monthlyExpense
   const isPositive = monthlyNet >= 0
 
-  // Count-up animation using rAF
-  const [display, setDisplay] = useState(0)
-  const rafRef = useRef<number | null>(null)
+  const displayNet = useCountUp(monthlyNet)
+  const displayIncome = useCountUp(monthlyIncome, 900)
+  const displayExpense = useCountUp(monthlyExpense, 900)
 
-  useEffect(() => {
-    const duration = 1100
-    const start = Date.now()
-    const from = 0
-    const to = totalBalance
-
-    const tick = () => {
-      const progress = Math.min((Date.now() - start) / duration, 1)
-      const eased = 1 - Math.pow(1 - progress, 3)
-      setDisplay(from + (to - from) * eased)
-      if (progress < 1) rafRef.current = requestAnimationFrame(tick)
-    }
-
-    rafRef.current = requestAnimationFrame(tick)
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  const now = new Date()
+  const monthLabel = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
   return (
-    <div className="pb-2 pt-0">
+    <div className="pb-1 pt-0">
       <p
-        className="mb-1 text-[12px] font-semibold uppercase tracking-[0.18em]"
-        style={{ color: 'rgba(255,255,255,0.65)' }}
+        className="mb-1 text-[11px] font-semibold uppercase tracking-[0.18em]"
+        style={{ color: 'rgba(255,255,255,0.55)' }}
       >
-        Total Net Worth
+        {monthLabel}
       </p>
-      <div className="flex items-end gap-3">
+
+      {/* Net figure */}
+      <div className="flex items-baseline gap-2">
         <span
           className="font-mono text-[2.6rem] font-bold leading-none tracking-tight"
-          style={{ color: '#ffffff' }}
+          style={{ color: isPositive ? '#ffffff' : '#fca5a5' }}
         >
-          {formatCurrency(display)}
+          {isPositive ? '' : '−'}{formatCurrency(Math.abs(displayNet))}
         </span>
       </div>
+      <p className="mt-1 text-[11px] font-medium" style={{ color: 'rgba(255,255,255,0.5)' }}>
+        Net this month
+      </p>
+
+      {/* Income / Expense pills */}
       <motion.div
-        initial={{ opacity: 0, y: 4 }}
+        initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.85, type: 'spring', stiffness: 300, damping: 24 }}
-        className="mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold"
-        style={{
-          background: isPositive ? 'rgba(255,255,255,0.2)' : 'rgba(255,100,100,0.25)',
-          color: '#ffffff',
-        }}
+        transition={{ delay: 0.5, type: 'spring', stiffness: 300, damping: 24 }}
+        className="mt-4 flex gap-2"
       >
-        {isPositive ? (
-          <TrendUp size={12} weight="bold" aria-hidden="true" />
-        ) : (
-          <TrendDown size={12} weight="bold" aria-hidden="true" />
-        )}
-        {formatCurrency(Math.abs(monthlyNet))} this month
+        <div
+          className="flex items-center gap-1.5 rounded-full px-3 py-1.5"
+          style={{ background: 'rgba(255,255,255,0.13)' }}
+        >
+          <ArrowFatLineUp size={11} weight="fill" color="rgba(255,255,255,0.7)" aria-hidden="true" />
+          <span className="font-mono text-[12px] font-semibold" style={{ color: '#ffffff' }}>
+            {formatCurrency(displayIncome)}
+          </span>
+        </div>
+        <div
+          className="flex items-center gap-1.5 rounded-full px-3 py-1.5"
+          style={{ background: 'rgba(255,100,100,0.2)' }}
+        >
+          <ArrowFatLineDown size={11} weight="fill" color="rgba(255,160,160,0.9)" aria-hidden="true" />
+          <span className="font-mono text-[12px] font-semibold" style={{ color: '#fca5a5' }}>
+            {formatCurrency(displayExpense)}
+          </span>
+        </div>
       </motion.div>
     </div>
   )

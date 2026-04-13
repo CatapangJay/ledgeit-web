@@ -18,17 +18,19 @@ const CATEGORY_HEX: Record<string, string> = {
 
 export default function SpendStrip() {
   const transactions = useStore((s) => s.transactions)
+  const getDailyTotal = useStore((s) => s.getDailyTotal)
   const today = new Date().toISOString().split('T')[0]
   const todayExpenses = transactions.filter((t) => t.date === today && t.type === 'expense')
   const total = todayExpenses.reduce((sum, t) => sum + t.amount, 0)
+  const todayIncome = getDailyTotal(today, 'income')
 
-  if (todayExpenses.length === 0) return null
-
-  // Aggregate by category
   const breakdown = todayExpenses.reduce<Record<string, number>>((acc, t) => {
     acc[t.category.id] = (acc[t.category.id] ?? 0) + t.amount
     return acc
   }, {})
+
+  const now = new Date()
+  const dateLabel = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 
   return (
     <div
@@ -39,30 +41,78 @@ export default function SpendStrip() {
       }}
     >
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-[12px] font-bold uppercase tracking-[0.12em]" style={{ color: '#00352e' }}>
+        <span
+          className="text-[12px] font-bold uppercase tracking-[0.12em]"
+          style={{ color: '#00352e' }}
+        >
           Today
         </span>
-        <span className="font-mono text-sm font-bold" style={{ color: '#ba1a1a' }}>
-          −{formatCurrency(total)}
+        <span className="font-mono text-[11px]" style={{ color: '#6e9990' }}>
+          {dateLabel}
         </span>
       </div>
 
-      {/* Category breakdown bar — rounded pill */}
-      <div className="flex h-2 w-full overflow-hidden rounded-full gap-0.5">
-        {Object.entries(breakdown).map(([catId, amount]) => {
-          const cat = CATEGORIES.find((c) => c.id === catId)
-          return (
-            <div
-              key={catId}
-              title={`${cat?.label ?? catId}: ${formatCurrency(amount)}`}
-              style={{
-                width: `${(amount / total) * 100}%`,
-                backgroundColor: CATEGORY_HEX[catId] ?? '#6e9990',
-              }}
-            />
-          )
-        })}
-      </div>
+      {todayExpenses.length === 0 ? (
+        <div className="flex flex-col gap-1">
+          {/* Empty bar placeholder */}
+          <div className="h-2 w-full rounded-full" style={{ background: '#f0f4f2' }} />
+          <p className="mt-2 text-[12px]" style={{ color: '#6e9990' }}>
+            Nothing logged yet today.
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* Totals row */}
+          <div className="mb-2 flex items-baseline justify-between">
+            <span className="font-mono text-base font-bold" style={{ color: '#ba1a1a' }}>
+              −{formatCurrency(total)}
+            </span>
+            {todayIncome > 0 && (
+              <span className="font-mono text-[13px] font-semibold" style={{ color: '#1f6950' }}>
+                +{formatCurrency(todayIncome)}
+              </span>
+            )}
+          </div>
+
+          {/* Category breakdown bar */}
+          <div className="flex h-2 w-full overflow-hidden rounded-full gap-0.5">
+            {Object.entries(breakdown).map(([catId, amount]) => {
+              const cat = CATEGORIES.find((c) => c.id === catId)
+              return (
+                <div
+                  key={catId}
+                  title={`${cat?.label ?? catId}: ${formatCurrency(amount)}`}
+                  style={{
+                    width: `${(amount / total) * 100}%`,
+                    backgroundColor: CATEGORY_HEX[catId] ?? '#6e9990',
+                  }}
+                />
+              )
+            })}
+          </div>
+
+          {/* Category dots */}
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            {Object.entries(breakdown).map(([catId, amount]) => {
+              const cat = CATEGORIES.find((c) => c.id === catId)
+              return (
+                <div key={catId} className="flex items-center gap-1">
+                  <div
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{ background: CATEGORY_HEX[catId] ?? '#6e9990' }}
+                  />
+                  <span className="text-[11px] font-medium" style={{ color: '#3f4946' }}>
+                    {cat?.label ?? catId}
+                  </span>
+                  <span className="font-mono text-[11px]" style={{ color: '#6e9990' }}>
+                    {formatCurrency(amount)}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
     </div>
   )
 }

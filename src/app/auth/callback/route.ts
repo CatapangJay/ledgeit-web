@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
+// Handles OAuth provider callbacks (e.g. Google). Not used for email+password.
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
@@ -30,6 +31,5 @@ export async function GET(request: NextRequest) {
     await supabase.auth.exchangeCodeForSession(code)
   }
 
-  // Always redirect to root — never trust a redirect param
   return NextResponse.redirect(new URL('/', request.url))
 }

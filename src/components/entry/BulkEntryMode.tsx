@@ -2,15 +2,15 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Check, X, CheckCircle } from '@phosphor-icons/react'
+import { CheckCircle } from '@phosphor-icons/react'
 import { parseTransaction } from '@/lib/parser'
 import { categorize, getMerchantKey } from '@/lib/categorizer'
 import { resolveMerchant } from '@/lib/fuzzy'
 import { useStore } from '@/lib/store'
-import { PHOSPHOR_ICON_MAP, getIconComponent } from '@/lib/iconMap'
-import { formatCurrency } from '@/lib/formatters'
+import { formatCurrency, formatDate } from '@/lib/formatters'
+import ParsePreview from './ParsePreview'
 import { CATEGORIES } from '@/types'
-import type { Transaction, Category, CategoryId, CustomCategory } from '@/types'
+import type { Transaction, Category } from '@/types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -24,20 +24,17 @@ interface BulkEntry {
   category: Category
   confidence: number
   logged: boolean
+  /** Whether this entry is ticked for inclusion when "Log All" is pressed */
+  selected: boolean
 }
 
 // ─── Splitting Logic ──────────────────────────────────────────────────────────
 
-/**
- * Splits freeform multi-entry text into individual entry strings.
- * Delimiters: newline, semicolon, and comma (when NOT between digits — avoids splitting "1,500").
- */
 function splitEntries(text: string): string[] {
   const segments: string[] = []
   for (const line of text.split(/[\n;]/)) {
     const trimmed = line.trim()
     if (!trimmed) continue
-    // Comma-split only when the comma is NOT preceded and followed by digits
     for (const part of trimmed.split(/,(?!\d)/)) {
       const t = part.trim()
       if (t) segments.push(t)
@@ -46,228 +43,215 @@ function splitEntries(text: string): string[] {
   return segments
 }
 
-// ─── Category Picker (inline panel) ──────────────────────────────────────────
-
-interface CategoryPickerProps {
-  currentId: string
-  customCategories: CustomCategory[]
-  onSelect: (cat: Category) => void
-  onClose: () => void
-}
-
-function CategoryPicker({ currentId, customCategories, onSelect, onClose }: CategoryPickerProps) {
-  const allCategories: Category[] = [
-    ...CATEGORIES,
-    ...customCategories.map((c) => ({
-      id: c.id,
-      label: c.name,
-      icon: c.icon,
-      color: c.textColor,
-      bgColor: c.bgColor,
-      keywords: [] as string[],
-    })),
-  ]
-  return (
-    <motion.div
-      key="cat-picker"
-      initial={{ opacity: 0, y: 6, scale: 0.97 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 6, scale: 0.97 }}
-      transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-      className="p-4 rounded-2xl"
-      style={{ background: '#f0f4f2', border: '1px solid #e7edeb' }}
-    >
-      <div className="mb-2.5 flex items-center justify-between">
-        <span className="text-[11px] font-semibold" style={{ color: '#3f4946' }}>
-          Change category
-        </span>
-        <button
-          onClick={onClose}
-          className="flex h-5 w-5 items-center justify-center transition-colors"
-          style={{ color: '#6e9990' }}
-          aria-label="Close category picker"
-        >
-          <X size={11} weight="bold" />
-        </button>
-      </div>
-      <div className="grid grid-cols-3 gap-1.5">
-        {allCategories.map((cat) => {
-          const Icon = getIconComponent(cat.icon)
-          const active = cat.id === currentId
-          return (
-            <button
-              key={cat.id}
-              onClick={() => onSelect(cat)}
-              className={`flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors rounded-xl ${
-                active
-                  ? `${cat.bgColor} ${cat.color}`
-                  : 'text-ledge-muted hover:bg-ledge-surface2 hover:text-ledge-data'
-              }`}
-            >
-              {Icon && (
-                <Icon size={15} weight={active ? 'fill' : 'regular'} aria-hidden="true" />
-              )}
-              <span className="leading-none">{cat.label.split(/[\s&]/)[0]}</span>
-            </button>
-          )
-        })}
-      </div>
-    </motion.div>
-  )
-}
-
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 interface Props {
   onAllLogged: () => void
   onDiscard: () => void
+  logAllRef: React.MutableRefObject<(() => void) | null>
+  onValidCountChange: (count: number) => void
+  initialText?: string
+  onTextChange?: (text: string) => void
 }
 
-const BULK_PLACEHOLDER = 'mcdo 150\ngrab 85; netflix 649\nmeralco bill 1,740'
+const BULK_PLACEHOLDER = `mcdo 150
+grab 85
+netflix 649
+meralco bill 1,740`
 
-export default function BulkEntryMode({ onAllLogged, onDiscard }: Props) {
+export default function BulkEntryMode({ onAllLogged, logAllRef, onValidCountChange, initialText = '', onTextChange }: Props) {
   const addTransaction = useStore((s) => s.addTransaction)
   const learnCategory = useStore((s) => s.learnCategory)
   const learnedMerchants = useStore((s) => s.learnedMerchants)
   const transactions = useStore((s) => s.transactions)
   const customCategories = useStore((s) => s.customCategories)
 
-  // History merchants for fuzzy resolution
   const historyMerchants = useMemo(() => {
     const freq = new Map<string, number>()
     for (const tx of transactions) {
-      if (tx.merchant && tx.merchant !== 'Unknown') {
+      if (tx.merchant && tx.merchant !== 'Unknown')
         freq.set(tx.merchant, (freq.get(tx.merchant) ?? 0) + 1)
-      }
     }
     return [...freq.entries()].map(([name, freq]) => ({ name, freq }))
   }, [transactions])
-  const [text, setText] = useState('')
+
+  const [text, setText] = useState(initialText)
   const [entries, setEntries] = useState<BulkEntry[]>([])
   const [isParsing, setIsParsing] = useState(false)
-  const [categoryEditId, setCategoryEditId] = useState<string | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  // Stable entry pool keyed by raw text — prevents re-parsing unchanged lines
+  const stablePoolRef = useRef<Map<string, BulkEntry[]>>(new Map())
 
+  // Focus textarea on mount; trigger initial parse if text was pre-populated
   useEffect(() => {
     const t = setTimeout(() => textareaRef.current?.focus(), 80)
     return () => clearTimeout(t)
   }, [])
 
-  const handleChange = useCallback(
-    (val: string) => {
-      setText(val)
-      if (timerRef.current) clearTimeout(timerRef.current)
-      if (!val.trim()) {
-        setEntries([])
-        setIsParsing(false)
-        return
+  useEffect(() => {
+    if (initialText.trim()) {
+      handleChange(initialText)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const parseSegment = useCallback((raw: string, i: number): BulkEntry => {
+    const draft = parseTransaction(raw)
+    const { category, confidence } = categorize(draft, learnedMerchants)
+    const resolvedMerchant = resolveMerchant(draft.merchant, historyMerchants)
+    return {
+      id: `bulk-${Date.now()}-${i}-${Math.random().toString(36).slice(2)}`,
+      raw,
+      amount: draft.amount,
+      merchant: resolvedMerchant ?? draft.merchant,
+      date: draft.date,
+      type: draft.type,
+      category,
+      confidence,
+      logged: false,
+      selected: true,
+    }
+  }, [learnedMerchants, historyMerchants])
+
+  const handleChange = useCallback((val: string) => {
+    setText(val)
+    onTextChange?.(val)
+    if (timerRef.current) clearTimeout(timerRef.current)
+    if (!val.trim()) {
+      setEntries([])
+      stablePoolRef.current.clear()
+      setIsParsing(false)
+      return
+    }
+    setIsParsing(true)
+    timerRef.current = setTimeout(() => {
+      const rawSegs = splitEntries(val)
+
+      // Build a consumption pool from the current stable set
+      // (so identical raws are reused in order, avoids re-parsing unchanged lines)
+      const pool = new Map<string, BulkEntry[]>()
+      for (const e of stablePoolRef.current.values()) {
+        for (const entry of e) {
+          const arr = pool.get(entry.raw) ?? []
+          arr.push({ ...entry }) // shallow copy to avoid mutation
+          pool.set(entry.raw, arr)
+        }
       }
-      setIsParsing(true)
-      timerRef.current = setTimeout(() => {
-        const rawSegs = splitEntries(val)
-        const parsed: BulkEntry[] = rawSegs.map((raw, i) => {
-          const draft = parseTransaction(raw)
-          const { category, confidence } = categorize(draft, learnedMerchants)
-          // Silent fuzzy merchant resolution
-          const resolvedMerchant = resolveMerchant(draft.merchant, historyMerchants)
-          return {
-            id: `bulk-${Date.now()}-${i}`,
-            raw,
-            amount: draft.amount,
-            merchant: resolvedMerchant ?? draft.merchant,
-            date: draft.date,
-            type: draft.type,
-            category,
-            confidence,
-            logged: false,
-          }
-        })
-        setEntries(parsed)
-        setIsParsing(false)
-      }, 450)
-    },
-    [learnedMerchants, historyMerchants],
-  )
-
-  const logEntry = useCallback(
-    (id: string) => {
+      // Also pull from current entries (covers in-flight edits / category changes)
       setEntries((prev) => {
-        const entry = prev.find((e) => e.id === id)
-        if (!entry || entry.amount === null) return prev
-        const tx: Transaction = {
-          id: crypto.randomUUID(),
-          raw: entry.raw,
-          amount: entry.amount,
-          merchant: entry.merchant,
-          category: entry.category,
-          date: entry.date,
-          type: entry.type,
-          confidence: entry.confidence,
-          createdAt: new Date().toISOString(),
+        const prevPool = new Map<string, BulkEntry[]>()
+        for (const e of prev) {
+          const arr = prevPool.get(e.raw) ?? []
+          arr.push(e)
+          prevPool.set(e.raw, arr)
         }
-        addTransaction(tx)
-        const updated = prev.map((e) => (e.id === id ? { ...e, logged: true } : e))
-        const valid = updated.filter((e) => e.amount !== null)
-        if (valid.length > 0 && valid.every((e) => e.logged)) {
-          setTimeout(onAllLogged, 700)
-        }
-        return updated
-      })
-    },
-    [addTransaction, onAllLogged],
-  )
 
-  const logAll = useCallback(() => {
-    setEntries((prev) => {
-      const toLog = prev.filter((e) => !e.logged && e.amount !== null)
-      if (toLog.length === 0) return prev
-      toLog.forEach((entry, idx) => {
-        addTransaction({
-          id: crypto.randomUUID(),
-          raw: entry.raw,
-          amount: entry.amount!,
-          merchant: entry.merchant,
-          category: entry.category,
-          date: entry.date,
-          type: entry.type,
-          confidence: entry.confidence,
-          createdAt: new Date().toISOString(),
+        const next: BulkEntry[] = rawSegs.map((raw, i) => {
+          const bucket = prevPool.get(raw)
+          if (bucket && bucket.length > 0) {
+            return bucket.shift()! // reuse existing entry untouched
+          }
+          return parseSegment(raw, i) // parse fresh only for new/changed segments
         })
+
+        // Rebuild stable pool
+        const newPool = new Map<string, BulkEntry[]>()
+        for (const e of next) {
+          const arr = newPool.get(e.raw) ?? []
+          arr.push(e)
+          newPool.set(e.raw, arr)
+        }
+        stablePoolRef.current = newPool
+
+        return next
       })
-      const updated = prev.map((e) => (e.amount !== null ? { ...e, logged: true } : e))
-      setTimeout(onAllLogged, 700)
-      return updated
-    })
-  }, [addTransaction, onAllLogged])
+
+      setIsParsing(false)
+    }, 380)
+  }, [parseSegment])
+
+  const toggleSelect = useCallback((id: string) => {
+    setEntries((prev) => prev.map((e) => e.id === id ? { ...e, selected: !e.selected } : e))
+  }, [])
 
   const removeEntry = useCallback((id: string) => {
-    setEntries((prev) => prev.filter((e) => e.id !== id))
-    setCategoryEditId((cur) => (cur === id ? null : cur))
+    setEntries((prev) => {
+      const next = prev.filter((e) => e.id !== id)
+      // Rebuild stable pool
+      const newPool = new Map<string, BulkEntry[]>()
+      for (const e of next) {
+        const arr = newPool.get(e.raw) ?? []
+        arr.push(e)
+        newPool.set(e.raw, arr)
+      }
+      stablePoolRef.current = newPool
+      return next
+    })
   }, [])
 
   const changeCategory = useCallback((entryId: string, cat: Category) => {
-    setEntries((prev) =>
-      prev.map((e) => {
-        if (e.id !== entryId) return e
-        // Persist correction so future entries benefit from it
-        const draft = parseTransaction(e.raw)
-        learnCategory(getMerchantKey(draft), cat.id)
-        // Sync type with category: income category → income type, else expense
-        const newType = cat.id === 'income' ? 'income' : 'expense'
-        return { ...e, category: cat, type: newType }
-      }),
-    )
-    setCategoryEditId(null)
-  }, [learnCategory])
+    const entry = entries.find((e) => e.id === entryId)
+    if (entry) learnCategory(getMerchantKey(parseTransaction(entry.raw)), cat.id)
+    const newType = cat.id === 'income' ? 'income' : 'expense'
+    setEntries((prev) => prev.map((e) => e.id === entryId ? { ...e, category: cat, type: newType } : e))
+  }, [entries, learnCategory])
 
-  const validPending = entries.filter((e) => e.amount !== null && !e.logged)
+  const changeMerchant = useCallback((entryId: string, name: string) => {
+    setEntries((prev) => prev.map((e) => e.id === entryId ? { ...e, merchant: name } : e))
+  }, [])
+
+  const changeDate = useCallback((entryId: string, date: string) => {
+    setEntries((prev) => prev.map((e) => e.id === entryId ? { ...e, date } : e))
+  }, [])
+
+  const changeType = useCallback((entryId: string, type: 'expense' | 'income') => {
+    const incomeCategory = CATEGORIES.find((c) => c.id === 'income')!
+    const otherCategory = CATEGORIES.find((c) => c.id === 'other')!
+    setEntries((prev) => prev.map((e) => {
+      if (e.id !== entryId) return e
+      const autoCategory = type === 'income'
+        ? incomeCategory
+        : e.category.id === 'income' ? otherCategory : e.category
+      return { ...e, type, category: autoCategory }
+    }))
+  }, [])
+
+  // Log all SELECTED valid unlogged entries
+  const logAll = useCallback(() => {
+    const toLog = entries.filter((e) => e.selected && !e.logged && e.amount !== null)
+    if (toLog.length === 0) return
+
+    toLog.forEach((entry) => {
+      addTransaction({
+        id: crypto.randomUUID(),
+        raw: entry.raw,
+        amount: entry.amount!,
+        merchant: entry.merchant,
+        category: entry.category,
+        date: entry.date,
+        type: entry.type,
+        confidence: entry.confidence,
+        createdAt: new Date().toISOString(),
+      })
+    })
+
+    setEntries((prev) =>
+      prev.map((e) => (e.selected && e.amount !== null ? { ...e, logged: true } : e))
+    )
+    setTimeout(onAllLogged, 700)
+  }, [entries, addTransaction, onAllLogged])
+
+  // Count of selected+valid+unlogged
+  const selectedValidCount = entries.filter((e) => e.selected && e.amount !== null && !e.logged).length
   const loggedCount = entries.filter((e) => e.logged).length
-  const activeCatEntry = entries.find((e) => e.id === categoryEditId)
+
+  useEffect(() => { onValidCountChange(selectedValidCount) }, [selectedValidCount, onValidCountChange])
+  useEffect(() => { logAllRef.current = logAll }, [logAll, logAllRef])
 
   return (
-    <div className="flex flex-col gap-3">
-      {/* Textarea */}
+    <div className="flex flex-col gap-4">
+      {/* ── Textarea — same feel as Quick Entry ── */}
       <div>
         <textarea
           ref={textareaRef}
@@ -276,18 +260,16 @@ export default function BulkEntryMode({ onAllLogged, onDiscard }: Props) {
           placeholder={BULK_PLACEHOLDER}
           aria-label="Enter multiple transactions, one per line"
           rows={4}
-          className="w-full resize-none px-4 py-3 text-sm leading-relaxed outline-none transition-colors"
-          style={{ background: '#f0f4f2', color: '#191c1c', caretColor: '#1f695d', borderBottom: '2px solid #cde0db', borderRadius: '12px 12px 0 0' }}
+          className="w-full resize-none bg-transparent text-[1.35rem] font-light leading-relaxed outline-none"
+          style={{ color: '#191c1c', caretColor: '#1f695d' }}
         />
         <p className="mt-1 text-[11px] font-medium" style={{ color: '#6e9990' }}>
-          Separate entries with a new line,{' '}
-          <code className="px-0.5 rounded" style={{ background: '#e7edeb', color: '#3f4946' }}>;</code> or{' '}
-          <code className="px-0.5 rounded" style={{ background: '#e7edeb', color: '#3f4946' }}>,</code>
-          {' '}— format: description + amount
+          One entry per line — or separate with{' '}
+          <code className="rounded px-0.5" style={{ background: '#e7edeb', color: '#3f4946' }}>;</code>
         </p>
       </div>
 
-      {/* Identifying entries pulse */}
+      {/* Parsing pulse */}
       <AnimatePresence>
         {isParsing && (
           <motion.p
@@ -296,17 +278,17 @@ export default function BulkEntryMode({ onAllLogged, onDiscard }: Props) {
             animate={{ opacity: [0.3, 0.9, 0.3] }}
             exit={{ opacity: 0 }}
             transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
-            className="font-mono text-xs font-medium"
+            className="text-xs font-medium"
             style={{ color: '#6e9990' }}
           >
-            Identifying entries…
+            Analyzing…
           </motion.p>
         )}
       </AnimatePresence>
 
-      {/* Entry list */}
+      {/* Entry cards */}
       <AnimatePresence>
-        {entries.length > 0 && !isParsing && (
+        {entries.length > 0 && (
           <motion.div
             key="entry-list"
             initial={{ opacity: 0, y: 4 }}
@@ -314,15 +296,15 @@ export default function BulkEntryMode({ onAllLogged, onDiscard }: Props) {
             transition={{ type: 'spring', stiffness: 280, damping: 28 }}
             className="flex flex-col gap-2"
           >
-            {/* Count header */}
+            {/* Count row */}
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: '#3f4946' }}>
-                {entries.length} {entries.length === 1 ? 'entry' : 'entries'} found
+                {entries.length} {entries.length === 1 ? 'entry' : 'entries'} detected
               </span>
               <AnimatePresence>
                 {loggedCount > 0 && (
                   <motion.span
-                    key="logged-count"
+                    key="logged-badge"
                     initial={{ opacity: 0, x: 4 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0 }}
@@ -336,143 +318,33 @@ export default function BulkEntryMode({ onAllLogged, onDiscard }: Props) {
               </AnimatePresence>
             </div>
 
-            {/* Entry rows */}
             <AnimatePresence mode="popLayout">
-              {entries.map((entry) => {
-                const isValid = entry.amount !== null
-                const isEditingCat = categoryEditId === entry.id
-                return (
-                  <motion.div
-                    key={entry.id}
-                    layout
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: entry.logged ? 0.5 : 1, x: 0 }}
-                    exit={{ opacity: 0, x: 10, transition: { duration: 0.15 } }}
-                    transition={{ type: 'spring', stiffness: 300, damping: 26 }}
-                    className="flex items-center gap-2 rounded-xl px-3 py-2.5 transition-colors"
-                    style={{
-                      background: entry.logged ? 'rgba(31,105,93,0.06)' : '#ffffff',
-                      border: isEditingCat ? '1px solid #1f695d' : entry.logged ? '1px solid rgba(31,105,93,0.2)' : '1px solid #e7edeb',
-                      boxShadow: entry.logged ? 'none' : '0 1px 6px rgba(0,53,46,0.05)',
-                    }}
-                  >
-                    {/* Amount */}
-                    <span
-                      className="shrink-0 font-mono text-[13px] font-semibold tabular-nums"
-                      style={{ color: entry.type === 'income' || entry.logged ? '#1f6950' : isValid ? '#191c1c' : '#6e9990' }}
-                    >
-                      {isValid ? formatCurrency(entry.amount!) : '—'}
-                    </span>
-
-                    {/* Merchant / description */}
-                    <span className="min-w-0 flex-1 truncate text-xs font-medium" style={{ color: '#3f4946' }}>
-                      {entry.merchant && entry.merchant !== 'Unknown'
-                        ? entry.merchant
-                        : entry.raw}
-                    </span>
-
-                    {/* Category pill (clickable to edit) */}
-                    {!entry.logged && (
-                      <button
-                        onClick={() =>
-                          isValid &&
-                          setCategoryEditId((cur) => (cur === entry.id ? null : entry.id))
-                        }
-                        disabled={!isValid}
-                        aria-label={`Category: ${entry.category.label}. Tap to change`}
-                        className={`inline-flex shrink-0 items-center gap-0.5 px-2 py-0.5 text-[10px] font-medium leading-none transition-all disabled:opacity-30 ${entry.category.bgColor} ${entry.category.color}`}
-                      >
-                        {entry.category.label.split(/[\s&]/)[0]}
-                        <span className="ml-0.5 opacity-50">▾</span>
-                      </button>
-                    )}
-
-                    {/* Logged checkmark */}
-                    {entry.logged && (
-                      <CheckCircle
-                        size={14}
-                        weight="fill"
-                        style={{ color: '#1f6950' }}
-                        aria-label="Logged"
-                      />
-                    )}
-
-                    {/* Confirm (log) button */}
-                    {!entry.logged && (
-                      <motion.button
-                        onClick={() => isValid && logEntry(entry.id)}
-                        disabled={!isValid}
-                        aria-label="Confirm and log entry"
-                        className="flex h-6 w-6 shrink-0 items-center justify-center disabled:opacity-25"
-                        style={{ background: 'linear-gradient(135deg, #1f695d 0%, #00352e 100%)', color: '#ffffff' }}
-                        whileTap={{ scale: 0.85 }}
-                        transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-                      >
-                        <Check size={11} weight="bold" aria-hidden="true" />
-                      </motion.button>
-                    )}
-
-                    {/* Remove button */}
-                    {!entry.logged && (
-                      <motion.button
-                        onClick={() => removeEntry(entry.id)}
-                        aria-label="Remove this entry"
-                        className="flex h-6 w-6 shrink-0 items-center justify-center transition-colors"
-                        style={{ color: '#6e9990' }}
-                        whileTap={{ scale: 0.85 }}
-                        transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-                      >
-                        <X size={10} weight="bold" aria-hidden="true" />
-                      </motion.button>
-                    )}
-                  </motion.div>
-                )
-              })}
-            </AnimatePresence>
-
-            {/* Inline category picker */}
-            <AnimatePresence>
-              {categoryEditId && activeCatEntry && (
-                <CategoryPicker
-                  key={`picker-${categoryEditId}`}
-                  currentId={activeCatEntry.category.id}
+              {entries.map((entry) => (
+                <ParsePreview
+                  key={entry.id}
+                  draft={{
+                    raw: entry.raw,
+                    amount: entry.amount,
+                    merchant: entry.merchant,
+                    date: entry.date,
+                    type: entry.type,
+                  }}
+                  category={entry.category}
+                  confidence={entry.confidence}
                   customCategories={customCategories}
-                  onSelect={(cat) => changeCategory(categoryEditId, cat)}
-                  onClose={() => setCategoryEditId(null)}
+                  selected={entry.selected}
+                  logged={entry.logged}
+                  onToggleSelect={() => toggleSelect(entry.id)}
+                  onCategoryChange={(cat) => changeCategory(entry.id, cat)}
+                  onMerchantChange={(name) => changeMerchant(entry.id, name)}
+                  onDateChange={(date) => changeDate(entry.id, date)}
                 />
-              )}
-            </AnimatePresence>
-
-            {/* Log All button — shown when 2+ valid unlogged entries */}
-            <AnimatePresence>
-              {validPending.length > 1 && (
-                <motion.button
-                  key="log-all"
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 4 }}
-                  transition={{ type: 'spring', stiffness: 300, damping: 26 }}
-                  onClick={logAll}
-                  className="mt-1 w-full rounded-2xl py-3.5 text-sm font-bold tracking-wide"
-                  style={{ background: 'linear-gradient(135deg, #1f695d 0%, #00352e 100%)', color: '#ffffff' }}
-                  whileTap={{ scale: 0.97 }}
-                >
-                  Log All {validPending.length} Entries
-                </motion.button>
-              )}
+              ))}
             </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Discard */}
-      <button
-        onClick={onDiscard}
-        className="w-full rounded-2xl py-4 text-sm font-semibold transition-colors active:scale-[0.97]"
-        style={{ color: '#6e9990', background: '#f0f4f2' }}
-      >
-        Discard
-      </button>
     </div>
   )
 }
+
