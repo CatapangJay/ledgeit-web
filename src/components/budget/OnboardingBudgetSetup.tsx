@@ -58,6 +58,7 @@ export default function OnboardingBudgetSetup() {
   const customCategories = useStore((s) => s.customCategories)
   const storeAddCustomCategory = useStore((s) => s.addCustomCategory)
   const userId = useStore((s) => s.userId)
+  const budgetAllocationsLoaded = useStore((s) => s.budgetAllocationsLoaded)
 
   const [dismissed, setDismissed] = useState(false)
   const [step, setStep] = useState<Step>(0)
@@ -72,7 +73,8 @@ export default function OnboardingBudgetSetup() {
   const [allocationMode, setAllocationMode] = useState<'amount' | 'percent'>('amount')
   const [percents, setPercents] = useState<Record<string, number>>({})
 
-  if (dismissed || hasSetupBudget()) return null
+  // Only show once: user is authenticated, allocations have been fetched from DB, and none exist yet
+  if (dismissed || !userId || !budgetAllocationsLoaded || hasSetupBudget()) return null
 
   function advance() {
     setDirection(1)

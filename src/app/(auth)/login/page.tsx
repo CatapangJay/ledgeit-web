@@ -51,13 +51,17 @@ export default function LoginPage() {
         router.refresh()
       }
     } else {
-      const { error: authError } = await supabase.auth.signUp({
+      const { data, error: authError } = await supabase.auth.signUp({
         email: email.trim(),
         password,
       })
       setLoading(false)
       if (authError) {
         setError(authError.message)
+      } else if (data.session) {
+        // Email confirmation disabled — session is live, go straight to app
+        router.push('/')
+        router.refresh()
       } else {
         setSignedUp(true)
       }

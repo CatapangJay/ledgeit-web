@@ -52,6 +52,8 @@ interface StoreState {
   learnedMerchants: Record<string, string>
   isLoading: boolean
   userId: string | null
+  /** True once loadBudgetAllocations has resolved at least once for the current user */
+  budgetAllocationsLoaded: boolean
 }
 
 interface StoreActions {
@@ -91,9 +93,10 @@ export const useStore = create<AppStore>()((set, get) => ({
   learnedMerchants: {},
   isLoading: false,
   userId: null,
+  budgetAllocationsLoaded: false,
 
   setUserId(userId) {
-    set({ userId })
+    set({ userId, ...(userId === null ? { budgetAllocationsLoaded: false, budgetAllocations: [] } : {}) })
   },
 
   async loadTransactions(userId) {
@@ -115,9 +118,11 @@ export const useStore = create<AppStore>()((set, get) => ({
       set({
         budgetAllocations: allocations,
         budgetLimits: active ? allocationToLimits(active) : DEFAULT_BUDGETS,
+        budgetAllocationsLoaded: true,
       })
     } catch {
       // Keep defaults on error
+      set({ budgetAllocationsLoaded: true })
     }
   },
 
