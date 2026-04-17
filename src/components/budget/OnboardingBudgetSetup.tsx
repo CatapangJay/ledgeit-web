@@ -2,7 +2,11 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Plus } from '@phosphor-icons/react'
+import {
+  X, Plus,
+  Briefcase, Laptop, Buildings, TrendUp, House,
+  Bank, ArrowsLeftRight, ShieldCheck, DotsThree,
+} from '@phosphor-icons/react'
 import { useStore, DEFAULT_BUDGETS } from '@/lib/store'
 import { CATEGORIES } from '@/types'
 import type { BudgetAllocationItem, CustomCategory } from '@/types'
@@ -16,7 +20,54 @@ const EXPENSE_CATEGORIES = CATEGORIES.filter(
   (c) => c.id !== 'income' && c.id !== 'other'
 )
 
-const SUGGESTED_NAMES = ['Regular Month', 'Tight Month', 'Vacation Mode', 'Savings Mode']
+// ─── Plan templates ──────────────────────────────────────────────────────────
+// Each value is a percentage (must sum to 100).
+// Categories: restaurants, groceries, transport, shopping, utilities, entertainment, health
+
+type PlanTemplate = {
+  label: string
+  description: string
+  percents: Record<string, number>
+}
+
+const PLAN_TEMPLATES: PlanTemplate[] = [
+  {
+    label: 'Regular Month',
+    description: 'Balanced spending across all categories',
+    percents: { restaurants: 15, groceries: 20, transport: 10, shopping: 10, utilities: 10, entertainment: 5, health: 5, savings: 10, investments: 8, education: 4, personal_care: 3 },
+  },
+  {
+    label: 'Tight Month',
+    description: 'Cut spending to essentials only',
+    percents: { restaurants: 8, groceries: 28, transport: 15, shopping: 3, utilities: 18, entertainment: 3, health: 6, savings: 12, investments: 5, education: 1, personal_care: 1 },
+  },
+  {
+    label: 'Vacation Mode',
+    description: 'More dining, fun & transport; fewer essentials',
+    percents: { restaurants: 22, groceries: 12, transport: 18, shopping: 14, utilities: 6, entertainment: 10, health: 3, savings: 5, investments: 3, education: 2, personal_care: 5 },
+  },
+  {
+    label: 'Savings Mode',
+    description: 'Bare minimum — maximise savings this month',
+    percents: { restaurants: 6, groceries: 26, transport: 13, shopping: 3, utilities: 16, entertainment: 2, health: 6, savings: 15, investments: 10, education: 2, personal_care: 1 },
+  },
+]
+
+const SUGGESTED_NAMES = PLAN_TEMPLATES.map((t) => t.label)
+
+// ─── Income sources ───────────────────────────────────────────────────────────
+
+const INCOME_SOURCES = [
+  { id: 'salary',      label: 'Salary / Employment',    description: 'Monthly wages or fixed employment pay',        Icon: Briefcase },
+  { id: 'freelance',   label: 'Freelance / Side Hustle', description: 'Project-based or part-time work',              Icon: Laptop },
+  { id: 'business',    label: 'Business Revenue',        description: 'Income from your own business operations',     Icon: Buildings },
+  { id: 'inv_returns', label: 'Investment Returns',      description: 'Dividends, stocks, UITF, MP2, ETF earnings',   Icon: TrendUp },
+  { id: 'rental',      label: 'Rental Income',           description: 'From property, space, or equipment leasing',   Icon: House },
+  { id: 'bonds',       label: 'Bonds & Interest',        description: 'Time deposits, bonds, bank savings interest',  Icon: Bank },
+  { id: 'remittance',  label: 'Remittance',              description: 'Money received from family abroad',            Icon: ArrowsLeftRight },
+  { id: 'pension',     label: 'Pension / Benefits',      description: 'SSS, GSIS, PhilHealth, or government aid',     Icon: ShieldCheck },
+  { id: 'other_inc',   label: 'Other Income',            description: 'Any other income sources',                     Icon: DotsThree },
+]
 
 function buildDefaultItems(customCats: CustomCategory[] = []): BudgetAllocationItem[] {
   const presetItems = EXPENSE_CATEGORIES.map((cat) => ({
@@ -38,9 +89,9 @@ function getCatDisplay(
   return { label: '?', icon: 'DotsThree', colorClass: 'text-slate-500', isCustom: false }
 }
 
-type Step = 0 | 1 | 2
+type Step = 0 | 1 | 2 | 3
 
-const STEP_COUNT = 3
+const STEP_COUNT = 4
 
 // ─── Motion variants ──────────────────────────────────────────────────────────
 
@@ -54,6 +105,7 @@ const slideVariants = {
 
 export default function OnboardingBudgetSetup() {
   const saveBudgetAllocation = useStore((s) => s.saveBudgetAllocation)
+  const saveIncomeAllocation = useStore((s) => s.saveIncomeAllocation)
   const hasSetupBudget = useStore((s) => s.hasSetupBudget)
   const customCategories = useStore((s) => s.customCategories)
   const storeAddCustomCategory = useStore((s) => s.addCustomCategory)
@@ -72,13 +124,18 @@ export default function OnboardingBudgetSetup() {
   const [totalBudget, setTotalBudget] = useState(0)
   const [allocationMode, setAllocationMode] = useState<'amount' | 'percent'>('amount')
   const [percents, setPercents] = useState<Record<string, number>>({})
+  const [incomeAmounts, setIncomeAmounts] = useState<Record<string, number>>({})
 
   // Only show once: user is authenticated, allocations have been fetched from DB, and none exist yet
   if (dismissed || !userId || !budgetAllocationsLoaded || hasSetupBudget()) return null
 
   function advance() {
     setDirection(1)
-    setStep((s) => (Math.min(s + 1, 2) as Step))
+    if (step === 2) {
+      const total = Object.values(incomeAmounts).reduce((s, v) => s + v, 0)
+      if (total > 0) setTotalBudget(total)
+    }
+    setStep((s) => (Math.min(s + 1, 3) as Step))
   }
 
   function back() {
@@ -88,6 +145,25 @@ export default function OnboardingBudgetSetup() {
 
   function pickSuggestedName(name: string) {
     setPlanName(name)
+    const template = PLAN_TEMPLATES.find((t) => t.label === name)
+    if (!template) return
+    // Apply template percentages
+    const newPercents: Record<string, number> = {}
+    items.forEach((item) => {
+      newPercents[item.categoryId] = template.percents[item.categoryId] ?? 0
+    })
+    setPercents(newPercents)
+    // If total budget is set, recompute amount limits from the new percents
+    if (totalBudget > 0) {
+      setItems((prev) =>
+        prev.map((item) => ({
+          ...item,
+          limit: Math.round(((newPercents[item.categoryId] ?? 0) / 100) * totalBudget),
+        }))
+      )
+    }
+    // Switch to percent mode so the user sees the allocations
+    setAllocationMode('percent')
   }
 
   function handleLimitChange(categoryId: string, raw: string) {
@@ -179,6 +255,13 @@ export default function OnboardingBudgetSetup() {
     const name = skipToDefaults ? 'Regular Month' : planName.trim() || 'Regular Month'
     const finalItems = skipToDefaults ? buildDefaultItems() : items
     await saveBudgetAllocation({ name, items: finalItems })
+    // Save income allocation if any amounts were entered
+    const incomeItems = Object.entries(incomeAmounts)
+      .filter(([, v]) => v > 0)
+      .map(([sourceId, amount]) => ({ sourceId, amount }))
+    if (incomeItems.length > 0) {
+      await saveIncomeAllocation({ name, items: incomeItems })
+    }
     setSaving(false)
     setDismissed(true)
   }
@@ -292,19 +375,29 @@ export default function OnboardingBudgetSetup() {
               />
 
               {/* Suggested name chips */}
-              <div className="mb-8 flex flex-wrap gap-2">
-                {SUGGESTED_NAMES.map((name) => (
+              <div className="mb-8 flex flex-col gap-2">
+                {PLAN_TEMPLATES.map((t) => (
                   <motion.button
-                    key={name}
-                    whileTap={{ scale: 0.94 }}
-                    onClick={() => pickSuggestedName(name)}
-                    className="rounded-full px-3 py-1.5 text-xs font-semibold"
+                    key={t.label}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => pickSuggestedName(t.label)}
+                    className="flex items-start gap-3 rounded-2xl px-4 py-3 text-left transition-all"
                     style={{
-                      background: planName === name ? '#1f695d' : '#f0f4f2',
-                      color: planName === name ? '#ffffff' : '#3f4946',
+                      background: planName === t.label ? 'rgba(31,105,93,0.08)' : '#f0f4f2',
+                      border: planName === t.label ? '1.5px solid #1f695d' : '1.5px solid transparent',
                     }}
                   >
-                    {name}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-bold" style={{ color: '#00352e' }}>{t.label}</p>
+                      <p className="text-[11px] mt-0.5" style={{ color: '#6e9990' }}>{t.description}</p>
+                    </div>
+                    {planName === t.label && (
+                      <div className="h-4 w-4 shrink-0 mt-0.5 rounded-full flex items-center justify-center" style={{ background: '#1f695d' }}>
+                        <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
+                          <path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </div>
+                    )}
                   </motion.button>
                 ))}
               </div>
@@ -335,6 +428,109 @@ export default function OnboardingBudgetSetup() {
           )}
 
           {step === 2 && (
+            <motion.div
+              key="income"
+              custom={direction}
+              variants={slideVariants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={{ type: 'spring', stiffness: 340, damping: 30 }}
+              className="absolute inset-0 flex flex-col"
+            >
+              <div className="px-6 pb-2 pt-8">
+                <h2 className="mb-1 text-xl font-bold" style={{ color: '#00352e' }}>
+                  Monthly income
+                </h2>
+                <p className="text-sm" style={{ color: '#6e9990' }}>
+                  Enter expected amounts per source. The total becomes your monthly budget.
+                </p>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-6 pb-4 pt-4">
+                <div className="flex flex-col gap-2">
+                  {INCOME_SOURCES.map(({ id, label, description, Icon }) => (
+                    <div
+                      key={id}
+                      className="flex items-center gap-3 rounded-xl px-4 py-3"
+                      style={{ background: '#f0f4f2' }}
+                    >
+                      <div
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+                        style={{ background: '#e7edeb' }}
+                      >
+                        <Icon size={15} weight="duotone" style={{ color: '#1f695d' }} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold" style={{ color: '#191c1c' }}>{label}</p>
+                        <p className="text-[10px]" style={{ color: '#6e9990' }}>{description}</p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <span className="font-mono text-xs font-semibold" style={{ color: '#6e9990' }}>₱</span>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          aria-label={`${label} amount`}
+                          value={incomeAmounts[id] || ''}
+                          onChange={(e) => {
+                            const num = parseFloat(e.target.value.replace(/[^0-9.]/g, '')) || 0
+                            setIncomeAmounts((prev) => ({ ...prev, [id]: num }))
+                          }}
+                          placeholder="0"
+                          className="w-24 rounded-lg px-2 py-1.5 text-right font-mono text-sm font-semibold outline-none"
+                          style={{
+                            background: '#ffffff',
+                            color: '#191c1c',
+                            border: '1px solid #cde0db',
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {Object.values(incomeAmounts).reduce((s, v) => s + v, 0) > 0 && (
+                  <div
+                    className="mt-4 flex items-center justify-between rounded-xl px-4 py-3"
+                    style={{ background: 'rgba(31,105,93,0.06)' }}
+                  >
+                    <span className="text-xs font-bold" style={{ color: '#1f695d' }}>Total Monthly Income</span>
+                    <span className="font-mono text-sm font-bold" style={{ color: '#00352e' }}>
+                      {formatCurrency(Object.values(incomeAmounts).reduce((s, v) => s + v, 0))}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div
+                className="flex gap-3 px-6 pb-[calc(env(safe-area-inset-bottom,0px)+20px)] pt-4"
+                style={{ borderTop: '1px solid #e7edeb' }}
+              >
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
+                  onClick={back}
+                  className="flex-1 rounded-xl py-3.5 text-sm font-semibold"
+                  style={{ background: '#f0f4f2', color: '#3f4946' }}
+                >
+                  Back
+                </motion.button>
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
+                  onClick={advance}
+                  className="flex-2 grow rounded-xl py-3.5 text-sm font-bold"
+                  style={{
+                    background: 'linear-gradient(135deg, #1f695d 0%, #00352e 100%)',
+                    color: '#ffffff',
+                  }}
+                >
+                  Continue
+                </motion.button>
+              </div>
+            </motion.div>
+          )}
+
+          {step === 3 && (
             <motion.div
               key="limits"
               custom={direction}

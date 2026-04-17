@@ -13,6 +13,7 @@ export default function StoreBootstrap() {
   const setUserId = useStore((s) => s.setUserId)
   const loadTransactions = useStore((s) => s.loadTransactions)
   const loadBudgetAllocations = useStore((s) => s.loadBudgetAllocations)
+  const loadIncomeAllocations = useStore((s) => s.loadIncomeAllocations)
   const loadCustomCategories = useStore((s) => s.loadCustomCategories)
   const supabase = useRef(createClient()).current
 
@@ -25,12 +26,13 @@ export default function StoreBootstrap() {
         await loadCustomCategories(user.id)
         loadTransactions(user.id)
         loadBudgetAllocations(user.id)
+        loadIncomeAllocations(user.id)
       } else {
         setUserId(null)
       }
     })
     return () => subscription.unsubscribe()
-  }, [supabase, setUserId, loadTransactions, loadBudgetAllocations, loadCustomCategories])
+  }, [supabase, setUserId, loadTransactions, loadBudgetAllocations, loadIncomeAllocations, loadCustomCategories])
 
   return <OnboardingBudgetSetup />
 }

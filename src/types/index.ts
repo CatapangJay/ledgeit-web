@@ -8,6 +8,10 @@ export type CategoryId =
   | 'utilities'
   | 'entertainment'
   | 'health'
+  | 'savings'
+  | 'investments'
+  | 'education'
+  | 'personal_care'
   | 'income'
   | 'other'
 
@@ -106,6 +110,53 @@ export const CATEGORIES: Category[] = [
       'dental', 'dentist', 'checkup', 'laboratory', 'lab', 'xray',
       'gym', 'fitness', 'wellness', 'vitamins', 'supplement', 'drugstore',
       'watsons', 'mercury', 'rose pharmacy',
+    ],
+  },
+  {
+    id: 'savings',
+    label: 'Savings',
+    icon: 'PiggyBank',
+    color: 'text-teal-700',
+    bgColor: 'bg-teal-50',
+    keywords: [
+      'savings', 'save', 'ipon', 'emergency fund', 'sinking fund', 'nabv',
+      'piggy', 'cola', 'buffer', 'reserve', 'rainy day',
+    ],
+  },
+  {
+    id: 'investments',
+    label: 'Investments',
+    icon: 'TrendUp',
+    color: 'text-indigo-700',
+    bgColor: 'bg-indigo-50',
+    keywords: [
+      'invest', 'investment', 'stock', 'stocks', 'mutual fund', 'uitf', 'vul',
+      'crypto', 'bitcoin', 'eth', 'psei', 'mp2', 'pag-ibig mp2',
+      'philstocks', 'col financial', 'gcash invest', 'bonds', 'reit',
+    ],
+  },
+  {
+    id: 'education',
+    label: 'Education',
+    icon: 'GraduationCap',
+    color: 'text-blue-700',
+    bgColor: 'bg-blue-50',
+    keywords: [
+      'tuition', 'school', 'university', 'college', 'course', 'udemy',
+      'coursera', 'book', 'books', 'training', 'seminar', 'workshop',
+      'enrollment', 'allowance', 'school supply', 'notebook',
+    ],
+  },
+  {
+    id: 'personal_care',
+    label: 'Personal Care',
+    icon: 'Scissors',
+    color: 'text-fuchsia-700',
+    bgColor: 'bg-fuchsia-50',
+    keywords: [
+      'salon', 'haircut', 'barbershop', 'barber', 'beauty', 'spa', 'nails',
+      'nail', 'massage', 'facial', 'skincare', 'skin care', 'grooming',
+      'waxing', 'threading', 'lash', 'brow', 'manicure', 'pedicure',
     ],
   },
   {
@@ -211,6 +262,21 @@ export interface BudgetAllocation {
   name: string
   isActive: boolean
   items: BudgetAllocationItem[]
+  createdAt: string
+}
+
+// ─── Income Allocation ────────────────────────────────────────────────────────
+
+export interface IncomeAllocationItem {
+  sourceId: string      // Matches INCOME_SOURCES[n].id
+  amount: number        // Expected monthly amount
+}
+
+export interface IncomeAllocation {
+  id: string
+  name: string
+  isActive: boolean
+  items: IncomeAllocationItem[]
   createdAt: string
 }
 

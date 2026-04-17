@@ -21,6 +21,9 @@ import {
   Globe,
   FilmSlate,
   GraduationCap,
+  // ─── New preset category icons ───────────────────────────────────────────────
+  PiggyBank,
+  TrendUp,
 } from '@phosphor-icons/react'
 import type { Icon } from '@phosphor-icons/react'
 
@@ -38,6 +41,11 @@ export const PHOSPHOR_ICON_MAP: Record<string, Icon> = {
   Heartbeat,
   ArrowFatLineDown,
   DotsThree,
+  // Preset category icons
+  PiggyBank,
+  TrendUp,
+  GraduationCap,
+  Scissors,
   // Custom category icon options
   Coffee,
   Airplane,
@@ -46,11 +54,9 @@ export const PHOSPHOR_ICON_MAP: Record<string, Icon> = {
   MusicNote,
   PawPrint,
   Gift,
-  Scissors,
   Wrench,
   Globe,
   FilmSlate,
-  GraduationCap,
 }
 
 /** Resolve a Phosphor icon component by its string name. Falls back to DotsThree. */
@@ -68,6 +74,10 @@ const PRESET_ICON_BG: Record<string, string> = {
   utilities:     '#b45309',
   entertainment: '#be185d',
   health:        '#be123c',
+  savings:       '#0f766e',
+  investments:   '#4338ca',
+  education:     '#1d4ed8',
+  personal_care: '#a21caf',
   income:        '#1f6950',
   other:         '#64748b',
 }

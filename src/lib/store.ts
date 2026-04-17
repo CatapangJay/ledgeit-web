@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Transaction, BudgetLimit, BudgetAllocation, BudgetAllocationItem, CustomCategory } from '@/types'
+import type { Transaction, BudgetLimit, BudgetAllocation, BudgetAllocationItem, CustomCategory, IncomeAllocation, IncomeAllocationItem } from '@/types'
 import {
   fetchTransactions,
   insertTransaction,
@@ -15,6 +15,13 @@ import {
   deleteBudgetAllocation,
 } from '@/lib/db/budgetAllocations'
 import {
+  fetchIncomeAllocations,
+  createIncomeAllocation,
+  updateIncomeAllocation,
+  activateIncomeAllocation,
+  deleteIncomeAllocation,
+} from '@/lib/db/incomeAllocations'
+import {
   fetchCustomCategories,
   createCustomCategory,
   deleteCustomCategory,
@@ -24,13 +31,17 @@ import {
 // Applied as fallback when no active allocation is loaded.
 
 export const DEFAULT_BUDGETS: BudgetLimit[] = [
-  { categoryId: 'restaurants', limit: 5000, cycle: 'monthly' },
-  { categoryId: 'groceries', limit: 8000, cycle: 'monthly' },
-  { categoryId: 'transport', limit: 3000, cycle: 'monthly' },
-  { categoryId: 'shopping', limit: 4000, cycle: 'monthly' },
-  { categoryId: 'utilities', limit: 3500, cycle: 'monthly' },
+  { categoryId: 'restaurants',  limit: 6000, cycle: 'monthly' },
+  { categoryId: 'groceries',    limit: 8000, cycle: 'monthly' },
+  { categoryId: 'transport',    limit: 4000, cycle: 'monthly' },
+  { categoryId: 'shopping',     limit: 4000, cycle: 'monthly' },
+  { categoryId: 'utilities',    limit: 4000, cycle: 'monthly' },
   { categoryId: 'entertainment', limit: 2000, cycle: 'monthly' },
-  { categoryId: 'health', limit: 2000, cycle: 'monthly' },
+  { categoryId: 'health',       limit: 2000, cycle: 'monthly' },
+  { categoryId: 'savings',      limit: 3000, cycle: 'monthly' },
+  { categoryId: 'investments',  limit: 2000, cycle: 'monthly' },
+  { categoryId: 'education',    limit: 1000, cycle: 'monthly' },
+  { categoryId: 'personal_care', limit: 1000, cycle: 'monthly' },
 ]
 
 function allocationToLimits(allocation: BudgetAllocation): BudgetLimit[] {
@@ -54,6 +65,9 @@ interface StoreState {
   userId: string | null
   /** True once loadBudgetAllocations has resolved at least once for the current user */
   budgetAllocationsLoaded: boolean
+  incomeAllocations: IncomeAllocation[]
+  /** True once loadIncomeAllocations has resolved at least once for the current user */
+  incomeAllocationsLoaded: boolean
 }
 
 interface StoreActions {
@@ -65,6 +79,12 @@ interface StoreActions {
   saveBudgetAllocation: (payload: { id?: string; name: string; items: BudgetAllocationItem[] }) => Promise<void>
   activateAllocation: (allocationId: string) => Promise<void>
   deleteAllocation: (allocationId: string) => Promise<void>
+  loadIncomeAllocations: (userId: string) => Promise<void>
+  saveIncomeAllocation: (payload: { id?: string; name: string; items: IncomeAllocationItem[] }) => Promise<void>
+  activateIncomeAllocationById: (allocationId: string) => Promise<void>
+  deleteIncomeAllocationById: (allocationId: string) => Promise<void>
+  /** Sum of items in the active income allocation. */
+  getTotalPlannedIncome: () => number
   loadCustomCategories: (userId: string) => Promise<void>
   addCustomCategory: (userId: string, name: string, icon: string, textColor: string, bgColor: string) => Promise<CustomCategory>
   removeCustomCategory: (id: string) => Promise<void>
@@ -94,9 +114,19 @@ export const useStore = create<AppStore>()((set, get) => ({
   isLoading: false,
   userId: null,
   budgetAllocationsLoaded: false,
+  incomeAllocations: [],
+  incomeAllocationsLoaded: false,
 
   setUserId(userId) {
-    set({ userId, ...(userId === null ? { budgetAllocationsLoaded: false, budgetAllocations: [] } : {}) })
+    set({
+      userId,
+      ...(userId === null ? {
+        budgetAllocationsLoaded: false,
+        budgetAllocations: [],
+        incomeAllocationsLoaded: false,
+        incomeAllocations: [],
+      } : {}),
+    })
   },
 
   async loadTransactions(userId) {
@@ -222,7 +252,80 @@ export const useStore = create<AppStore>()((set, get) => ({
     return get().budgetAllocations.length > 0
   },
 
-  // ─── Custom Categories ────────────────────────────────────────────────────
+  // ─── Income Allocations ─────────────────────────────────────────────────────────
+
+  async loadIncomeAllocations(userId) {
+    try {
+      const allocations = await fetchIncomeAllocations(userId)
+      set({ incomeAllocations: allocations, incomeAllocationsLoaded: true })
+    } catch {
+      set({ incomeAllocationsLoaded: true })
+    }
+  },
+
+  async saveIncomeAllocation({ id, name, items }) {
+    const userId = get().userId
+    if (!userId) return
+    const prev = get().incomeAllocations
+    if (id) {
+      const optimistic = prev.map((a) => (a.id === id ? { ...a, name, items } : a))
+      set({ incomeAllocations: optimistic })
+      try {
+        await updateIncomeAllocation(id, name, items)
+      } catch (err) {
+        console.error('[store] updateIncomeAllocation failed:', err)
+        set({ incomeAllocations: prev })
+      }
+    } else {
+      try {
+        const created = await createIncomeAllocation(userId, name, items)
+        const next = [created, ...prev.map((a) => ({ ...a, isActive: created.isActive ? false : a.isActive }))]
+        set({ incomeAllocations: next })
+      } catch (err) {
+        console.error('[store] createIncomeAllocation failed:', err)
+      }
+    }
+  },
+
+  async activateIncomeAllocationById(allocationId) {
+    const userId = get().userId
+    if (!userId) return
+    const prev = get().incomeAllocations
+    set({ incomeAllocations: prev.map((a) => ({ ...a, isActive: a.id === allocationId })) })
+    try {
+      await activateIncomeAllocation(userId, allocationId)
+    } catch (err) {
+      console.error('[store] activateIncomeAllocation failed:', err)
+      set({ incomeAllocations: prev })
+    }
+  },
+
+  async deleteIncomeAllocationById(allocationId) {
+    const userId = get().userId
+    if (!userId) return
+    const prev = get().incomeAllocations
+    if (prev.length === 1) return
+    const target = prev.find((a) => a.id === allocationId)
+    if (!target) return
+    const remaining = prev.filter((a) => a.id !== allocationId)
+    const promoted = target.isActive
+      ? remaining.map((a, i) => ({ ...a, isActive: i === 0 }))
+      : remaining
+    set({ incomeAllocations: promoted })
+    try {
+      await deleteIncomeAllocation(allocationId)
+    } catch (err) {
+      console.error('[store] deleteIncomeAllocation failed:', err)
+      set({ incomeAllocations: prev })
+    }
+  },
+
+  getTotalPlannedIncome() {
+    const active = get().incomeAllocations.find((a) => a.isActive)
+    if (!active) return 0
+    return active.items.reduce((s, i) => s + i.amount, 0)
+  },
+
 
   async loadCustomCategories(userId) {
     try {
