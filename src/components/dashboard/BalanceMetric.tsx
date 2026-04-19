@@ -30,10 +30,17 @@ function useCountUp(target: number, duration = 1000) {
 }
 
 export default function BalanceMetric() {
-  const getMonthlyTotal = useStore((s) => s.getMonthlyTotal)
+  const transactions = useStore((s) => s.transactions)
 
-  const monthlyIncome = getMonthlyTotal('income')
-  const monthlyExpense = getMonthlyTotal('expense')
+  const now = new Date()
+  const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+
+  const monthlyIncome = transactions
+    .filter((t) => t.type === 'income' && t.date.startsWith(yearMonth))
+    .reduce((sum, t) => sum + t.amount, 0)
+  const monthlyExpense = transactions
+    .filter((t) => t.type === 'expense' && t.date.startsWith(yearMonth))
+    .reduce((sum, t) => sum + t.amount, 0)
   const monthlyNet = monthlyIncome - monthlyExpense
   const isPositive = monthlyNet >= 0
 
@@ -41,7 +48,6 @@ export default function BalanceMetric() {
   const displayIncome = useCountUp(monthlyIncome, 900)
   const displayExpense = useCountUp(monthlyExpense, 900)
 
-  const now = new Date()
   const monthLabel = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
   return (

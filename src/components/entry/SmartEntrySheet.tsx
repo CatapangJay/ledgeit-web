@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useId, useMemo } from 'react'
 import { motion, AnimatePresence, useMotionValue, animate } from 'framer-motion'
 import type { PanInfo } from 'framer-motion'
-import { X, CheckCircle, ArrowsOutSimple, ArrowsInSimple } from '@phosphor-icons/react'
+import { X, CheckCircle, ArrowsOutSimple, ArrowsInSimple, Sparkle } from '@phosphor-icons/react'
 import { parseTransaction } from '@/lib/parser'
 import { categorize, getMerchantKey } from '@/lib/categorizer'
 import { getMerchantSuggestions, resolveMerchant } from '@/lib/fuzzy'
@@ -57,6 +57,16 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
   const transactions = useStore((s) => s.transactions)
   const customCategories = useStore((s) => s.customCategories)
 
+  // ── Desktop vs mobile detection ─────────────────────────────────────────
+  const [isDesktop, setIsDesktop] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)')
+    setIsDesktop(mq.matches)
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+
   // ── Drag / snap state ────────────────────────────────────────────────────
   const [sheetVisible, setSheetVisible] = useState(false)
   const [snapState, setSnapState] = useState<'partial' | 'full'>('partial')
@@ -73,6 +83,7 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
 
   // Open / close driven by the `open` prop
   useEffect(() => {
+    if (isDesktop) return // desktop uses AnimatePresence directly
     if (open && !isVisibleRef.current) {
       isVisibleRef.current = true
       setSheetVisible(true)
@@ -91,10 +102,14 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
       })
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  }, [open, isDesktop])
 
-  // All close paths (X button, backdrop tap, drag-to-close) funnel through here
+  // All close paths funnel through here
   const triggerClose = useCallback(() => {
+    if (isDesktop) {
+      onClose()
+      return
+    }
     if (!isVisibleRef.current) return
     animate(sheetTopPx, getClosedTopPx(), {
       ...springCfg,
@@ -105,7 +120,7 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
       },
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sheetTopPx, onClose])
+  }, [isDesktop, sheetTopPx, onClose])
 
   // Handle drag — move the sheet top live with the pointer
   const handleDrag = useCallback((_: unknown, info: PanInfo) => {
@@ -259,6 +274,326 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
 
   const canLog = !success && (parseResult?.draft.amount ?? null) !== null
 
+  // ── Shared inner content (used by both mobile sheet + desktop modal) ───
+  const sheetContent = (
+    <>
+      {/* ── Pinned header + mode toggle ─────────────────────────────── */}
+      <div className="shrink-0 px-5 pt-1.5 pb-3" style={{ borderBottom: '1px solid #e7edeb' }}>
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Sparkle size={15} weight="fill" color="#1f695d" aria-hidden="true" />
+            <span
+              id={labelId}
+              className="text-[15px] font-bold"
+              style={{ color: '#00352e' }}
+            >
+              Smart Log
+            </span>
+          </div>
+          <motion.button
+            onClick={triggerClose}
+            aria-label="Close"
+            className="flex h-8 w-8 items-center justify-center rounded-full"
+            style={{ background: '#f0f4f2', color: '#3f4946' }}
+            whileTap={{ scale: 0.88 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+          >
+            <X size={14} weight="bold" aria-hidden="true" />
+          </motion.button>
+        </div>
+        <div className="flex rounded-xl p-1" style={{ background: '#f0f4f2' }}>
+          {(['quick', 'bulk'] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => handleModeChange(m)}
+              className="flex-1 py-2 text-[12px] font-semibold tracking-wide transition-all rounded-lg"
+              style={
+                mode === m
+                  ? { background: '#ffffff', color: '#00352e', boxShadow: '0 2px 8px rgba(0,53,46,0.1)' }
+                  : { background: 'transparent', color: '#6e9990' }
+              }
+            >
+              {m === 'quick' ? 'Quick Entry' : 'Multi-Entry'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Scrollable body ─────────────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto px-5 pt-4 pb-2">
+        {/* Bulk mode */}
+        {mode === 'bulk' && !success && (
+          <BulkEntryMode
+            onAllLogged={handleBulkComplete}
+            onDiscard={triggerClose}
+            logAllRef={bulkLogAllRef}
+            onValidCountChange={setBulkValidCount}
+            initialText={bulkText}
+            onTextChange={setBulkText}
+          />
+        )}
+
+        {/* Bulk success flash */}
+        {mode === 'bulk' && success && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.94, y: 6 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 24 }}
+            className="flex items-center justify-center gap-2 rounded-2xl py-6 text-sm font-semibold"
+            style={{ background: 'rgba(31,105,93,0.1)', color: '#1f6950' }}
+          >
+            <CheckCircle size={18} weight="fill" aria-hidden="true" />
+            All transactions logged
+          </motion.div>
+        )}
+
+        {/* ── QUICK MODE ─────────────────────────────────────────────── */}
+        {mode === 'quick' && (
+          <>
+            {/* Freeform text input */}
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => handleChange(e.target.value)}
+              placeholder={`try: ${EXAMPLES[exampleIndex]}`}
+              aria-label="Describe your transaction in plain language"
+              rows={isDesktop ? 3 : snapState === 'full' ? 6 : 2}
+              className="w-full resize-none bg-transparent text-[1.6rem] font-light leading-snug outline-none transition-all"
+              style={{ color: '#191c1c', caretColor: '#1f695d' }}
+            />
+
+            {/* Analyzing pulse */}
+            <AnimatePresence>
+              {isAnalyzing && (
+                <motion.p
+                  key="analyzing"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: [0.3, 0.9, 0.3] }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+                  className="mt-2 text-xs font-medium"
+                  style={{ color: '#6e9990' }}
+                >
+                  Analyzing…
+                </motion.p>
+              )}
+            </AnimatePresence>
+
+            {/* Merchant suggestion chips */}
+            <AnimatePresence>
+              {!isAnalyzing && parseResult && (
+                <motion.div
+                  key="merchant-chips"
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 4 }}
+                  transition={{ type: 'spring', stiffness: 340, damping: 28 }}
+                  className="mt-2 flex flex-wrap items-center gap-1.5"
+                >
+                  {rawMerchant && (
+                    <>
+                      <span className="text-[11px] font-medium" style={{ color: '#6e9990' }}>Not right?</span>
+                      <motion.button
+                        key="use-original"
+                        onClick={() => {
+                          setParseResult((prev) =>
+                            prev ? { ...prev, draft: { ...prev.draft, merchant: rawMerchant } } : prev
+                          )
+                          setRawMerchant(null)
+                        }}
+                        className="px-3 py-0.5 text-[11px] font-semibold rounded-full transition-colors active:scale-[0.95]"
+                        style={{ background: 'rgba(31,105,93,0.1)', color: '#1f695d', border: '1px solid rgba(31,105,93,0.2)' }}
+                        whileTap={{ scale: 0.93 }}
+                        transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+                      >
+                        Use: {rawMerchant}
+                      </motion.button>
+                    </>
+                  )}
+                  {merchantSuggestions.length > 0 && (
+                    <span className="text-[11px] font-medium" style={{ color: '#6e9990' }}>
+                      {rawMerchant ? 'or:' : 'Also:'}
+                    </span>
+                  )}
+                  {merchantSuggestions.map((s) => (
+                    <motion.button
+                      key={s.name}
+                      onClick={() =>
+                        setParseResult((prev) =>
+                          prev
+                            ? { ...prev, draft: { ...prev.draft, merchant: s.name } }
+                            : prev,
+                        )
+                      }
+                      className="px-3 py-0.5 text-[11px] font-semibold rounded-full transition-colors active:scale-[0.95]"
+                      style={{ background: '#f0f4f2', color: '#3f4946', border: '1px solid #e7edeb' }}
+                      whileTap={{ scale: 0.93 }}
+                      transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+                    >
+                      {s.name}
+                    </motion.button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Parse preview card */}
+            <AnimatePresence mode="wait">
+              {parseResult && !isAnalyzing && !success && (
+                <ParsePreview
+                  key="preview"
+                  draft={parseResult.draft}
+                  category={parseResult.category}
+                  confidence={parseResult.confidence}
+                  customCategories={customCategories}
+                  onMerchantChange={(name) =>
+                    setParseResult((prev) =>
+                      prev ? { ...prev, draft: { ...prev.draft, merchant: name } } : prev
+                    )
+                  }
+                  onCategoryChange={(cat) => {
+                    const newType = cat.id === 'income' ? 'income' : 'expense'
+                    setParseResult((prev) =>
+                      prev
+                        ? { ...prev, category: cat, draft: { ...prev.draft, type: newType } }
+                        : prev,
+                    )
+                    if (parseResult?.draft) {
+                      learnCategory(getMerchantKey(parseResult.draft), cat.id)
+                    }
+                  }}
+                  onDateChange={(date) =>
+                    setParseResult((prev) =>
+                      prev ? { ...prev, draft: { ...prev.draft, date } } : prev
+                    )
+                  }
+                />
+              )}
+            </AnimatePresence>
+
+            {/* Success confirmation */}
+            <AnimatePresence>
+              {success && (
+                <motion.div
+                  key="success"
+                  initial={{ opacity: 0, scale: 0.94, y: 6 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 24 }}
+                  className="mt-4 flex items-center justify-center gap-2 rounded-2xl py-4 text-sm font-semibold"
+                  style={{ background: 'rgba(31,105,93,0.1)', color: '#1f6950' }}
+                >
+                  <CheckCircle size={18} weight="fill" aria-hidden="true" />
+                  Transaction logged
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </>
+        )}
+      </div>
+
+      {/* ── Sticky footer ───────────────────────────────────────────── */}
+      {!success && (
+        <div
+          className="shrink-0 px-5 pt-3"
+          style={{
+            paddingBottom: isDesktop ? '20px' : 'calc(env(safe-area-inset-bottom) + 20px)',
+            borderTop: '1px solid #e7edeb',
+          }}
+        >
+          <div className="flex gap-3">
+            <button
+              onClick={triggerClose}
+              className="flex-1 rounded-2xl py-4 text-sm font-semibold transition-colors active:scale-[0.97]"
+              style={{ color: '#6e9990', background: '#f0f4f2' }}
+            >
+              Discard
+            </button>
+            {mode === 'quick' && (
+              <motion.button
+                onClick={handleLog}
+                disabled={!canLog}
+                aria-label="Log transaction"
+                className="flex-1 rounded-2xl py-4 text-sm font-bold tracking-wide disabled:opacity-30"
+                style={{ background: 'linear-gradient(135deg, #1f695d 0%, #00352e 100%)', color: '#ffffff' }}
+                whileTap={{ scale: 0.97 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+              >
+                Log Transaction
+              </motion.button>
+            )}
+            {mode === 'bulk' && (
+              <motion.button
+                onClick={() => bulkLogAllRef.current?.()}
+                disabled={bulkValidCount === 0}
+                aria-label="Log all entries"
+                className="flex-1 rounded-2xl py-4 text-sm font-bold tracking-wide disabled:opacity-30"
+                style={{ background: 'linear-gradient(135deg, #1f695d 0%, #00352e 100%)', color: '#ffffff' }}
+                whileTap={{ scale: 0.97 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+              >
+                {bulkValidCount > 0 ? `Log All ${bulkValidCount}` : 'Log All'}
+              </motion.button>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  )
+
+  // ── DESKTOP: centered modal overlay ──────────────────────────────────────
+  if (isDesktop) {
+    return (
+      <AnimatePresence>
+        {open && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              key="modal-backdrop"
+              className="fixed inset-0 z-40 bg-black/40"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              onClick={triggerClose}
+              aria-hidden="true"
+            />
+
+            {/* Modal panel */}
+            <motion.div
+              key="modal-panel"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={labelId}
+              className="fixed left-1/2 top-1/2 z-50 flex w-full max-w-md flex-col overflow-hidden"
+              style={{
+                borderRadius: '20px',
+                background: 'rgba(248,250,249,0.98)',
+                backdropFilter: 'blur(24px)',
+                WebkitBackdropFilter: 'blur(24px)',
+                boxShadow: '0 24px 80px rgba(0,53,46,0.18), 0 0 0 1px rgba(205,224,219,0.5)',
+                maxHeight: '85dvh',
+              }}
+              initial={{ opacity: 0, scale: 0.94, x: '-50%', y: '-46%' }}
+              animate={{ opacity: 1, scale: 1, x: '-50%', y: '-50%' }}
+              exit={{ opacity: 0, scale: 0.94, x: '-50%', y: '-46%' }}
+              transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+            >
+              {/* Thin accent top bar */}
+              <div
+                className="h-0.5 w-full shrink-0"
+                style={{ background: 'linear-gradient(90deg, #1f695d, #00352e)' }}
+              />
+              {sheetContent}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    )
+  }
+
+  // ── MOBILE: bottom sheet with drag / snap ────────────────────────────────
   return (
     <>
       {/* Backdrop */}
@@ -277,7 +612,7 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
         )}
       </AnimatePresence>
 
-      {/* Sheet — position controlled by sheetTopPx motion value */}
+      {/* Sheet */}
       {sheetVisible && (
         <motion.div
           role="dialog"
@@ -294,7 +629,7 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
             boxShadow: '0 -8px 48px rgba(0,53,46,0.12)',
           }}
         >
-          {/* ── Drag handle ───────────────────────────────────────────────── */}
+          {/* ── Drag handle ─────────────────────────────────────────── */}
           <motion.div
             drag="y"
             dragConstraints={{ top: 0, bottom: 0 }}
@@ -333,273 +668,11 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
               style={{ height: 4, background: '#cde0db' }}
             />
 
-            {/* Spacer to balance the expand button */}
+            {/* Spacer */}
             <div className="h-7 w-7" />
           </motion.div>
 
-          {/* ── Pinned header + mode toggle — never scrolls away ────────── */}
-          <div className="shrink-0 px-5 pt-1.5 pb-3" style={{ borderBottom: '1px solid #e7edeb' }}>
-            <div className="mb-3 flex items-center justify-between">
-              <span
-                id={labelId}
-                className="text-[15px] font-bold"
-                style={{ color: '#00352e' }}
-              >
-                Smart Log
-              </span>
-              <motion.button
-                onClick={triggerClose}
-                aria-label="Close"
-                className="flex h-8 w-8 items-center justify-center rounded-full"
-                style={{ background: '#f0f4f2', color: '#3f4946' }}
-                whileTap={{ scale: 0.88 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-              >
-                <X size={14} weight="bold" aria-hidden="true" />
-              </motion.button>
-            </div>
-            <div className="flex rounded-xl p-1" style={{ background: '#f0f4f2' }}>
-              {(['quick', 'bulk'] as const).map((m) => (
-                <button
-                  key={m}
-                  onClick={() => handleModeChange(m)}
-                  className="flex-1 py-2 text-[12px] font-semibold tracking-wide transition-all rounded-lg"
-                  style={
-                    mode === m
-                      ? { background: '#ffffff', color: '#00352e', boxShadow: '0 2px 8px rgba(0,53,46,0.1)' }
-                      : { background: 'transparent', color: '#6e9990' }
-                  }
-                >
-                  {m === 'quick' ? 'Quick Entry' : 'Multi-Entry'}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-5 pt-4 pb-2">
-              {/* Bulk mode */}
-              {mode === 'bulk' && !success && (
-                <BulkEntryMode
-                  onAllLogged={handleBulkComplete}
-                  onDiscard={triggerClose}
-                  logAllRef={bulkLogAllRef}
-                  onValidCountChange={setBulkValidCount}
-                  initialText={bulkText}
-                  onTextChange={setBulkText}
-                />
-              )}
-
-              {/* Bulk success flash */}
-              {mode === 'bulk' && success && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.94, y: 6 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-                  className="flex items-center justify-center gap-2 rounded-2xl py-6 text-sm font-semibold"
-                  style={{ background: 'rgba(31,105,93,0.1)', color: '#1f6950' }}
-                >
-                  <CheckCircle size={18} weight="fill" aria-hidden="true" />
-                  All transactions logged
-                </motion.div>
-              )}
-
-              {/* ── QUICK MODE ────────────────────────────── */}
-              {mode === 'quick' && (
-                <>
-                  {/* Freeform text input — grows with sheet height */}
-                  <textarea
-                    ref={textareaRef}
-                    value={input}
-                    onChange={(e) => handleChange(e.target.value)}
-                    placeholder={`try: ${EXAMPLES[exampleIndex]}`}
-                    aria-label="Describe your transaction in plain language"
-                    rows={snapState === 'full' ? 6 : 2}
-                    className="w-full resize-none bg-transparent text-[1.6rem] font-light leading-snug outline-none transition-all"
-                    style={{ color: '#191c1c', caretColor: '#1f695d' }}
-                  />
-
-                  {/* Analyzing pulse */}
-                  <AnimatePresence>
-                    {isAnalyzing && (
-                      <motion.p
-                        key="analyzing"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: [0.3, 0.9, 0.3] }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
-                        className="mt-2 text-xs font-medium"
-                        style={{ color: '#6e9990' }}
-                      >
-                        Analyzing…
-                      </motion.p>
-                    )}
-                  </AnimatePresence>
-
-                  {/* Merchant suggestion chips (fuzzy matches / alternatives) */}
-                  <AnimatePresence>
-                    {!isAnalyzing && parseResult && (
-                      <motion.div
-                        key="merchant-chips"
-                        initial={{ opacity: 0, y: 4 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 4 }}
-                        transition={{ type: 'spring', stiffness: 340, damping: 28 }}
-                        className="mt-2 flex flex-wrap items-center gap-1.5"
-                      >
-                        {/* "Use original" chip — shown when fuzzy correction was applied */}
-                        {rawMerchant && (
-                          <>
-                            <span className="text-[11px] font-medium" style={{ color: '#6e9990' }}>Not right?</span>
-                            <motion.button
-                              key="use-original"
-                              onClick={() => {
-                                setParseResult((prev) =>
-                                  prev ? { ...prev, draft: { ...prev.draft, merchant: rawMerchant } } : prev
-                                )
-                                setRawMerchant(null)
-                              }}
-                              className="px-3 py-0.5 text-[11px] font-semibold rounded-full transition-colors active:scale-[0.95]"
-                              style={{ background: 'rgba(31,105,93,0.1)', color: '#1f695d', border: '1px solid rgba(31,105,93,0.2)' }}
-                              whileTap={{ scale: 0.93 }}
-                              transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-                            >
-                              Use: {rawMerchant}
-                            </motion.button>
-                          </>
-                        )}
-                        {/* Alt suggestions */}
-                        {merchantSuggestions.length > 0 && (
-                          <span className="text-[11px] font-medium" style={{ color: '#6e9990' }}>
-                            {rawMerchant ? 'or:' : 'Also:'}
-                          </span>
-                        )}
-                        {merchantSuggestions.map((s) => (
-                          <motion.button
-                            key={s.name}
-                            onClick={() =>
-                              setParseResult((prev) =>
-                                prev
-                                  ? { ...prev, draft: { ...prev.draft, merchant: s.name } }
-                                  : prev,
-                              )
-                            }
-                            className="px-3 py-0.5 text-[11px] font-semibold rounded-full transition-colors active:scale-[0.95]"
-                            style={{ background: '#f0f4f2', color: '#3f4946', border: '1px solid #e7edeb' }}
-                            whileTap={{ scale: 0.93 }}
-                            transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-                          >
-                            {s.name}
-                            {s.source === 'history' && (
-                              <span className="ml-1 opacity-50">♥</span>
-                            )}
-                          </motion.button>
-                        ))}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-
-                  {/* Parse preview card */}
-                  <AnimatePresence mode="wait">
-                    {parseResult && !isAnalyzing && !success && (
-                      <ParsePreview
-                        key="preview"
-                        draft={parseResult.draft}
-                        category={parseResult.category}
-                        confidence={parseResult.confidence}
-                        customCategories={customCategories}
-                        onMerchantChange={(name) =>
-                          setParseResult((prev) =>
-                            prev ? { ...prev, draft: { ...prev.draft, merchant: name } } : prev
-                          )
-                        }
-                        onCategoryChange={(cat) => {
-                          const newType = cat.id === 'income' ? 'income' : 'expense'
-                          setParseResult((prev) =>
-                            prev
-                              ? { ...prev, category: cat, draft: { ...prev.draft, type: newType } }
-                              : prev,
-                          )
-                          if (parseResult?.draft) {
-                            learnCategory(getMerchantKey(parseResult.draft), cat.id)
-                          }
-                        }}
-                        onDateChange={(date) =>
-                          setParseResult((prev) =>
-                            prev ? { ...prev, draft: { ...prev.draft, date } } : prev
-                          )
-                        }
-                      />
-                    )}
-                  </AnimatePresence>
-
-                  {/* Success confirmation */}
-                  <AnimatePresence>
-                    {success && (
-                      <motion.div
-                        key="success"
-                        initial={{ opacity: 0, scale: 0.94, y: 6 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-                        className="mt-4 flex items-center justify-center gap-2 rounded-2xl py-4 text-sm font-semibold"
-                        style={{ background: 'rgba(31,105,93,0.1)', color: '#1f6950' }}
-                      >
-                        <CheckCircle size={18} weight="fill" aria-hidden="true" />
-                        Transaction logged
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </>
-              )}
-            </div>
-
-          {/* ── Sticky footer — buttons always pinned to bottom ───────────── */}
-          {!success && (
-            <div
-              className="shrink-0 px-5 pt-3"
-              style={{
-                paddingBottom: 'calc(env(safe-area-inset-bottom) + 20px)',
-                borderTop: '1px solid #e7edeb',
-              }}
-            >
-              <div className="flex gap-3">
-                <button
-                  onClick={triggerClose}
-                  className="flex-1 rounded-2xl py-4 text-sm font-semibold transition-colors active:scale-[0.97]"
-                  style={{ color: '#6e9990', background: '#f0f4f2' }}
-                >
-                  Discard
-                </button>
-                {mode === 'quick' && (
-                  <motion.button
-                    onClick={handleLog}
-                    disabled={!canLog}
-                    aria-label="Log transaction"
-                    className="flex-1 rounded-2xl py-4 text-sm font-bold tracking-wide disabled:opacity-30"
-                    style={{ background: 'linear-gradient(135deg, #1f695d 0%, #00352e 100%)', color: '#ffffff' }}
-                    whileTap={{ scale: 0.97 }}
-                    transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-                  >
-                    Log Transaction
-                  </motion.button>
-                )}
-                {mode === 'bulk' && (
-                  <motion.button
-                    onClick={() => bulkLogAllRef.current?.()}
-                    disabled={bulkValidCount === 0}
-                    aria-label="Log all entries"
-                    className="flex-1 rounded-2xl py-4 text-sm font-bold tracking-wide disabled:opacity-30"
-                    style={{ background: 'linear-gradient(135deg, #1f695d 0%, #00352e 100%)', color: '#ffffff' }}
-                    whileTap={{ scale: 0.97 }}
-                    transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-                  >
-                    {bulkValidCount > 0 ? `Log All ${bulkValidCount}` : 'Log All'}
-                  </motion.button>
-                )}
-              </div>
-            </div>
-          )}
+          {sheetContent}
         </motion.div>
       )}
     </>

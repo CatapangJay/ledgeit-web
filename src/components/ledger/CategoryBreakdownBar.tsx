@@ -25,9 +25,12 @@ interface Props {
 export default function CategoryBreakdownBar({ transactions }: Props) {
   const [active, setActive] = useState<string | null>(null)
 
-  const { breakdown, total } = useMemo(() => {
+  const { breakdown, total, incomeTotal } = useMemo(() => {
     const expenses = transactions.filter((t) => t.type === 'expense')
     const total = expenses.reduce((s, t) => s + t.amount, 0)
+    const incomeTotal = transactions
+      .filter((t) => t.type === 'income')
+      .reduce((s, t) => s + t.amount, 0)
 
     const map = new Map<string, number>()
     for (const t of expenses) {
@@ -45,10 +48,10 @@ export default function CategoryBreakdownBar({ transactions }: Props) {
       }))
       .sort((a, b) => b.amount - a.amount)
 
-    return { breakdown, total }
+    return { breakdown, total, incomeTotal }
   }, [transactions])
 
-  if (total === 0 || breakdown.length === 0) return null
+  if (total === 0 && incomeTotal === 0) return null
 
   const activeSeg = breakdown.find((s) => s.id === active)
 
@@ -66,86 +69,99 @@ export default function CategoryBreakdownBar({ transactions }: Props) {
           className="text-[11px] font-bold uppercase tracking-[0.12em]"
           style={{ color: '#00352e' }}
         >
-          Expense Breakdown
+          {total > 0 && incomeTotal > 0 ? 'Breakdown' : total > 0 ? 'Expenses' : 'Income'}
         </span>
-        <span className="font-mono text-sm font-bold" style={{ color: '#ba1a1a' }}>
-          −{formatCurrencyCompact(total)}
-        </span>
-      </div>
-
-      {/* Stacked bar — overflow-visible so segments can scale out */}
-      <div
-        className="relative flex w-full gap-px"
-        style={{ height: '12px', overflow: 'visible' }}
-      >
-        {breakdown.map((seg, i) => {
-          const isFirst = i === 0
-          const isLast = i === breakdown.length - 1
-          const isActive = active === seg.id
-          return (
-            <motion.div
-              key={seg.id}
-              className="h-full shrink-0 cursor-pointer"
-              style={{
-                backgroundColor: seg.color,
-                width: `${seg.pct}%`,
-                transformOrigin: 'center',
-                borderRadius: isFirst
-                  ? '9999px 4px 4px 9999px'
-                  : isLast
-                  ? '4px 9999px 9999px 4px'
-                  : '4px',
-              }}
-              animate={{ scaleY: isActive ? 1.7 : 1, opacity: active && !isActive ? 0.45 : 1 }}
-              transition={{ type: 'spring', stiffness: 420, damping: 26 }}
-              onPointerEnter={() => setActive(seg.id)}
-              onPointerLeave={() => setActive(null)}
-              onTap={() => setActive((prev) => (prev === seg.id ? null : seg.id))}
-            />
-          )
-        })}
-      </div>
-
-      {/* Tooltip / hint */}
-      <div className="mt-3" style={{ minHeight: '22px' }}>
-        <AnimatePresence mode="wait">
-          {activeSeg ? (
-            <motion.div
-              key={activeSeg.id}
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-              className="flex items-center gap-1.5"
-            >
-              <div
-                className="h-2 w-2 shrink-0 rounded-full"
-                style={{ backgroundColor: activeSeg.color }}
-              />
-              <span className="text-[12px] font-semibold" style={{ color: '#191c1c' }}>
-                {activeSeg.label}
-              </span>
-              <span className="font-mono text-[12px] font-bold" style={{ color: activeSeg.color }}>
-                −{formatCurrencyCompact(activeSeg.amount)}
-              </span>
-              <span className="text-[11px] font-medium" style={{ color: '#6e9990' }}>
-                {activeSeg.pct.toFixed(0)}%
-              </span>
-            </motion.div>
-          ) : (
-            <motion.p
-              key="hint"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="text-[11px]"
-              style={{ color: '#cde0db' }}
-            >
-              Tap a segment to see details
-            </motion.p>
+        <div className="flex items-baseline gap-2">
+          {incomeTotal > 0 && (
+            <span className="font-mono text-sm font-bold" style={{ color: '#1f6950' }}>
+              +{formatCurrencyCompact(incomeTotal)}
+            </span>
           )}
-        </AnimatePresence>
+          {total > 0 && (
+            <span className="font-mono text-sm font-bold" style={{ color: '#ba1a1a' }}>
+              −{formatCurrencyCompact(total)}
+            </span>
+          )}
+        </div>
       </div>
+
+      {/* Stacked bar + tooltip — only when there are expenses */}
+      {total > 0 && (
+        <>
+          <div
+            className="relative flex w-full gap-px"
+            style={{ height: '12px', overflow: 'visible' }}
+          >
+            {breakdown.map((seg, i) => {
+              const isFirst = i === 0
+              const isLast = i === breakdown.length - 1
+              const isActive = active === seg.id
+              return (
+                <motion.div
+                  key={seg.id}
+                  className="h-full shrink-0 cursor-pointer"
+                  style={{
+                    backgroundColor: seg.color,
+                    width: `${seg.pct}%`,
+                    transformOrigin: 'center',
+                    borderRadius: isFirst
+                      ? '9999px 4px 4px 9999px'
+                      : isLast
+                      ? '4px 9999px 9999px 4px'
+                      : '4px',
+                  }}
+                  animate={{ scaleY: isActive ? 1.7 : 1, opacity: active && !isActive ? 0.45 : 1 }}
+                  transition={{ type: 'spring', stiffness: 420, damping: 26 }}
+                  onPointerEnter={() => setActive(seg.id)}
+                  onPointerLeave={() => setActive(null)}
+                  onTap={() => setActive((prev) => (prev === seg.id ? null : seg.id))}
+                />
+              )
+            })}
+          </div>
+
+          {/* Tooltip / hint */}
+          <div className="mt-3" style={{ minHeight: '22px' }}>
+            <AnimatePresence mode="wait">
+              {activeSeg ? (
+                <motion.div
+                  key={activeSeg.id}
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+                  className="flex items-center gap-1.5"
+                >
+                  <div
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: activeSeg.color }}
+                  />
+                  <span className="text-[12px] font-semibold" style={{ color: '#191c1c' }}>
+                    {activeSeg.label}
+                  </span>
+                  <span className="font-mono text-[12px] font-bold" style={{ color: activeSeg.color }}>
+                    −{formatCurrencyCompact(activeSeg.amount)}
+                  </span>
+                  <span className="text-[11px] font-medium" style={{ color: '#6e9990' }}>
+                    {activeSeg.pct.toFixed(0)}%
+                  </span>
+                </motion.div>
+              ) : (
+                <motion.p
+                  key="hint"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="text-[11px]"
+                  style={{ color: '#cde0db' }}
+                >
+                  Tap a segment to see details
+                </motion.p>
+              )}
+            </AnimatePresence>
+          </div>
+        </>
+      )}
     </motion.div>
   )
 }

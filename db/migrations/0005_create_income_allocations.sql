@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS income_allocations (
   id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     UUID        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   name        TEXT        NOT NULL,
-  is_active   BOOLEAN     NOT NULL DEFAULT FALSE,
+  is_active   BOOLEAN     NOT NULL DEFA+ULT FALSE,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

@@ -26,6 +26,31 @@ import {
   createCustomCategory,
   deleteCustomCategory,
 } from '@/lib/db/customCategories'
+import { CATEGORIES } from '@/types'
+
+// ─── Income source id → human-readable label ─────────────────────────────────
+// Mirrors the INCOME_SOURCES list in OnboardingBudgetSetup (kept here so the
+// store can build Transaction records without importing component files).
+const INCOME_SOURCE_LABELS: Record<string, string> = {
+  salary:      'Salary',
+  freelance:   'Freelance',
+  business:    'Business Revenue',
+  inv_returns: 'Investment Returns',
+  rental:      'Rental Income',
+  bonds:       'Bonds & Interest',
+  remittance:  'Remittance',
+  pension:     'Pension / Benefits',
+  other_inc:   'Other Income',
+}
+
+// Returns a local-time ISO date string (YYYY-MM-DD) for the first day of the
+// current month — used as the date for auto-inserted income transactions.
+function currentMonthFirstDay(): string {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  return `${y}-${m}-01`
+}
 
 // ─── Default budget limits ────────────────────────────────────────────────────
 // Applied as fallback when no active allocation is loaded.
@@ -268,6 +293,7 @@ export const useStore = create<AppStore>()((set, get) => ({
     if (!userId) return
     const prev = get().incomeAllocations
     if (id) {
+      // ── Update existing — just persist the new amounts, no new transactions ──
       const optimistic = prev.map((a) => (a.id === id ? { ...a, name, items } : a))
       set({ incomeAllocations: optimistic })
       try {
@@ -277,10 +303,31 @@ export const useStore = create<AppStore>()((set, get) => ({
         set({ incomeAllocations: prev })
       }
     } else {
+      // ── Create new — persist allocation then auto-insert income transactions ─
       try {
         const created = await createIncomeAllocation(userId, name, items)
         const next = [created, ...prev.map((a) => ({ ...a, isActive: created.isActive ? false : a.isActive }))]
         set({ incomeAllocations: next })
+
+        // Insert one income transaction per source with amount > 0
+        const incomeCategory = CATEGORIES.find((c) => c.id === 'income')!
+        const dateStr = currentMonthFirstDay()
+        for (const item of items) {
+          if (item.amount <= 0) continue
+          const label = INCOME_SOURCE_LABELS[item.sourceId] ?? item.sourceId
+          const tx: Transaction = {
+            id: crypto.randomUUID(),
+            raw: `${label.toLowerCase()} ${item.amount}`,
+            amount: item.amount,
+            merchant: label,
+            category: incomeCategory,
+            date: dateStr,
+            type: 'income',
+            confidence: 1,
+            createdAt: new Date().toISOString(),
+          }
+          get().addTransaction(tx)
+        }
       } catch (err) {
         console.error('[store] createIncomeAllocation failed:', err)
       }

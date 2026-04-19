@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { headers } from 'next/headers'
 import BottomNav from './BottomNav'
+import SideNav from './SideNav'
 import UserBadge from './UserBadge'
 
 interface AppShellProps {
@@ -15,10 +16,12 @@ export default async function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="relative min-h-dvh bg-ledge-bg">
-      {/* User badge — fixed top-right, only on app routes */}
+      {!isAuthRoute && <SideNav />}
+
+      {/* User badge — fixed top-right, mobile only (sidebar handles desktop) */}
       {!isAuthRoute && (
         <div
-          className="pointer-events-none fixed left-0 right-0 top-0 z-50 flex items-center justify-end px-5"
+          className="pointer-events-none fixed left-0 right-0 top-0 z-50 flex items-center justify-end px-5 md:hidden"
           style={{ paddingTop: 'calc(env(safe-area-inset-top) + 14px)' }}
         >
           <div className="pointer-events-auto">
@@ -27,8 +30,10 @@ export default async function AppShell({ children }: AppShellProps) {
         </div>
       )}
 
-      {/* Page content — padded so nothing hides behind bottom nav */}
-      <main className="pb-24 pt-0">{children}</main>
+      {/* Page content — bottom nav offset on mobile, sidebar offset on md+ */}
+      <main className={!isAuthRoute ? 'pb-24 pt-0 md:pl-60 md:pb-0' : ''}>
+        {children}
+      </main>
 
       {!isAuthRoute && <BottomNav />}
     </div>

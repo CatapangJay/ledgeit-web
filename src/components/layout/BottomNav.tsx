@@ -33,7 +33,7 @@ export default function BottomNav() {
   return (
     <>
       <nav
-        className="fixed bottom-0 left-0 right-0 z-40"
+        className="fixed bottom-0 left-0 right-0 z-40 md:hidden"
         aria-label="Primary navigation"
       >
         <div

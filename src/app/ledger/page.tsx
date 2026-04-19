@@ -47,9 +47,9 @@ export default function LedgerPage() {
   const groups = groupByDate(filtered)
 
   return (
-    <div className="px-5 pb-4" style={{ background: '#f8faf9', minHeight: '100dvh' }}>
+    <div className="px-5 pb-4 md:px-8 md:max-w-3xl md:mx-auto lg:max-w-4xl lg:px-10" style={{ background: '#f8faf9', minHeight: '100dvh' }}>
       {/* Header */}
-      <div className="flex items-baseline gap-3 pb-4 pt-12">
+      <div className="flex items-baseline gap-3 pb-4 pt-12 md:pt-8">
         <h1 className="text-base font-bold tracking-tight" style={{ color: '#00352e' }}>
           Activity
         </h1>
@@ -64,7 +64,7 @@ export default function LedgerPage() {
       </div>
 
       {/* Category breakdown bar */}
-      <CategoryBreakdownBar transactions={transactions} />
+      <CategoryBreakdownBar transactions={filtered} />
 
       {/* Transaction list */}
       <AnimatePresence mode="wait">

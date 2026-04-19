@@ -42,7 +42,13 @@ export function parseDirection(text: string): 'expense' | 'income' {
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
 
 function toISODate(d: Date): string {
-  return d.toISOString().split('T')[0]
+  // Use LOCAL calendar date components — NOT d.toISOString() which is UTC.
+  // UTC offset can shift the date to a different day (or even month) for
+  // UTC+ users, causing transactions to fall outside the month filter.
+  const year  = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day   = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function getPastDayOfWeek(dayName: string, weeksAgo = 1): Date {

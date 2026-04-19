@@ -69,14 +69,34 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col justify-center px-6">
+    <div className="flex min-h-dvh flex-col justify-center md:flex-row md:items-stretch">
+      {/* Left brand panel — desktop only */}
+      <div
+        className="hidden md:flex md:w-1/2 md:flex-col md:justify-between md:px-14 md:py-12"
+        style={{ background: 'linear-gradient(145deg, #00352e 0%, #1f695d 100%)' }}
+      >
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-[0.22em]" style={{ color: 'rgba(255,255,255,0.5)' }}>
+            Finance
+          </p>
+          <span className="text-3xl font-bold tracking-tight text-white">LedgeIt</span>
+        </div>
+        <div>
+          <p className="max-w-xs font-mono text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.6)' }}>
+            A personal finance ledger built for clarity. Track income, manage budgets, and understand where your money goes.
+          </p>
+        </div>
+      </div>
+
+      {/* Right form panel */}
+      <div className="flex flex-col justify-center px-6 md:w-1/2 md:px-14 lg:px-20">
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ type: 'spring', stiffness: 280, damping: 24 }}
         className="w-full max-w-sm"
       >
-        <p className="mb-1 font-mono text-[11px] uppercase tracking-[0.2em] text-ledge-muted">
+        <p className="mb-1 font-mono text-[11px] uppercase tracking-[0.2em] text-ledge-muted md:hidden">
           LedgeIt
         </p>
 
@@ -216,6 +236,7 @@ export default function LoginPage() {
           )}
         </AnimatePresence>
       </motion.div>
+      </div>
     </div>
   )
 }

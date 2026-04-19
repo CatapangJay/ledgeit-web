@@ -114,9 +114,9 @@ export default function InsightsPage() {
   )
 
   return (
-    <div className="px-5 pb-4" style={{ background: '#f8faf9', minHeight: '100dvh' }}>
+    <div className="px-5 pb-4 md:px-8 lg:px-10" style={{ background: '#f8faf9', minHeight: '100dvh' }}>
       {/* Header */}
-      <div className="flex items-center justify-between pb-2 pt-12">
+      <div className="flex items-center justify-between pb-2 pt-12 md:pt-8">
         <h1 className="text-base font-bold tracking-tight" style={{ color: '#00352e' }}>
           Your Financial Breath
         </h1>
@@ -165,45 +165,54 @@ export default function InsightsPage() {
         </span>
       </motion.button>
 
-      {/* Metric strip */}
-      <div className="mt-4">
-        <MetricStrip metrics={metrics} />
-      </div>
+      {/* ── Responsive content grid: stacked mobile, 2-col desktop ───────── */}
+      <div className="lg:grid lg:grid-cols-2 lg:gap-8 lg:items-start">
+        {/* Left col: metrics + donut */}
+        <div>
+          {/* Metric strip */}
+          <div className="mt-4">
+            <MetricStrip metrics={metrics} />
+          </div>
 
-      {/* Spend vs Saved donut */}
-      <div className="mt-4">
-        <SpendDonut spent={totalExpense} saved={Math.max(totalIncome - totalExpense, 0)} />
-      </div>
-
-      {/* Section label */}
-      <div className="py-4 mt-2">
-        <span className="text-[12px] font-bold uppercase tracking-[0.12em]" style={{ color: '#00352e' }}>
-          Budget Flow
-        </span>
-      </div>
-
-      {/* Budget bars */}
-      {budgetCategories.map((cat) => {
-        const limit = budgetLimits.find((b) => b.categoryId === cat.id)?.limit ?? 0
-        const spent = categorySpend[cat.id] ?? 0
-        if (limit === 0 && spent === 0) return null
-        return (
-          <BudgetBar
-            key={cat.id}
-            category={cat}
-            spent={spent}
-            limit={limit > 0 ? limit : spent * 1.5}
-          />
-        )
-      })}
-
-      {/* Empty state */}
-      {Object.keys(categorySpend).length === 0 && (
-        <div className="flex flex-col items-start gap-2 py-10">
-          <p className="text-sm font-medium" style={{ color: '#6e9990' }}>No spending data for this period.</p>
-          <p className="text-xs" style={{ color: '#cde0db' }}>Add transactions to see your patterns.</p>
+          {/* Spend vs Saved donut */}
+          <div className="mt-4">
+            <SpendDonut spent={totalExpense} saved={Math.max(totalIncome - totalExpense, 0)} />
+          </div>
         </div>
-      )}
+
+        {/* Right col: budget breakdown */}
+        <div>
+          {/* Section label */}
+          <div className="py-4 mt-2">
+            <span className="text-[12px] font-bold uppercase tracking-[0.12em]" style={{ color: '#00352e' }}>
+              Budget Flow
+            </span>
+          </div>
+
+          {/* Budget bars */}
+          {budgetCategories.map((cat) => {
+            const limit = budgetLimits.find((b) => b.categoryId === cat.id)?.limit ?? 0
+            const spent = categorySpend[cat.id] ?? 0
+            if (limit === 0 && spent === 0) return null
+            return (
+              <BudgetBar
+                key={cat.id}
+                category={cat}
+                spent={spent}
+                limit={limit > 0 ? limit : spent * 1.5}
+              />
+            )
+          })}
+
+          {/* Empty state */}
+          {Object.keys(categorySpend).length === 0 && (
+            <div className="flex flex-col items-start gap-2 py-10">
+              <p className="text-sm font-medium" style={{ color: '#6e9990' }}>No spending data for this period.</p>
+              <p className="text-xs" style={{ color: '#cde0db' }}>Add transactions to see your patterns.</p>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Budget allocation sheet */}
       <BudgetAllocationSheet

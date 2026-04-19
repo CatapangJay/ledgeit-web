@@ -9,6 +9,7 @@ import SpendStrip from '@/components/dashboard/SpendStrip'
 import MonthBurnRate from '@/components/dashboard/MonthBurnRate'
 import TopCategoryBars from '@/components/dashboard/TopCategoryBars'
 import RecentFeed from '@/components/dashboard/RecentFeed'
+import IncomePanel from '@/components/dashboard/IncomePanel'
 import SmartEntrySheet from '@/components/entry/SmartEntrySheet'
 
 const stagger = {
@@ -33,9 +34,9 @@ export default function DashboardPage() {
 
   return (
     <>
-      <div className="min-h-dvh pb-36" style={{ background: '#f8faf9' }}>
+      <div className="min-h-dvh pb-36 md:pb-10" style={{ background: '#f8faf9' }}>
         {/* ── Header ──────────────────────────────────────────────────────── */}
-        <div className="flex items-center justify-between px-5 pt-14 pb-2">
+        <div className="flex items-center justify-between px-5 pt-14 pb-2 md:px-8 md:pt-8 lg:px-10">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: '#6e9990' }}>
               {greeting()}
@@ -47,18 +48,18 @@ export default function DashboardPage() {
           <button
             aria-label="Account"
             onClick={() => router.push('/account')}
-            className="flex h-9 w-9 items-center justify-center rounded-full transition-colors"
+            className="flex h-9 w-9 items-center justify-center rounded-full transition-colors md:hidden"
             style={{ background: '#e7edeb' }}
           >
             <UserCircle size={20} weight="fill" color="#1f695d" aria-hidden="true" />
           </button>
         </div>
 
-        <motion.div variants={stagger} initial="hidden" animate="show" className="mt-2 space-y-3 px-5">
-          {/* ── Hero: monthly snapshot ───────────────────────────────────── */}
+        <motion.div variants={stagger} initial="hidden" animate="show" className="mt-2 space-y-3 px-5 md:px-8 lg:px-10 lg:grid lg:grid-cols-[1fr_340px] lg:gap-5 lg:items-start lg:space-y-0">
+          {/* ── Hero: monthly snapshot ── left col desktop ───────────────── */}
           <motion.div
             variants={fadeUp}
-            className="rounded-3xl p-6"
+            className="rounded-3xl p-6 lg:col-start-1 lg:row-start-1"
             style={{
               background: 'linear-gradient(145deg, #00352e 0%, #1f695d 100%)',
               boxShadow: '0 16px 48px rgba(0,53,46,0.22)',
@@ -79,23 +80,28 @@ export default function DashboardPage() {
             </motion.button>
           </motion.div>
 
-          {/* ── Today's activity ─────────────────────────────────────────── */}
-          <motion.div variants={fadeUp}>
+          {/* ── Today's activity ── right col desktop row 1 ─────────────── */}
+          <motion.div variants={fadeUp} className="lg:col-start-2 lg:row-start-1">
             <SpendStrip />
           </motion.div>
 
-          {/* ── Budget burn rate ──────────────────────────────────────────── */}
-          <motion.div variants={fadeUp}>
+          {/* ── Income ── right col desktop row 2 ───────────────────────── */}
+          <motion.div variants={fadeUp} className="lg:col-start-2 lg:row-start-2">
+            <IncomePanel />
+          </motion.div>
+
+          {/* ── Budget burn rate ── right col desktop row 3 ──────────────────── */}
+          <motion.div variants={fadeUp} className="lg:col-start-2 lg:row-start-3">
             <MonthBurnRate />
           </motion.div>
 
-          {/* ── Top categories ────────────────────────────────────────────── */}
-          <motion.div variants={fadeUp}>
+          {/* ── Top categories ── right col desktop row 4 ────────────────────── */}
+          <motion.div variants={fadeUp} className="lg:col-start-2 lg:row-start-4">
             <TopCategoryBars />
           </motion.div>
 
-          {/* ── Recent activity feed ──────────────────────────────────────── */}
-          <motion.div variants={fadeUp}>
+          {/* ── Recent activity feed ── left col desktop rows 2-5 ─────────── */}
+          <motion.div variants={fadeUp} className="lg:col-start-1 lg:row-start-2 lg:row-span-4">
             <div
               className="rounded-2xl overflow-hidden px-5 pt-4 pb-2"
               style={{

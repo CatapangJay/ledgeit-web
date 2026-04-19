@@ -102,7 +102,7 @@ export default function AccountPage() {
     : '?'
 
   return (
-    <div className="mx-auto max-w-md px-5 pt-16 pb-10">
+    <div className="mx-auto max-w-md px-5 pt-16 pb-10 md:pt-10 md:max-w-lg">
       {/* Avatar + email */}
       <motion.div
         initial={{ opacity: 0, y: 14 }}
