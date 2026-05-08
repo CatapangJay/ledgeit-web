@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans, Geist_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import AppShell from "@/components/layout/AppShell";
 import StoreBootstrap from "@/components/layout/StoreBootstrap";
 import "./globals.css";
@@ -50,6 +51,7 @@ export default function RootLayout({
       <body className="min-h-[100dvh] bg-ledge-bg text-ledge-data antialiased">
         <StoreBootstrap />
         <AppShell>{children}</AppShell>
+        <Analytics />
       </body>
     </html>
   );
