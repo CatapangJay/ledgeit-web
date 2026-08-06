@@ -1,17 +1,19 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { SignOut, PencilSimple, Check, X, Lock, User } from '@phosphor-icons/react'
+import { SignOut, PencilSimple, Check, X, Lock, User, SlidersHorizontal, CaretRight } from '@phosphor-icons/react'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
+import { useStore } from '@/lib/store'
+import BudgetAllocationSheet from '@/components/budget/BudgetAllocationSheet'
 
 type Section = 'profile' | 'password'
 
 export default function AccountPage() {
   const router = useRouter()
-  const supabase = useRef(createClient()).current
+  const supabase = useMemo(() => createClient(), [])
 
   const [user, setUser] = useState<SupabaseUser | null>(null)
 
@@ -29,6 +31,10 @@ export default function AccountPage() {
   const [passwordMsg, setPasswordMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
   const [activeSection, setActiveSection] = useState<Section>('profile')
+  const [budgetSheetOpen, setBudgetSheetOpen] = useState(false)
+
+  const budgetAllocations = useStore((s) => s.budgetAllocations)
+  const activePlan = budgetAllocations.find((a) => a.isActive) ?? null
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -219,6 +225,28 @@ export default function AccountPage() {
               </AnimatePresence>
             </div>
 
+            {/* Budget plans */}
+            <button
+              onClick={() => setBudgetSheetOpen(true)}
+              aria-label="Manage budget plans"
+              className="flex items-center gap-3 rounded-xl border border-ledge-border bg-ledge-surface p-4 text-left transition-colors hover:bg-ledge-surface2 active:scale-[0.99]"
+              style={{ boxShadow: '0 2px 12px rgba(0,53,46,0.04)' }}
+            >
+              <div
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+                style={{ background: '#e7edeb' }}
+              >
+                <SlidersHorizontal size={16} weight="bold" color="#1f695d" aria-hidden="true" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-ledge-data">Budget Plans</p>
+                <p className="truncate text-[11px] text-ledge-muted">
+                  {activePlan ? `Active: ${activePlan.name}` : 'Create or switch plans'}
+                </p>
+              </div>
+              <CaretRight size={15} weight="bold" color="#6e9990" aria-hidden="true" />
+            </button>
+
             {/* Account metadata */}
             <div
               className="rounded-xl border border-ledge-border bg-ledge-surface p-4"
@@ -331,6 +359,8 @@ export default function AccountPage() {
           </motion.form>
         )}
       </AnimatePresence>
+
+      <BudgetAllocationSheet open={budgetSheetOpen} onClose={() => setBudgetSheetOpen(false)} />
     </div>
   )
 }

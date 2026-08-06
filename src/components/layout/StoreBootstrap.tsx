@@ -1,13 +1,11 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useStore } from '@/lib/store'
-import OnboardingBudgetSetup from '@/components/budget/OnboardingBudgetSetup'
-
 /**
  * Bootstraps the Zustand store on the client after auth is confirmed.
- * Also renders the first-time budget setup onboarding overlay.
+ * Renders nothing — onboarding is handled per-page (see dashboard/page.tsx).
  */
 export default function StoreBootstrap() {
   const setUserId = useStore((s) => s.setUserId)
@@ -15,7 +13,7 @@ export default function StoreBootstrap() {
   const loadBudgetAllocations = useStore((s) => s.loadBudgetAllocations)
   const loadIncomeAllocations = useStore((s) => s.loadIncomeAllocations)
   const loadCustomCategories = useStore((s) => s.loadCustomCategories)
-  const supabase = useRef(createClient()).current
+  const supabase = useMemo(() => createClient(), [])
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -34,5 +32,5 @@ export default function StoreBootstrap() {
     return () => subscription.unsubscribe()
   }, [supabase, setUserId, loadTransactions, loadBudgetAllocations, loadIncomeAllocations, loadCustomCategories])
 
-  return <OnboardingBudgetSetup />
+  return null
 }

@@ -8,6 +8,7 @@ import { parseTransaction } from '@/lib/parser'
 import { categorize, getMerchantKey } from '@/lib/categorizer'
 import { getMerchantSuggestions, resolveMerchant } from '@/lib/fuzzy'
 import { useStore } from '@/lib/store'
+import { useIsDesktop } from '@/lib/useIsDesktop'
 import ParsePreview from './ParsePreview'
 import BulkEntryMode from './BulkEntryMode'
 import type { MerchantSuggestion } from '@/lib/fuzzy'
@@ -58,14 +59,7 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
   const customCategories = useStore((s) => s.customCategories)
 
   // ── Desktop vs mobile detection ─────────────────────────────────────────
-  const [isDesktop, setIsDesktop] = useState(false)
-  useEffect(() => {
-    const mq = window.matchMedia('(min-width: 768px)')
-    setIsDesktop(mq.matches)
-    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches)
-    mq.addEventListener('change', handler)
-    return () => mq.removeEventListener('change', handler)
-  }, [])
+  const isDesktop = useIsDesktop()
 
   // ── Drag / snap state ────────────────────────────────────────────────────
   const [sheetVisible, setSheetVisible] = useState(false)

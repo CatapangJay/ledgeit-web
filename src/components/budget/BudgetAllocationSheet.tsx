@@ -12,6 +12,7 @@ import {
 } from '@phosphor-icons/react'
 import { useStore } from '@/lib/store'
 import { DEFAULT_BUDGETS } from '@/lib/store'
+import { useIsDesktop } from '@/lib/useIsDesktop'
 import { CATEGORIES } from '@/types'
 import type { BudgetAllocationItem, CustomCategory } from '@/types'
 import { formatCurrency } from '@/lib/formatters'
@@ -84,6 +85,7 @@ const viewVariants = {
 
 export default function BudgetAllocationSheet({ open, onClose }: Props) {
   const labelId = useId()
+  const isDesktop = useIsDesktop()
 
   const allocations = useStore((s) => s.budgetAllocations)
   const saveBudgetAllocation = useStore((s) => s.saveBudgetAllocation)
@@ -249,46 +251,9 @@ export default function BudgetAllocationSheet({ open, onClose }: Props) {
 
   const canDelete = allocations.length > 1
 
-  return (
-    <AnimatePresence>
-      {open && (
-        <>
-          {/* Backdrop */}
-          <motion.div
-            className="fixed inset-0 z-50"
-            style={{ background: 'rgba(0,53,46,0.18)', backdropFilter: 'blur(4px)' }}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.22 }}
-            onClick={onClose}
-            aria-hidden="true"
-          />
-
-          {/* Sheet */}
-          <motion.div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={labelId}
-            className="fixed bottom-0 left-0 right-0 z-50 flex flex-col overflow-hidden"
-            style={{
-              background: '#f8faf9',
-              borderRadius: '20px 20px 0 0',
-              maxHeight: '92dvh',
-              boxShadow: '0 -12px 48px rgba(0,53,46,0.14)',
-            }}
-            variants={sheetVariants}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-          >
-            {/* Drag handle */}
-            <div className="flex justify-center pt-3 pb-1">
-              <div className="h-1 w-10 rounded-full" style={{ background: '#cde0db' }} />
-            </div>
-
-            <div className="flex-1 overflow-hidden">
+  // ── Shared inner content (list + editor), used by both variants ──────────
+  const body = (
+    <div className="flex flex-1 flex-col overflow-hidden">
               <AnimatePresence mode="wait" custom={direction}>
                 {view === 'list' ? (
                   <motion.div
@@ -719,6 +684,95 @@ export default function BudgetAllocationSheet({ open, onClose }: Props) {
                 )}
               </AnimatePresence>
             </div>
+  )
+
+  // ── DESKTOP: centered modal overlay ──────────────────────────────────────
+  if (isDesktop) {
+    return (
+      <AnimatePresence>
+        {open && (
+          <>
+            <motion.div
+              key="budget-modal-backdrop"
+              className="fixed inset-0 z-50 bg-black/40"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              onClick={onClose}
+              aria-hidden="true"
+            />
+            <motion.div
+              key="budget-modal-panel"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={labelId}
+              className="fixed left-1/2 top-1/2 z-50 flex w-full max-w-lg flex-col overflow-hidden"
+              style={{
+                borderRadius: '20px',
+                background: '#f8faf9',
+                boxShadow: '0 24px 80px rgba(0,53,46,0.18), 0 0 0 1px rgba(205,224,219,0.5)',
+                maxHeight: '85dvh',
+              }}
+              initial={{ opacity: 0, scale: 0.94, x: '-50%', y: '-46%' }}
+              animate={{ opacity: 1, scale: 1, x: '-50%', y: '-50%' }}
+              exit={{ opacity: 0, scale: 0.94, x: '-50%', y: '-46%' }}
+              transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+            >
+              {/* Thin accent top bar */}
+              <div
+                className="h-0.5 w-full shrink-0"
+                style={{ background: 'linear-gradient(90deg, #1f695d, #00352e)' }}
+              />
+              {body}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    )
+  }
+
+  // ── MOBILE: bottom sheet ──────────────────────────────────────────────────
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            className="fixed inset-0 z-50"
+            style={{ background: 'rgba(0,53,46,0.18)', backdropFilter: 'blur(4px)' }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.22 }}
+            onClick={onClose}
+            aria-hidden="true"
+          />
+
+          {/* Sheet */}
+          <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={labelId}
+            className="fixed bottom-0 left-0 right-0 z-50 flex flex-col overflow-hidden"
+            style={{
+              background: '#f8faf9',
+              borderRadius: '20px 20px 0 0',
+              maxHeight: '92dvh',
+              boxShadow: '0 -12px 48px rgba(0,53,46,0.14)',
+            }}
+            variants={sheetVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+          >
+            {/* Drag handle */}
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="h-1 w-10 rounded-full" style={{ background: '#cde0db' }} />
+            </div>
+
+            {body}
           </motion.div>
         </>
       )}

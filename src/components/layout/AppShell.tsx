@@ -11,16 +11,15 @@ interface AppShellProps {
 export default async function AppShell({ children }: AppShellProps) {
   const h = await headers()
   const pathname = h.get('x-pathname') ?? '/'
-  const isAuthRoute =
-    pathname.startsWith('/login') || pathname.startsWith('/auth')
+  const isAuthRoute      = pathname.startsWith('/login') || pathname.startsWith('/auth')
   const isMarketingRoute = pathname === '/'
 
   return (
     <div className="relative min-h-dvh bg-ledge-bg">
-      {!isAuthRoute && <SideNav />}
+      {!isAuthRoute && !isMarketingRoute && <SideNav />}
 
       {/* User badge — fixed top-right, mobile only (sidebar handles desktop) */}
-      {!isAuthRoute && (
+      {!isAuthRoute && !isMarketingRoute && (
         <div
           className="pointer-events-none fixed left-0 right-0 top-0 z-50 flex items-center justify-end px-5 md:hidden"
           style={{ paddingTop: 'calc(env(safe-area-inset-top) + 14px)' }}
@@ -31,8 +30,8 @@ export default async function AppShell({ children }: AppShellProps) {
         </div>
       )}
 
-      {/* Page content — bottom nav offset on mobile, sidebar offset on md+ */}
-      <main className={!isAuthRoute ? 'pb-24 pt-0 md:pl-60 md:pb-0' : ''}>
+      {/* Page content — bottom nav offset on mobile, sidebar offset on md+ (app routes only) */}
+      <main className={!isAuthRoute && !isMarketingRoute ? 'pb-24 pt-0 md:pl-60 md:pb-0' : ''}>
         {children}
       </main>
 

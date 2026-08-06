@@ -86,7 +86,7 @@ function levenshtein(a: string, b: string): number {
   const m = a.length
   const n = b.length
   // Use two rolling rows to save memory
-  let prev = Array.from({ length: n + 1 }, (_, i) => i)
+  const prev = Array.from({ length: n + 1 }, (_, i) => i)
   const curr: number[] = new Array(n + 1)
   for (let i = 1; i <= m; i++) {
     curr[0] = i

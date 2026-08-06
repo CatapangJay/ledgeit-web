@@ -6,6 +6,9 @@ import { CaretLeft, CaretRight, Sliders } from '@phosphor-icons/react'
 import MetricStrip from '@/components/insights/MetricStrip'
 import BudgetBar from '@/components/insights/BudgetBar'
 import SpendDonut from '@/components/insights/SpendDonut'
+import WeeklyTrendChart from '@/components/dashboard/WeeklyTrendChart'
+import RecurringPaymentsCard from '@/components/dashboard/RecurringPaymentsCard'
+import BiggestExpenseCard from '@/components/dashboard/BiggestExpenseCard'
 import BudgetAllocationSheet from '@/components/budget/BudgetAllocationSheet'
 import { useStore } from '@/lib/store'
 import { formatCurrency, formatMonthLabel } from '@/lib/formatters'
@@ -212,6 +215,16 @@ export default function InsightsPage() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* ── Spending patterns ─────────────────────────────────────────────── */}
+      <div className="mt-8">
+        <WeeklyTrendChart />
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <RecurringPaymentsCard />
+        <BiggestExpenseCard />
       </div>
 
       {/* Budget allocation sheet */}

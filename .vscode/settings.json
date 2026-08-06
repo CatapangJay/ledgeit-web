@@ -3,6 +3,7 @@
         "New-Item": true,
         "Out-Null": true,
         "npx tsc": true,
-        "npx next": true
+        "npx next": true,
+        "ForEach-Object": true
     }
 }

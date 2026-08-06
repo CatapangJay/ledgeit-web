@@ -1,7 +1,7 @@
 'use client'
 
 import { useStore } from '@/lib/store'
-import { formatCurrencyCompact } from '@/lib/formatters'
+import { formatCurrency } from '@/lib/formatters'
 import { CATEGORIES } from '@/types'
 
 const CATEGORY_HEX: Record<string, string> = {
@@ -14,19 +14,6 @@ const CATEGORY_HEX: Record<string, string> = {
   health:        '#e91e63',
   income:        '#1f6950',
   other:         '#6e9990',
-}
-
-// Subtle pastel backgrounds per category for the legend pills
-const CATEGORY_BG: Record<string, string> = {
-  restaurants:   'rgba(224,92,42,0.1)',
-  groceries:     'rgba(40,164,106,0.1)',
-  transport:     'rgba(2,132,199,0.1)',
-  shopping:      'rgba(124,58,237,0.1)',
-  utilities:     'rgba(217,119,6,0.1)',
-  entertainment: 'rgba(219,39,119,0.1)',
-  health:        'rgba(233,30,99,0.1)',
-  income:        'rgba(31,105,80,0.1)',
-  other:         'rgba(110,153,144,0.1)',
 }
 
 export default function SpendStrip() {

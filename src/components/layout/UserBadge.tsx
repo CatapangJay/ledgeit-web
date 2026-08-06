@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { SignOut } from '@phosphor-icons/react'
 import { createClient } from '@/lib/supabase/client'
@@ -8,7 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 export default function UserBadge() {
   const [email, setEmail] = useState<string | null>(null)
   const router = useRouter()
-  const supabase = useRef(createClient()).current
+  const supabase = useMemo(() => createClient(), [])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {

@@ -13,7 +13,7 @@ import { useState } from 'react'
 import SmartEntrySheet from '@/components/entry/SmartEntrySheet'
 
 const NAV_ITEMS = [
-  { label: 'Dashboard', icon: House, href: '/' },
+  { label: 'Dashboard', icon: House, href: '/dashboard' },
   { label: 'Ledger', icon: List, href: '/ledger' },
   { label: 'Insights', icon: ChartPieSlice, href: '/insights' },
   { label: 'Account', icon: UserCircle, href: '/account' },

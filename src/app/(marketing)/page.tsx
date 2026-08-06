@@ -5,11 +5,11 @@ import Link from 'next/link'
 import { motion, useInView, useMotionValue, useSpring, AnimatePresence } from 'framer-motion'
 import {
   Lightning,
-  ChatText,
-  Users,
   ArrowRight,
   CheckCircle,
   Sparkle,
+  ChatText,
+  Users,
 } from '@phosphor-icons/react'
 
 // ─── Demo sequence ────────────────────────────────────────────────────────────
@@ -34,6 +34,7 @@ function EntryDemo() {
   const charRef    = useRef(0)
   const entry = DEMO_SEQUENCE[seqIndex]
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { charRef.current = 0; setDisplay(''); setPhase('typing') }, [seqIndex])
 
   useEffect(() => {
@@ -52,7 +53,7 @@ function EntryDemo() {
       timeoutRef.current = setTimeout(() => setSeqIndex(i => (i + 1) % DEMO_SEQUENCE.length), 200)
     }
     return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current) }
-  }, [phase, displayText, entry.input.length])
+  }, [phase, displayText, entry.input])
 
   const isIncome = entry.type === 'income'
 
@@ -62,7 +63,6 @@ function EntryDemo() {
       style={{ background: '#ffffff', boxShadow: '0 40px 100px rgba(0,40,32,0.30), 0 8px 32px rgba(0,53,46,0.15)' }}
       aria-hidden="true"
     >
-      {/* Phone chrome */}
       <div className="flex items-center justify-between px-5 py-3" style={{ background: '#f8faf9', borderBottom: '1px solid #e7edeb' }}>
         <span className="font-mono text-[11px] font-bold" style={{ color: '#00352e' }}>LedgeIt</span>
         <div className="flex items-center gap-1">
@@ -131,17 +131,77 @@ function EntryDemo() {
   )
 }
 
+// ─── Correction demo (for NLP feature block) ──────────────────────────────────
+
+const CORRECTIONS = [
+  { original: 'mcdo',     corrected: "McDonald's", catColor: '#e05c2a' },
+  { original: 'meralco',  corrected: 'Meralco',    catColor: '#d97706' },
+  { original: 'grab',     corrected: 'Grab',       catColor: '#0284c7' },
+  { original: 'jollibee', corrected: 'Jollibee',   catColor: '#e05c2a' },
+]
+
+function SmartCorrectDemo() {
+  const [idx, setIdx] = useState(0)
+  const [phase, setPhase] = useState<'showing' | 'fading'>('showing')
+  const item = CORRECTIONS[idx]
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setPhase('fading'), 1800)
+    const t2 = setTimeout(() => {
+      setIdx(i => (i + 1) % CORRECTIONS.length)
+      setPhase('showing')
+    }, 2200)
+    return () => { clearTimeout(t1); clearTimeout(t2) }
+  }, [idx])
+
+  return (
+    <div className="flex flex-col gap-3" aria-hidden="true">
+      <div className="flex items-center gap-2">
+        <div className="rounded-full px-3 py-1.5 text-sm font-light" style={{ background: '#f0f4f2', color: '#6e9990' }}>
+          {item.original} 320
+        </div>
+        <svg width="16" height="10" viewBox="0 0 16 10" fill="none" className="shrink-0 opacity-40">
+          <path d="M1 5h14M10 1l5 4-5 4" stroke="#1f695d" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={idx}
+            initial={{ opacity: 0, x: 6 }}
+            animate={{ opacity: phase === 'fading' ? 0 : 1, x: 0 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+            className="flex items-center gap-1.5 rounded-full px-3 py-1.5"
+            style={{ background: `${item.catColor}18`, border: `1px solid ${item.catColor}30` }}
+          >
+            <div className="h-1.5 w-1.5 rounded-full" style={{ background: item.catColor }} />
+            <span className="text-[12px] font-semibold" style={{ color: item.catColor }}>{item.corrected}</span>
+          </motion.div>
+        </AnimatePresence>
+      </div>
+      <p className="text-[11px]" style={{ color: '#6e9990' }}>Recognised from your history — no typing needed next time.</p>
+    </div>
+  )
+}
+
+// ─── Household feed mini ──────────────────────────────────────────────────────
+
+const FEED_MINI = [
+  { merchant: 'SM Supermarket', amount: '−₱2,340', who: 'Ana',   catColor: '#28a46a' },
+  { merchant: 'Grab',           amount: '−₱65',    who: 'Marco', catColor: '#0284c7' },
+  { merchant: 'Netflix',        amount: '−₱649',   who: 'Ana',   catColor: '#db2777' },
+  { merchant: 'Salary',         amount: '+₱40,000',who: 'Marco', catColor: '#1f6950' },
+]
+
 // ─── Count-up ─────────────────────────────────────────────────────────────────
 
 function CountUp({ target, suffix = '', className, style }: { target: number; suffix?: string; className?: string; style?: React.CSSProperties }) {
-  const ref      = useRef<HTMLSpanElement>(null)
-  const inView   = useInView(ref, { once: true, margin: '-60px' })
+  const ref       = useRef<HTMLSpanElement>(null)
+  const inView    = useInView(ref, { once: true, margin: '-60px' })
   const motionVal = useMotionValue(0)
-  const spring   = useSpring(motionVal, { stiffness: 60, damping: 20 })
+  const spring    = useSpring(motionVal, { stiffness: 60, damping: 20 })
   const [display, setDisplay] = useState(0)
 
   useEffect(() => { if (inView) motionVal.set(target) }, [inView, motionVal, target])
-  useEffect(() => { return spring.on('change', v => setDisplay(Math.round(v))) }, [spring])
+  useEffect(() => spring.on('change', v => setDisplay(Math.round(v))), [spring])
 
   return <span ref={ref} className={className} style={style}>{display}{suffix}</span>
 }
@@ -166,7 +226,7 @@ function Reveal({ children, delay = 0, className }: { children: React.ReactNode;
   )
 }
 
-// ─── Household feed items ─────────────────────────────────────────────────────
+// ─── Household feed items (full) ──────────────────────────────────────────────
 
 const FEED_ITEMS = [
   { merchant: 'SM Supermarket', category: 'Groceries',     amount: '−₱2,340', who: 'Ana',   catColor: '#28a46a', catBg: 'rgba(40,164,106,0.12)'  },
@@ -241,6 +301,14 @@ export default function LandingPage() {
           paddingBottom: '80px',
         }}
       >
+        {/* Grain overlay */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E")`,
+            opacity: 0.35,
+          }}
+        />
         {/* Refraction edge */}
         <div
           className="pointer-events-none absolute inset-x-0 top-0 h-px"
@@ -255,7 +323,7 @@ export default function LandingPage() {
         <div className="relative z-10 mx-auto max-w-6xl px-6 lg:px-8">
           <div className="flex flex-col gap-12 lg:flex-row lg:items-center lg:gap-16">
 
-            {/* ── Left: copy ── */}
+            {/* Left: copy */}
             <div className="flex flex-col lg:flex-1 lg:max-w-xl">
               <motion.div
                 initial={{ opacity: 0, y: 12 }}
@@ -313,7 +381,6 @@ export default function LandingPage() {
                 </Link>
               </motion.div>
 
-              {/* Trust line */}
               <motion.p
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -325,7 +392,7 @@ export default function LandingPage() {
               </motion.p>
             </div>
 
-            {/* ── Right: demo widget ── */}
+            {/* Right: demo widget */}
             <motion.div
               initial={{ opacity: 0, y: 32, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -367,22 +434,21 @@ export default function LandingPage() {
       {/* ── HOW IT WORKS ─────────────────────────────────────────────────────── */}
       <section className="px-6 py-20 lg:px-8" style={{ background: '#ffffff' }}>
         <div className="mx-auto max-w-6xl">
-          <Reveal className="mb-14 text-center">
+          <Reveal className="mb-16 text-center">
             <h2
               className="text-[clamp(1.6rem,4vw,2.4rem)] font-bold leading-tight tracking-tight"
               style={{ color: '#00352e', textWrap: 'balance' } as React.CSSProperties}
             >
               Three steps. Under five seconds.
             </h2>
-            <p className="mt-2 text-sm" style={{ color: '#6e9990' }}>This is all it takes.</p>
           </Reveal>
 
-          <div className="grid gap-8 sm:grid-cols-3">
+          <div className="grid gap-0 sm:grid-cols-3">
             {[
               {
-                n: '1',
+                n: '01',
                 title: "Type it the way you'd say it",
-                body: '"grab 85 morning commute" or "bought meds 320" — Filipino, English, or mixed. Whatever comes naturally.',
+                body: '"grab 85 morning commute" or "bought meds 320" — Filipino, English, or mixed.',
                 visual: (
                   <div className="rounded-2xl px-5 py-4" style={{ background: '#f0f4f2', border: '1px solid #e7edeb' }}>
                     <p className="text-base font-light" style={{ color: '#191c1c' }}>
@@ -398,9 +464,9 @@ export default function LandingPage() {
                 ),
               },
               {
-                n: '2',
+                n: '02',
                 title: 'It parses instantly',
-                body: 'Amount, merchant, category — recognised in under a second. No dropdowns to navigate, no field to fill.',
+                body: 'Amount, merchant, category — recognised in under a second. No dropdowns.',
                 visual: (
                   <div className="rounded-2xl p-4" style={{ background: '#ffffff', boxShadow: '0 2px 16px rgba(0,53,46,0.06)', border: '1px solid #e7edeb' }}>
                     <div className="flex items-center justify-between mb-2">
@@ -418,9 +484,9 @@ export default function LandingPage() {
                 ),
               },
               {
-                n: '3',
+                n: '03',
                 title: 'Logged. Done.',
-                body: 'One tap to confirm. The transaction is in your ledger before you put your phone down.',
+                body: 'One tap to confirm. In your ledger before you put your phone down.',
                 visual: (
                   <div className="flex items-center justify-center gap-2 rounded-2xl py-5" style={{ background: 'rgba(31,105,93,0.08)', border: '1px solid rgba(31,105,93,0.2)' }}>
                     <CheckCircle size={20} weight="fill" color="#1f6950" aria-hidden="true" />
@@ -429,19 +495,31 @@ export default function LandingPage() {
                 ),
               },
             ].map((step, i) => (
-              <Reveal key={step.n} delay={i * 0.08}>
-                <div className="flex flex-col gap-4">
+              <Reveal key={step.n} delay={i * 0.08} className="relative">
+                {/* Step connector line */}
+                {i < 2 && (
                   <div
-                    className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold"
-                    style={{ background: 'linear-gradient(135deg, #1f695d 0%, #00352e 100%)', color: '#ffffff' }}
-                  >
-                    {step.n}
+                    className="absolute top-6 right-0 hidden sm:block h-px w-1/2"
+                    style={{ background: 'linear-gradient(90deg, #cde0db, transparent)', transform: 'translateX(100%)' }}
+                    aria-hidden="true"
+                  />
+                )}
+                <div className="flex flex-col gap-5 px-2 sm:px-4 pb-8 sm:pb-0">
+                  {/* Ghost number + title */}
+                  <div className="relative">
+                    <span
+                      className="absolute -top-3 left-0 font-mono font-bold leading-none select-none pointer-events-none"
+                      style={{ fontSize: 'clamp(4rem,8vw,6rem)', color: 'rgba(0,53,46,0.06)', lineHeight: 1 }}
+                      aria-hidden="true"
+                    >
+                      {step.n}
+                    </span>
+                    <div className="relative pt-8">
+                      <h3 className="mb-2 text-[15px] font-bold leading-snug" style={{ color: '#191c1c' }}>{step.title}</h3>
+                      <p className="mb-4 text-sm leading-relaxed" style={{ color: '#6e9990' }}>{step.body}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="mb-2 text-base font-bold" style={{ color: '#191c1c' }}>{step.title}</h3>
-                    <p className="mb-4 text-sm leading-relaxed" style={{ color: '#6e9990' }}>{step.body}</p>
-                    {step.visual}
-                  </div>
+                  {step.visual}
                 </div>
               </Reveal>
             ))}
@@ -449,55 +527,127 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── FEATURES ─────────────────────────────────────────────────────────── */}
+      {/* ── FEATURES BENTO ───────────────────────────────────────────────────── */}
       <section className="px-6 py-20 lg:px-8" style={{ background: '#f8faf9' }}>
         <div className="mx-auto max-w-6xl">
-          <div className="grid gap-10 sm:grid-cols-3">
-            {[
-              {
-                Icon: Lightning,
-                title: 'Natural language parsing',
-                body: 'Type "mcdo 200 lunch with kids" and it understands amount, merchant, and category. Filipino phrases work natively.',
-              },
-              {
-                Icon: ChatText,
-                title: 'Gets smarter over time',
-                body: 'Correct a category once and it remembers. Regular merchants are recognised instantly from your history.',
-              },
-              {
-                Icon: Users,
-                title: 'Built for households',
-                body: 'Log from multiple people under one account. See who bought what, without anyone needing to explain.',
-              },
-            ].map(({ Icon, title, body }, i) => (
-              <Reveal key={title} delay={i * 0.07}>
+          <Reveal className="mb-12">
+            <h2
+              className="text-[clamp(1.6rem,4vw,2.4rem)] font-bold leading-tight tracking-tight"
+              style={{ color: '#00352e', textWrap: 'balance' } as React.CSSProperties}
+            >
+              Built for the way<br className="hidden sm:block" /> households actually spend.
+            </h2>
+          </Reveal>
+
+          {/* Asymmetric bento: large left + narrow right stack */}
+          <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+
+            {/* Large feature: NLP */}
+            <Reveal>
+              <div
+                className="flex flex-col justify-between rounded-3xl p-7 h-full min-h-[320px]"
+                style={{ background: '#ffffff', boxShadow: '0 2px 16px rgba(0,53,46,0.05)' }}
+              >
+                <div>
+                  <div
+                    className="mb-5 flex h-10 w-10 items-center justify-center rounded-xl"
+                    style={{ background: 'rgba(0,53,46,0.07)' }}
+                  >
+                    <Lightning size={20} weight="fill" color="#1f695d" aria-hidden="true" />
+                  </div>
+                  <h3 className="mb-2 text-[1.15rem] font-bold leading-snug" style={{ color: '#191c1c' }}>
+                    Speaks Filipino.<br />Understands context.
+                  </h3>
+                  <p className="mb-6 text-sm leading-relaxed max-w-sm" style={{ color: '#6e9990' }}>
+                    Type "mcdo 200 lunch with kids" or "bayad kuryente 1740". Filipino, English, or Taglish — it parses what you mean, not what you typed exactly.
+                  </p>
+                </div>
+                <SmartCorrectDemo />
+              </div>
+            </Reveal>
+
+            {/* Right column: two stacked smaller features */}
+            <div className="flex flex-col gap-4">
+              <Reveal delay={0.06}>
                 <div
-                  className="flex flex-col gap-4 rounded-2xl p-6"
+                  className="flex flex-col gap-4 rounded-3xl p-6"
                   style={{ background: '#ffffff', boxShadow: '0 2px 16px rgba(0,53,46,0.05)' }}
                 >
                   <div
                     className="flex h-10 w-10 items-center justify-center rounded-xl"
                     style={{ background: 'rgba(0,53,46,0.07)' }}
                   >
-                    <Icon size={20} weight="fill" color="#1f695d" aria-hidden="true" />
+                    <ChatText size={20} weight="fill" color="#1f695d" aria-hidden="true" />
                   </div>
                   <div>
-                    <h3 className="mb-1.5 text-base font-bold" style={{ color: '#191c1c' }}>{title}</h3>
-                    <p className="text-sm leading-relaxed" style={{ color: '#6e9990' }}>{body}</p>
+                    <h3 className="mb-1.5 text-[15px] font-bold" style={{ color: '#191c1c' }}>Gets smarter over time</h3>
+                    <p className="text-sm leading-relaxed" style={{ color: '#6e9990' }}>
+                      Fix a category once and it remembers. Frequent merchants are recognised instantly.
+                    </p>
+                  </div>
+                  {/* Mini history visual */}
+                  <div className="flex flex-col gap-1.5 pt-1">
+                    {FEED_MINI.slice(0, 3).map((row) => (
+                      <div key={row.merchant} className="flex items-center justify-between rounded-xl px-3 py-2" style={{ background: '#f8faf9' }}>
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 w-2 rounded-full" style={{ background: row.catColor }} />
+                          <span className="text-[12px] font-medium" style={{ color: '#3f4946' }}>{row.merchant}</span>
+                        </div>
+                        <span className="font-mono text-[12px] font-bold tabular-nums" style={{ color: row.amount.startsWith('+') ? '#1f6950' : '#ba1a1a' }}>{row.amount}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </Reveal>
-            ))}
+
+              <Reveal delay={0.1}>
+                <div
+                  className="flex flex-col gap-4 rounded-3xl p-6"
+                  style={{ background: '#00352e' }}
+                >
+                  <div
+                    className="flex h-10 w-10 items-center justify-center rounded-xl"
+                    style={{ background: 'rgba(255,255,255,0.10)' }}
+                  >
+                    <Users size={20} weight="fill" color="rgba(255,255,255,0.85)" aria-hidden="true" />
+                  </div>
+                  <div>
+                    <h3 className="mb-1.5 text-[15px] font-bold" style={{ color: '#ffffff' }}>Built for households</h3>
+                    <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.58)' }}>
+                      Log from multiple people. See who bought what — no group chat receipts, no arguments about the grocery run.
+                    </p>
+                  </div>
+                  {/* Avatar cluster */}
+                  <div className="flex items-center gap-2">
+                    {['A', 'M', 'J'].map((initial, i) => (
+                      <div
+                        key={initial}
+                        className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold"
+                        style={{
+                          background: ['rgba(31,105,93,0.5)', 'rgba(255,255,255,0.18)', 'rgba(31,105,93,0.3)'][i],
+                          color: '#ffffff',
+                          marginLeft: i > 0 ? '-6px' : 0,
+                          zIndex: 3 - i,
+                          position: 'relative',
+                        }}
+                      >
+                        {initial}
+                      </div>
+                    ))}
+                    <span className="ml-2 text-[12px]" style={{ color: 'rgba(255,255,255,0.45)' }}>3 members logging</span>
+                  </div>
+                </div>
+              </Reveal>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* ── HOUSEHOLD ────────────────────────────────────────────────────────── */}
+      {/* ── HOUSEHOLD FEED ───────────────────────────────────────────────────── */}
       <section className="px-6 py-20 lg:px-8" style={{ background: '#ffffff' }}>
         <div className="mx-auto max-w-6xl">
           <div className="flex flex-col gap-12 lg:flex-row lg:items-start lg:gap-16">
 
-            {/* Copy */}
             <Reveal className="lg:flex-1 lg:max-w-md lg:pt-4">
               <h2
                 className="mb-4 text-[clamp(1.6rem,4vw,2.4rem)] font-bold leading-tight tracking-tight"
@@ -518,7 +668,6 @@ export default function LandingPage() {
               </Link>
             </Reveal>
 
-            {/* Feed mockup */}
             <Reveal className="lg:flex-1" delay={0.08}>
               <div
                 className="rounded-2xl overflow-hidden"
@@ -567,7 +716,6 @@ export default function LandingPage() {
                   </div>
                 ))}
 
-                {/* Footer summary */}
                 <div
                   className="flex items-center justify-between px-5 py-3.5"
                   style={{ borderTop: '1px solid #f0f4f2', background: '#fcfefe' }}
@@ -583,27 +731,37 @@ export default function LandingPage() {
 
       {/* ── FINAL CTA ────────────────────────────────────────────────────────── */}
       <section
-        className="relative overflow-hidden px-6 py-28 text-center lg:px-8"
-        style={{ background: 'linear-gradient(160deg, #001e18 0%, #00352e 45%, #1a5f52 100%)' }}
+        className="relative overflow-hidden px-6 py-32 lg:px-8"
+        style={{ background: '#f8faf9' }}
       >
+        {/* Tonal block behind the text */}
         <div
-          className="pointer-events-none absolute inset-x-0 top-0 h-px"
-          style={{ background: 'linear-gradient(90deg, transparent 5%, rgba(255,255,255,0.18) 30%, rgba(255,255,255,0.35) 50%, rgba(255,255,255,0.18) 70%, transparent 95%)' }}
+          className="pointer-events-none absolute inset-x-6 inset-y-8 rounded-3xl lg:inset-x-8"
+          style={{ background: 'linear-gradient(150deg, #001e18 0%, #00352e 50%, #1a5f52 100%)' }}
+          aria-hidden="true"
         />
+        {/* Grain on the block */}
         <div
-          className="pointer-events-none absolute left-1/2 top-0 h-80 w-80 -translate-x-1/2 rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(31,105,93,0.45) 0%, transparent 70%)' }}
+          className="pointer-events-none absolute inset-x-6 inset-y-8 rounded-3xl lg:inset-x-8"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E")`,
+            opacity: 0.4,
+          }}
+          aria-hidden="true"
         />
 
-        <Reveal className="relative z-10 mx-auto flex max-w-lg flex-col items-center gap-6">
+        <Reveal className="relative z-10 mx-auto flex max-w-xl flex-col items-center gap-6 text-center">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em]" style={{ color: 'rgba(255,255,255,0.45)' }}>
+            For Filipino households
+          </p>
           <h2
-            className="text-[clamp(1.8rem,5vw,2.8rem)] font-bold leading-tight tracking-tight"
+            className="text-[clamp(2rem,5vw,3.2rem)] font-bold leading-[1.06] tracking-tight"
             style={{ color: '#ffffff', textWrap: 'balance' } as React.CSSProperties}
           >
             Log your first expense in 5 seconds.
           </h2>
-          <p className="max-w-sm text-base leading-relaxed" style={{ color: 'rgba(255,255,255,0.62)' }}>
-            Free to start. No credit card. No categories to configure first. Works immediately.
+          <p className="max-w-sm text-base leading-relaxed" style={{ color: 'rgba(255,255,255,0.55)' }}>
+            Free to start. No credit card. No categories to configure first. Works immediately — just type.
           </p>
           <Link
             href="/login"
@@ -613,9 +771,9 @@ export default function LandingPage() {
             Sign up free — it&apos;s instant
             <ArrowRight size={15} weight="bold" aria-hidden="true" />
           </Link>
-          <p className="text-[12px]" style={{ color: 'rgba(255,255,255,0.38)' }}>
+          <p className="text-[12px]" style={{ color: 'rgba(255,255,255,0.32)' }}>
             Already have an account?{' '}
-            <Link href="/login" className="underline underline-offset-2" style={{ color: 'rgba(255,255,255,0.58)' }}>
+            <Link href="/login" className="underline underline-offset-2" style={{ color: 'rgba(255,255,255,0.52)' }}>
               Sign in
             </Link>
           </p>

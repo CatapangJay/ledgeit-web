@@ -4,12 +4,16 @@ import { useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { formatCurrencyCompact, formatDate } from '@/lib/formatters'
 import { useStore } from '@/lib/store'
+import { useIsDesktop } from '@/lib/useIsDesktop'
 import { PHOSPHOR_ICON_MAP } from '@/lib/iconMap'
 import type { Transaction } from '@/types'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const MAX_FEED = 5
+// Desktop has vertical room beside the taller left column, so it shows a deeper
+// feed; mobile stays compact so the dashboard remains a quick glance.
+const MAX_FEED_MOBILE = 5
+const MAX_FEED_DESKTOP = 8
 
 // Light-tinted icon badge backgrounds (iOS-style) + matching icon tint
 const ICON_TINT: Record<string, { bg: string; icon: string }> = {
@@ -35,10 +39,12 @@ function DateBadge({ tx }: { tx: Transaction }) {
 
 export default function ExpenseFeed() {
   const transactions = useStore((s) => s.transactions)
+  const isDesktop = useIsDesktop()
+  const maxFeed = isDesktop ? MAX_FEED_DESKTOP : MAX_FEED_MOBILE
 
   const recentExpenses = useMemo(
-    () => transactions.filter((t) => t.type === 'expense').slice(0, MAX_FEED),
-    [transactions],
+    () => transactions.filter((t) => t.type === 'expense').slice(0, maxFeed),
+    [transactions, maxFeed],
   )
 
   const expenseCount = useMemo(
@@ -56,7 +62,7 @@ export default function ExpenseFeed() {
 
   return (
     <div
-      className="rounded-2xl overflow-hidden"
+      className="rounded-2xl overflow-hidden flex flex-col h-full"
       style={{
         background: '#ffffff',
         boxShadow: '0 2px 16px rgba(0,53,46,0.06)',

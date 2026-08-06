@@ -6,26 +6,6 @@ import { ArrowFatLineUp, ArrowFatLineDown } from '@phosphor-icons/react'
 import { formatCurrency } from '@/lib/formatters'
 import { useStore } from '@/lib/store'
 
-function useCountUp(target: number, duration = 1100) {
-  const [display, setDisplay] = useState(0)
-  const rafRef = useRef<number | null>(null)
-
-  useEffect(() => {
-    const start = Date.now()
-    const tick = () => {
-      const progress = Math.min((Date.now() - start) / duration, 1)
-      const eased = 1 - Math.pow(1 - progress, 3)
-      setDisplay(target * eased)
-      if (progress < 1) rafRef.current = requestAnimationFrame(tick)
-    }
-    rafRef.current = requestAnimationFrame(tick)
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  return display
-}
-
 function useCountUp(target: number, duration = 1000) {
   const [display, setDisplay] = useState(0)
   const rafRef = useRef<number | null>(null)
@@ -73,8 +53,6 @@ export default function BalanceMetric() {
   return (
     <div className="pb-1 pt-0">
       <p
-        className="mb-1 text-[11px] font-semibold uppercase tracking-[0.18em]"
-        style={{ color: 'rgba(255,255,255,0.55)' }}
         className="mb-1 text-[11px] font-semibold uppercase tracking-[0.18em]"
         style={{ color: 'rgba(255,255,255,0.55)' }}
       >

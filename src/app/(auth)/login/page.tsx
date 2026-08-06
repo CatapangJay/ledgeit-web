@@ -47,7 +47,7 @@ export default function LoginPage() {
       if (authError) {
         setError('Invalid email or password.')
       } else {
-        router.push('/')
+        router.push('/dashboard')
         router.refresh()
       }
     } else {
@@ -60,7 +60,7 @@ export default function LoginPage() {
         setError(authError.message)
       } else if (data.session) {
         // Email confirmation disabled — session is live, go straight to app
-        router.push('/')
+        router.push('/dashboard')
         router.refresh()
       } else {
         setSignedUp(true)
