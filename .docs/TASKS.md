@@ -659,3 +659,29 @@ TASK-024 (Allocation Schema)
 | TASK-029 Wire Allocations | P1 High | 45m | Integration |
 
 **Total Estimate: ~26.75 hours**
+
+---
+
+## Phase 11 — Design Polish
+
+### TASK-024: Dashboard Design Overhaul
+- **Owner:** Frontend Lead
+- **Estimate:** 2h
+- **Description:** Elevate the dashboard visual design with a more distinctive, editorial aesthetic.
+- **Subtasks:**
+  - [x] Replace generic "Sanctuary" header with contextual greeting (`Good morning / afternoon / evening`) + date
+  - [x] Add ambient radial glow background behind the hero card
+  - [x] Upgrade hero card: deeper gradient (`#002820 → #1a6358`), premium light refraction line at card edge, depth vignette at card bottom
+  - [x] Absorb IncomePanel stats into BalanceMetric: monthly income/expense split with colored stat blocks
+  - [x] Add month-progress pacing bar (day X of N) with animated fill
+  - [x] Remove IncomePanel as a standalone card from the dashboard page
+  - [x] SpendStrip: thicker segmented bar (5px), category legend pills with tinted backgrounds below the bar
+  - [x] ExpenseFeed: switch from dark solid icon backgrounds to light-tinted iOS-style icon badges
+  - [x] Add per-row hairline dividers in feed for cleaner separation
+  - [x] Footer in ExpenseFeed: subtle `#fcfefe` background tint to signal a different zone
+- **Acceptance Criteria:**
+  - Dashboard conveys "financial sanctuary" — calm, premium, trustworthy
+  - Hero card feels physical (light refraction + depth vignette)
+  - Category breakdown immediately scannable via colored legend pills
+  - No redundant card for income stats (folded into hero)
+- **Dependencies:** TASK-010, TASK-011

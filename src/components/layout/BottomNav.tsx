@@ -13,7 +13,7 @@ import { useState } from 'react'
 import SmartEntrySheet from '@/components/entry/SmartEntrySheet'
 
 const TABS = [
-  { label: 'Dashboard', icon: House, href: '/' },
+  { label: 'Dashboard', icon: House, href: '/dashboard' },
   { label: 'Ledger', icon: List, href: '/ledger' },
   { label: 'Add', icon: PlusCircle, href: null }, // FAB — center, opens sheet
   { label: 'Insights', icon: ChartPieSlice, href: '/insights' },

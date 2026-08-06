@@ -1,19 +1,32 @@
 'use client'
 
 import { useStore } from '@/lib/store'
-import { formatCurrency } from '@/lib/formatters'
+import { formatCurrencyCompact } from '@/lib/formatters'
 import { CATEGORIES } from '@/types'
 
 const CATEGORY_HEX: Record<string, string> = {
-  restaurants:   '#1f695d',
-  groceries:     '#2d9a6a',
+  restaurants:   '#e05c2a',
+  groceries:     '#28a46a',
   transport:     '#0284c7',
   shopping:      '#7c3aed',
   utilities:     '#d97706',
   entertainment: '#db2777',
-  health:        '#059669',
+  health:        '#e91e63',
   income:        '#1f6950',
   other:         '#6e9990',
+}
+
+// Subtle pastel backgrounds per category for the legend pills
+const CATEGORY_BG: Record<string, string> = {
+  restaurants:   'rgba(224,92,42,0.1)',
+  groceries:     'rgba(40,164,106,0.1)',
+  transport:     'rgba(2,132,199,0.1)',
+  shopping:      'rgba(124,58,237,0.1)',
+  utilities:     'rgba(217,119,6,0.1)',
+  entertainment: 'rgba(219,39,119,0.1)',
+  health:        'rgba(233,30,99,0.1)',
+  income:        'rgba(31,105,80,0.1)',
+  other:         'rgba(110,153,144,0.1)',
 }
 
 export default function SpendStrip() {
@@ -37,9 +50,10 @@ export default function SpendStrip() {
       className="rounded-2xl px-5 py-4"
       style={{
         background: '#ffffff',
-        boxShadow: '0 4px 24px rgba(0,53,46,0.07)',
+        boxShadow: '0 2px 16px rgba(0,53,46,0.06)',
       }}
     >
+      {/* Header */}
       <div className="mb-3 flex items-center justify-between">
         <span
           className="text-[12px] font-bold uppercase tracking-[0.12em]"

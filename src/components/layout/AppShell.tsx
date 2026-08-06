@@ -13,6 +13,7 @@ export default async function AppShell({ children }: AppShellProps) {
   const pathname = h.get('x-pathname') ?? '/'
   const isAuthRoute =
     pathname.startsWith('/login') || pathname.startsWith('/auth')
+  const isMarketingRoute = pathname === '/'
 
   return (
     <div className="relative min-h-dvh bg-ledge-bg">
@@ -35,7 +36,7 @@ export default async function AppShell({ children }: AppShellProps) {
         {children}
       </main>
 
-      {!isAuthRoute && <BottomNav />}
+      {!isAuthRoute && !isMarketingRoute && <BottomNav />}
     </div>
   )
 }

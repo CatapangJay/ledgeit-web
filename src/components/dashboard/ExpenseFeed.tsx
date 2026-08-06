@@ -11,16 +11,17 @@ import type { Transaction } from '@/types'
 
 const MAX_FEED = 5
 
-const ICON_BG: Record<string, string> = {
-  restaurants:   '#c2410c',
-  groceries:     '#4d7c0f',
-  transport:     '#0369a1',
-  shopping:      '#7c3aed',
-  utilities:     '#b45309',
-  entertainment: '#be185d',
-  health:        '#be123c',
-  income:        '#1f6950',
-  other:         '#64748b',
+// Light-tinted icon badge backgrounds (iOS-style) + matching icon tint
+const ICON_TINT: Record<string, { bg: string; icon: string }> = {
+  restaurants:   { bg: 'rgba(224,92,42,0.12)',  icon: '#e05c2a' },
+  groceries:     { bg: 'rgba(40,164,106,0.12)', icon: '#1f8a56' },
+  transport:     { bg: 'rgba(2,132,199,0.12)',  icon: '#0284c7' },
+  shopping:      { bg: 'rgba(124,58,237,0.12)', icon: '#7c3aed' },
+  utilities:     { bg: 'rgba(217,119,6,0.12)',  icon: '#d97706' },
+  entertainment: { bg: 'rgba(219,39,119,0.12)', icon: '#db2777' },
+  health:        { bg: 'rgba(233,30,99,0.12)',  icon: '#e91e63' },
+  income:        { bg: 'rgba(31,105,80,0.12)',  icon: '#1f6950' },
+  other:         { bg: 'rgba(110,153,144,0.12)',icon: '#6e9990' },
 }
 
 // ─── Date badge — mirrors the "% change" badge in Live Portfolio Feed ──────────
@@ -58,19 +59,19 @@ export default function ExpenseFeed() {
       className="rounded-2xl overflow-hidden"
       style={{
         background: '#ffffff',
-        boxShadow: '0 4px 24px rgba(0,53,46,0.07)',
+        boxShadow: '0 2px 16px rgba(0,53,46,0.06)',
       }}
     >
       {/* Section header */}
       <div className="flex items-center justify-between px-5 pt-4 pb-3">
-        <span className="text-[12px] font-bold uppercase tracking-[0.12em]" style={{ color: '#00352e' }}>
+        <span className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: '#3f4946' }}>
           Recent Activity
         </span>
         <span
-          className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
-          style={{ background: '#f0f4f2', color: '#3f4946' }}
+          className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold"
+          style={{ background: '#f0f4f2', color: '#6e9990' }}
         >
-          {expenseCount} entries
+          {expenseCount}
         </span>
       </div>
 
@@ -86,6 +87,8 @@ export default function ExpenseFeed() {
           <AnimatePresence initial={false}>
             {recentExpenses.map((tx, i) => {
               const Icon = PHOSPHOR_ICON_MAP[tx.category.icon]
+              const tint = ICON_TINT[tx.category.id] ?? { bg: 'rgba(110,153,144,0.12)', icon: '#6e9990' }
+              const isIncome = tx.type === 'income'
               return (
                 <motion.div
                   key={tx.id}
@@ -94,31 +97,32 @@ export default function ExpenseFeed() {
                   exit={{ opacity: 0 }}
                   transition={{ type: 'spring', stiffness: 300, damping: 28, delay: i * 0.05 }}
                   className="flex items-center gap-3 px-5 py-3"
+                  style={{ borderTop: i > 0 ? '1px solid #f7f9f8' : undefined }}
                 >
-                  {/* Category icon */}
+                  {/* Category icon — light tinted */}
                   <div
                     className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
-                    style={{ background: ICON_BG[tx.category.id] ?? '#6e9990' }}
+                    style={{ background: tint.bg }}
                   >
-                    {Icon && <Icon size={15} weight="fill" color="#ffffff" aria-hidden="true" />}
+                    {Icon && <Icon size={16} weight="fill" color={tint.icon} aria-hidden="true" />}
                   </div>
 
                   {/* Merchant + category */}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold" style={{ color: '#191c1c' }}>
+                    <p className="truncate text-[13px] font-semibold" style={{ color: '#191c1c' }}>
                       {tx.merchant}
                     </p>
-                    <p className="mt-0.5 text-[11px] font-medium" style={{ color: '#6e9990' }}>
+                    <p className="mt-0.5 text-[11px]" style={{ color: '#8eaeaa' }}>
                       {tx.category.label} · <DateBadge tx={tx} />
                     </p>
                   </div>
 
                   {/* Amount */}
                   <span
-                    className="shrink-0 font-mono text-sm font-bold tabular-nums"
-                    style={{ color: '#ba1a1a' }}
+                    className="shrink-0 font-mono text-[13px] font-bold tabular-nums"
+                    style={{ color: isIncome ? '#1f6950' : '#ba1a1a' }}
                   >
-                    -{formatCurrencyCompact(tx.amount)}
+                    {isIncome ? '+' : '−'}{formatCurrencyCompact(tx.amount)}
                   </span>
                 </motion.div>
               )
@@ -128,13 +132,13 @@ export default function ExpenseFeed() {
           {/* Footer */}
           <div
             className="flex items-center justify-between px-5 py-3 rounded-b-2xl"
-            style={{ borderTop: '1px solid #f0f4f2' }}
+            style={{ borderTop: '1px solid #f0f4f2', background: '#fcfefe' }}
           >
-            <span className="text-[11px] font-semibold" style={{ color: '#3f4946' }}>
-              Total Expenses
+            <span className="text-[11px] font-semibold" style={{ color: '#8eaeaa' }}>
+              All-time expenses
             </span>
-            <span className="font-mono text-base font-bold" style={{ color: '#ba1a1a' }}>
-              -{formatCurrencyCompact(totalExpenses)}
+            <span className="font-mono text-[13px] font-bold" style={{ color: '#ba1a1a' }}>
+              −{formatCurrencyCompact(totalExpenses)}
             </span>
           </div>
         </>

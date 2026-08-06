@@ -1,0 +1,151 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-23T00:00:00.000Z",
+  "title": "Design System: LedgeIt",
+  "extensions": {
+    "colorMeta": {
+      "accent-deep":      { "role": "primary",   "displayName": "Deep Forest",     "canonical": "#00352e", "tonalRamp": ["#001a17","#002820","#00352e","#1f695d","#2d8a7a","#5bab9a","#96cec5","#d4e4e0","#f0f4f2"] },
+      "accent-teal":      { "role": "primary",   "displayName": "Warm Teal",       "canonical": "#1f695d", "tonalRamp": ["#0d3a33","#1a5549","#1f695d","#2d8a7a","#3eaa97","#72c7b8","#a8ddd5","#cde0db","#f0f4f2"] },
+      "gain":             { "role": "secondary",  "displayName": "Gain Emerald",    "canonical": "#1f6950", "tonalRamp": ["#0e3829","#185442","#1f6950","#258060","#30a076","#68c4a0","#a4dfc5","#d0efe2","#f0f8f4"] },
+      "danger":           { "role": "tertiary",   "displayName": "Danger Crimson",  "canonical": "#ba1a1a", "tonalRamp": ["#6b0000","#901010","#ba1a1a","#de3730","#f05959","#f98f8f","#fcc2c2","#fde8e8","#fff5f5"] },
+      "danger-bright":    { "role": "tertiary",   "displayName": "Danger Vivid",    "canonical": "#de3730", "tonalRamp": ["#901010","#ba1a1a","#de3730","#f05959","#f98f8f","#fcc2c2","#fde8e8","#fff5f5","#fffafa"] },
+      "bg":               { "role": "neutral",    "displayName": "Sage White",      "canonical": "#f8faf9", "tonalRamp": ["#1e2421","#2d3834","#3f4946","#6e9990","#96b8b3","#cde0db","#e7edeb","#f0f4f2","#f8faf9"] },
+      "surface-low":      { "role": "neutral",    "displayName": "Sage Low",        "canonical": "#f0f4f2", "tonalRamp": ["#1e2421","#2d3834","#3f4946","#6e9990","#96b8b3","#cde0db","#e7edeb","#f0f4f2","#f8faf9"] },
+      "surface":          { "role": "neutral",    "displayName": "Sage Mid",        "canonical": "#e7edeb", "tonalRamp": ["#1e2421","#2d3834","#3f4946","#6e9990","#96b8b3","#cde0db","#e7edeb","#f0f4f2","#f8faf9"] },
+      "surface-high":     { "role": "neutral",    "displayName": "Sage High",       "canonical": "#d4e4e0", "tonalRamp": ["#1e2421","#2d3834","#3f4946","#6e9990","#96b8b3","#cde0db","#e7edeb","#f0f4f2","#f8faf9"] },
+      "surface-highest":  { "role": "neutral",    "displayName": "Sea Glass",       "canonical": "#c1d9d4", "tonalRamp": ["#1e2421","#2d3834","#3f4946","#6e9990","#96b8b3","#c1d9d4","#d4e4e0","#e7edeb","#f8faf9"] },
+      "ink":              { "role": "neutral",    "displayName": "Near Black",      "canonical": "#191c1c", "tonalRamp": ["#0a0c0c","#191c1c","#2a2e2e","#3f4946","#6e9990","#96b8b3","#cde0db","#e7edeb","#f8faf9"] },
+      "ink-variant":      { "role": "neutral",    "displayName": "Slate Green",     "canonical": "#3f4946", "tonalRamp": ["#191c1c","#2a2e2e","#3f4946","#5c6e6b","#6e9990","#96b8b3","#cde0db","#e7edeb","#f8faf9"] },
+      "muted":            { "role": "neutral",    "displayName": "Muted Teal",      "canonical": "#6e9990", "tonalRamp": ["#2a3e3b","#3f5955","#4e706b","#6e9990","#8eaeaa","#adc8c4","#cde0db","#e0ecea","#f0f4f2"] },
+      "border":           { "role": "neutral",    "displayName": "Gossamer",        "canonical": "#cde0db", "tonalRamp": ["#3f4946","#5c6e6b","#6e9990","#96b8b3","#adc8c4","#cde0db","#e0ecea","#f0f4f2","#f8faf9"] }
+    },
+    "typographyMeta": {
+      "display":  { "displayName": "Display",  "purpose": "Hero balance total. One value per screen." },
+      "headline": { "displayName": "Headline", "purpose": "Screen-level greetings and section titles." },
+      "title":    { "displayName": "Title",    "purpose": "Card headers, sheet titles, modal headings." },
+      "body":     { "displayName": "Body",     "purpose": "Transaction descriptions, merchant names, contextual prose." },
+      "label":    { "displayName": "Label",    "purpose": "Section eyebrows — uppercase tracked. One per card maximum." },
+      "numeric":  { "displayName": "Numeric",  "purpose": "All currency values in Geist Mono. Never humanist-sans for numbers." }
+    },
+    "shadows": [
+      { "name": "ambient-surface", "value": "0 2px 16px rgba(0,53,46,0.06)",                                    "purpose": "White cards on the sage background. Barely perceptible; separating, not lifting." },
+      { "name": "hero-depth",      "value": "0 20px 56px rgba(0,40,32,0.28), 0 4px 16px rgba(0,53,46,0.14)",    "purpose": "The hero balance card only. One per screen; its rarity is the point." },
+      { "name": "sheet-lift",      "value": "0 -8px 48px rgba(0,53,46,0.12)",                                   "purpose": "Smart Entry bottom sheet. Directional — implies the sheet emerges from below." },
+      { "name": "segment-lift",    "value": "0 2px 8px rgba(0,53,46,0.10)",                                     "purpose": "Active segment in mode toggle controls." }
+    ],
+    "motion": [
+      { "name": "spring-responsive",   "value": "type: spring, stiffness: 400, damping: 20",  "purpose": "Tap responses, small interactive elements." },
+      { "name": "spring-content",      "value": "type: spring, stiffness: 280–340, damping: 26–30", "purpose": "Content appearance, cards entering the screen." },
+      { "name": "spring-sheet",        "value": "type: spring, stiffness: 280, damping: 30",  "purpose": "Bottom sheet entrance and exit." },
+      { "name": "fade-backdrop",       "value": "duration: 0.18, ease: linear",               "purpose": "Modal/sheet backdrop fade." },
+      { "name": "stagger-feed",        "value": "staggerChildren: 0.07",                      "purpose": "Dashboard feed stagger entrance." },
+      { "name": "count-up",            "value": "cubic-ease-out, 1100ms",                     "purpose": "Balance display count-up on mount." }
+    ],
+    "breakpoints": [
+      { "name": "mobile-first", "value": "max 430px", "note": "App is mobile-first PWA. Desktop is a side effect, not a target." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Forest gradient CTA. Used for Log Transaction and primary confirms.",
+      "html": "<button class=\"ds-btn-primary\">Log Transaction</button>",
+      "css": ".ds-btn-primary { background: linear-gradient(135deg, #1f695d 0%, #00352e 100%); color: #ffffff; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; font-size: 0.875rem; font-weight: 700; letter-spacing: 0.02em; padding: 16px 24px; border-radius: 16px; border: none; cursor: pointer; transition: transform 0.1s; } .ds-btn-primary:active { transform: scale(0.97); } .ds-btn-primary:hover { background: linear-gradient(135deg, #24796b 0%, #004036 100%); } .ds-btn-primary:focus-visible { outline: 2px solid #1f695d; outline-offset: 2px; } .ds-btn-primary:disabled { opacity: 0.30; cursor: not-allowed; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Deprioritized action (Discard, Cancel). Muted teal on sage surface.",
+      "html": "<button class=\"ds-btn-ghost\">Discard</button>",
+      "css": ".ds-btn-ghost { background: #f0f4f2; color: #6e9990; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; font-size: 0.875rem; font-weight: 600; padding: 16px 24px; border-radius: 16px; border: none; cursor: pointer; transition: background 0.15s; } .ds-btn-ghost:hover { background: #e7edeb; } .ds-btn-ghost:focus-visible { outline: 2px solid #6e9990; outline-offset: 2px; }"
+    },
+    {
+      "name": "Category Pill",
+      "kind": "chip",
+      "refersTo": "chip-category",
+      "description": "Category label with color dot and monospaced amount. Used in SpendStrip and feed.",
+      "html": "<div class=\"ds-chip-category\"><div class=\"ds-chip-dot\" style=\"background:#e05c2a\"></div><span class=\"ds-chip-label\">Food</span><span class=\"ds-chip-amount\" style=\"color:#e05c2a\">₱250</span></div>",
+      "css": ".ds-chip-category { display: inline-flex; align-items: center; gap: 6px; background: rgba(224,92,42,0.10); border-radius: 9999px; padding: 4px 10px; } .ds-chip-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; } .ds-chip-label { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; font-size: 0.625rem; font-weight: 600; color: #3f4946; } .ds-chip-amount { font-family: 'Geist Mono', monospace; font-size: 0.625rem; font-weight: 700; }"
+    },
+    {
+      "name": "Surface Card",
+      "kind": "card",
+      "refersTo": "card-surface",
+      "description": "White data card with ambient shadow. Used for SpendStrip, ExpenseFeed, all data panels.",
+      "html": "<div class=\"ds-card-surface\"><div class=\"ds-card-header\"><span class=\"ds-card-eyebrow\">Recent Activity</span><span class=\"ds-card-count\">12</span></div><div class=\"ds-card-body\"><p style=\"color:#6e9990;font-size:0.8125rem\">Transaction rows go here</p></div></div>",
+      "css": ".ds-card-surface { background: #ffffff; border-radius: 16px; box-shadow: 0 2px 16px rgba(0,53,46,0.06); overflow: hidden; } .ds-card-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px 12px; } .ds-card-eyebrow { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #3f4946; } .ds-card-count { background: #f0f4f2; color: #6e9990; font-size: 0.625rem; font-weight: 600; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; padding: 2px 10px; border-radius: 9999px; } .ds-card-body { padding: 0 20px 20px; }"
+    },
+    {
+      "name": "Hero Balance Card",
+      "kind": "card",
+      "refersTo": "card-hero",
+      "description": "The anchor element of every dashboard screen. Forest gradient, Hero Depth shadow, white text throughout.",
+      "html": "<div class=\"ds-card-hero\"><p class=\"ds-hero-label\">Net Balance</p><span class=\"ds-hero-balance\">₱24,500.00</span><div class=\"ds-hero-badge ds-hero-badge--positive\"><span>+₱4,200 this month</span></div></div>",
+      "css": ".ds-card-hero { background: linear-gradient(150deg, #002820 0%, #00352e 45%, #1a6358 100%); border-radius: 24px; box-shadow: 0 20px 56px rgba(0,40,32,0.28), 0 4px 16px rgba(0,53,46,0.14); padding: 24px; overflow: hidden; position: relative; } .ds-card-hero::before { content: ''; position: absolute; inset: 0; top: 0; height: 1px; background: linear-gradient(90deg, transparent 5%, rgba(255,255,255,0.32) 30%, rgba(255,255,255,0.52) 50%, rgba(255,255,255,0.32) 70%, transparent 95%); } .ds-hero-label { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(255,255,255,0.55); margin-bottom: 4px; } .ds-hero-balance { font-family: 'Geist Mono', monospace; font-size: 2.75rem; font-weight: 700; line-height: 1; letter-spacing: -0.02em; color: #ffffff; display: block; } .ds-hero-badge { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; padding: 4px 12px; border-radius: 9999px; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; font-size: 0.6875rem; font-weight: 600; color: #ffffff; } .ds-hero-badge--positive { background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.22); } .ds-hero-badge--negative { background: rgba(255,80,80,0.22); border: 1px solid rgba(255,80,80,0.3); }"
+    },
+    {
+      "name": "Transaction Row",
+      "kind": "custom",
+      "description": "Feed row: category icon badge, merchant name + category label + date, right-aligned monospaced amount.",
+      "html": "<div class=\"ds-tx-row\"><div class=\"ds-tx-icon\" style=\"background:rgba(224,92,42,0.12)\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 256 256\" fill=\"#e05c2a\"><path d=\"M176,232a8,8,0,0,1-8,8H88a8,8,0,0,1,0-16h80A8,8,0,0,1,176,232Zm40-128a87.55,87.55,0,0,1-33.64,69.21A16.24,16.24,0,0,1,176,186v6a16,16,0,0,1-16,16H96a16,16,0,0,1-16-16v-6a16,16,0,0,1-6.23-12.61A88,88,0,0,1,216,104Z\"/></svg></div><div class=\"ds-tx-meta\"><p class=\"ds-tx-merchant\">McDonald's</p><p class=\"ds-tx-sub\">Restaurants · Today</p></div><span class=\"ds-tx-amount ds-tx-amount--expense\">−₱185</span></div>",
+      "css": ".ds-tx-row { display: flex; align-items: center; gap: 12px; padding: 12px 20px; } .ds-tx-icon { width: 36px; height: 36px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; } .ds-tx-meta { flex: 1; min-width: 0; } .ds-tx-merchant { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; font-size: 0.8125rem; font-weight: 600; color: #191c1c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0; } .ds-tx-sub { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; font-size: 0.6875rem; color: #8eaeaa; margin: 2px 0 0 0; } .ds-tx-amount { font-family: 'Geist Mono', monospace; font-size: 0.8125rem; font-weight: 700; flex-shrink: 0; font-variant-numeric: tabular-nums; } .ds-tx-amount--expense { color: #ba1a1a; } .ds-tx-amount--income { color: #1f6950; }"
+    },
+    {
+      "name": "Smart Entry Sheet",
+      "kind": "custom",
+      "description": "Signature bottom sheet for natural-language transaction entry. Frosted glass overlay with spring entrance.",
+      "html": "<div class=\"ds-sheet\"><div class=\"ds-sheet-handle\"></div><div class=\"ds-sheet-inner\"><div class=\"ds-sheet-header\"><span class=\"ds-sheet-title\">Smart Log</span><button class=\"ds-sheet-close\" aria-label=\"Close\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 256 256\"><path fill=\"#3f4946\" d=\"M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z\"/></svg></button></div><textarea class=\"ds-sheet-input\" placeholder=\"try: 20 mcdonalds lunch\" rows=\"2\"></textarea></div></div>",
+      "css": ".ds-sheet { position: fixed; bottom: 0; left: 0; right: 0; z-index: 50; display: flex; flex-direction: column; border-radius: 24px 24px 0 0; background: rgba(248,250,249,0.96); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); box-shadow: 0 -8px 48px rgba(0,53,46,0.12); overflow: hidden; } .ds-sheet-handle { width: 40px; height: 4px; background: #cde0db; border-radius: 9999px; margin: 12px auto 4px; } .ds-sheet-inner { padding: 8px 20px 32px; } .ds-sheet-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; } .ds-sheet-title { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; font-size: 0.9375rem; font-weight: 700; color: #00352e; } .ds-sheet-close { width: 32px; height: 32px; border-radius: 9999px; background: #f0f4f2; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; } .ds-sheet-input { width: 100%; resize: none; background: transparent; border: none; outline: none; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; font-size: 1.6rem; font-weight: 300; line-height: 1.3; color: #191c1c; caret-color: #1f695d; }"
+    },
+    {
+      "name": "Mode Toggle",
+      "kind": "custom",
+      "description": "Segmented control for Quick Entry / Multi-Entry modes.",
+      "html": "<div class=\"ds-toggle\"><button class=\"ds-toggle-btn ds-toggle-btn--active\">Quick Entry</button><button class=\"ds-toggle-btn\">Multi-Entry</button></div>",
+      "css": ".ds-toggle { display: flex; background: #f0f4f2; border-radius: 12px; padding: 4px; gap: 0; } .ds-toggle-btn { flex: 1; padding: 8px 0; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.02em; border: none; cursor: pointer; border-radius: 8px; transition: background 0.1s, color 0.1s; background: transparent; color: #6e9990; } .ds-toggle-btn--active { background: #ffffff; color: #00352e; box-shadow: 0 2px 8px rgba(0,53,46,0.10); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Household Ledger",
+    "overview": "LedgeIt's visual system is built around a single idea: a well-kept personal record that a family trusts. Not a bank product, not an enterprise dashboard — a personal artifact that feels like it belongs in your home. The design earns that trust through composure. Deep Forest Green grounds every screen; generous whitespace creates breathing room in what could otherwise be a stressful context; spring-driven animations communicate responsiveness without urgency.\n\nThe system is soft-premium: rounded forms, layered tonal surfaces, and ambient shadows that separate layers without drama. Nothing is decorative. Every radius, every shadow, every animation serves either comprehension or confidence. When something moves, it's because a state changed and the user needs to perceive that change — not because motion is present by default.\n\nThis system explicitly rejects: the navy-and-gold of traditional finance apps, the neon glow and volatile energy of crypto products, and the information-wall approach of tools like Mint where the first screen is a 10-chart dashboard.",
+    "keyCharacteristics": [
+      "Deep Forest Green as the anchor: earns authority without coldness",
+      "Tonal surface hierarchy instead of hard borders: five steps from bg to surface-highest",
+      "Spring physics throughout: responsive, not mechanical",
+      "Monospaced numerics: Geist Mono for all currency values — precision reads as trustworthy",
+      "Soft-premium radius vocabulary: hero at 24px, cards at 16px, icons at 12px, chips as pills"
+    ],
+    "rules": [
+      { "name": "The One-Hue Rule",          "body": "Every color in this system, from the deepest accent to the palest background, originates from the same green-teal hue family. Importing a warm neutral or a blue-gray breaks the palette's coherence.", "section": "colors" },
+      { "name": "The Semantic Delta Rule",    "body": "Gain Emerald and Danger Crimson are financial signal colors. They must never be repurposed for decorative or non-financial UI.", "section": "colors" },
+      { "name": "The Mono Lock Rule",         "body": "Currency values always render in Geist Mono with tabular-nums. A humanist-sans amount in a feed row breaks the visual language that separates data from description.", "section": "typography" },
+      { "name": "The Tinted Shadow Rule",     "body": "All shadows use rgba(0,53,46,...) as the shadow color. Never rgba(0,0,0,...) or any neutral gray.", "section": "elevation" },
+      { "name": "The One Hero Rule",          "body": "Only one element per screen earns the Hero Depth shadow. Adding Hero Depth to any other element dilutes the hierarchy.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do use green-tinted shadows (rgba(0,53,46,...)) for all box-shadows. Never neutral gray.",
+      "Do render all currency values in Geist Mono with tabular-nums and font-bold.",
+      "Do animate with spring physics. Easing curves for simple opacity fades; spring for spatial movement.",
+      "Do use the tonal surface ramp to convey depth before reaching for shadows.",
+      "Do keep the hero balance card as the sole bearer of the Hero Depth shadow.",
+      "Do use backdrop-filter: blur on the Smart Entry sheet as a purposeful overlay metaphor.",
+      "Do assign category colors semantically. These are a fixed vocabulary; don't reassign them.",
+      "Do support prefers-reduced-motion on all Framer Motion animations."
+    ],
+    "donts": [
+      "Don't use navy, gold, or any warm-neutral (sand, cream, linen) backgrounds.",
+      "Don't use neon accents, glowing shadows, or dark-mode electric color.",
+      "Don't build screens with more than one chart type visible simultaneously.",
+      "Don't use border-left or border-right greater than 1px as a colored accent stripe on cards.",
+      "Don't apply background-clip: text with a gradient for decorative headings.",
+      "Don't use glassmorphism on cards or panels other than the Smart Entry sheet.",
+      "Don't repeat the Label eyebrow pattern more than once per card.",
+      "Don't use the Hero Depth shadow on anything other than the balance hero card.",
+      "Don't render amounts or balances in Plus Jakarta Sans. Geist Mono is the precision signal.",
+      "Don't animate layout properties. Animate transform and opacity only."
+    ]
+  }
+}
