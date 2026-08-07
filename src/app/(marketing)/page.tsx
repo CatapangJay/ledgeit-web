@@ -257,9 +257,9 @@ export default function LandingPage() {
           WebkitBackdropFilter: scrolled ? 'blur(16px)' : 'none',
         }}
         animate={{
-          background: scrolled ? 'rgba(248,250,249,0.92)' : 'transparent',
+          backgroundColor: scrolled ? 'rgba(248,250,249,0.92)' : 'rgba(248,250,249,0)',
           backdropFilter: scrolled ? 'blur(16px)' : 'none',
-          borderBottom: scrolled ? '1px solid rgba(205,224,219,0.5)' : '1px solid transparent',
+          borderBottom: scrolled ? '1px solid rgba(205,224,219,0.5)' : '1px solid rgba(205,224,219,0)',
         }}
         transition={{ duration: 0.2 }}
       >
