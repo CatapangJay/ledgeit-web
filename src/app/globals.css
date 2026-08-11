@@ -67,17 +67,17 @@ body {
   overscroll-behavior: none;
 }
 
-/* Scrollbar styling */
+/* Scrollbar — hidden with no reserved gutter so content spans the full width.
+   The page still scrolls normally via wheel / trackpad / touch / keyboard. */
 ::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+  width: 0;
+  height: 0;
 }
-::-webkit-scrollbar-track {
-  background: transparent;
+html {
+  scrollbar-width: none;        /* Firefox */
 }
-::-webkit-scrollbar-thumb {
-  background: var(--ledge-surface-high);
-  border-radius: 4px;
+body {
+  -ms-overflow-style: none;     /* legacy Edge/IE */
 }
 
 /* Remove tap highlight on mobile */

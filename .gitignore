@@ -139,3 +139,4 @@ dist
 .gitignore
 .omc/state/sessions/7b4172ff-441a-453d-8743-60b2952c1a67/hud-state.json
 .omc/state/sessions/293d30f3-b6d5-404d-91d3-bc3950e5ed85/hud-state.json
+/.docs/screenshots

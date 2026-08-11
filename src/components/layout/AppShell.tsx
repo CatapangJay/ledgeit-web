@@ -12,7 +12,7 @@ export default async function AppShell({ children }: AppShellProps) {
   const h = await headers()
   const pathname = h.get('x-pathname') ?? '/'
   const isAuthRoute      = pathname.startsWith('/login') || pathname.startsWith('/auth')
-  const isMarketingRoute = pathname === '/'
+  const isMarketingRoute = pathname === '/' || pathname.startsWith('/about')
 
   return (
     <div className="relative min-h-dvh bg-ledge-bg">
