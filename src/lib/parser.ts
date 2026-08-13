@@ -5,7 +5,11 @@ import type { TransactionDraft } from '@/types'
 const AMOUNT_PATTERNS = [
   // $20, ₱20, $1,234.56
   /[₱$]\s*([\d,]+(?:\.\d{1,2})?)/,
-  // 20 dollars, 1500 pesos
+  // php 50, usd 20, php50
+  /\b(?:php|usd)\s*([\d,]+(?:\.\d{1,2})?)/i,
+  // 1.5k → 1,500 · 2k → 2,000 · 1.2m → 1,200,000 (everyday shorthand)
+  /\b([\d,]*\.?\d+)\s*([km])\b/i,
+  // 20 dollars, 1500 pesos, 50php
   /([\d,]+(?:\.\d{1,2})?)\s*(?:dollars?|pesos?|php|usd)/i,
   // plain number (last resort) — must be at least 2 digits to avoid matching day numbers
   /\b([\d,]{2,}(?:\.\d{1,2})?)\b/,
@@ -16,8 +20,13 @@ export function parseAmount(text: string): number | null {
     const match = text.match(pattern)
     if (match) {
       const raw = match[1].replace(/,/g, '')
-      const value = parseFloat(raw)
-      if (!isNaN(value) && value > 0) return value
+      let value = parseFloat(raw)
+      if (isNaN(value) || value <= 0) continue
+      // Apply k / m multiplier when present (pattern index 2)
+      const suffix = match[2]?.toLowerCase()
+      if (suffix === 'k') value *= 1_000
+      else if (suffix === 'm') value *= 1_000_000
+      return value
     }
   }
   return null
@@ -40,6 +49,13 @@ export function parseDirection(text: string): 'expense' | 'income' {
 // ─── Date Resolution ──────────────────────────────────────────────────────────
 
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+
+const MONTHS: Record<string, number> = {
+  jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3, apr: 4, april: 4,
+  may: 5, jun: 6, june: 6, jul: 7, july: 7, aug: 8, august: 8, sep: 9, sept: 9,
+  september: 9, oct: 10, october: 10, nov: 11, november: 11, dec: 12, december: 12,
+}
+const MONTH_ALT = Object.keys(MONTHS).sort((a, b) => b.length - a.length).join('|')
 
 function toISODate(d: Date): string {
   // Use LOCAL calendar date components — NOT d.toISOString() which is UTC.
@@ -64,7 +80,55 @@ function getPastDayOfWeek(dayName: string, weeksAgo = 1): Date {
   return result
 }
 
-export function parseDate(text: string): string {
+/**
+ * Build an ISO date from month/day/optional-year. When the year is omitted and
+ * the resulting date would land in the future (you can't spend tomorrow), roll
+ * back one year — everyday logs are always for purchases that already happened.
+ */
+function fromMonthDay(month: number, day: number, year?: number): string | null {
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null
+  const today = new Date()
+  const resolvedYear = year ?? today.getFullYear()
+  const d = new Date(resolvedYear, month - 1, day)
+  if (isNaN(d.getTime()) || d.getMonth() !== month - 1) return null // reject invalid days (e.g. Feb 30)
+  if (year === undefined) {
+    const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    if (d.getTime() > endOfToday.getTime()) d.setFullYear(resolvedYear - 1)
+  }
+  return toISODate(d)
+}
+
+// Month-name dates: "march 5", "mar 5 2026", "march 5, 2026", "5 march", "5 mar 2026"
+const MONTH_NAME_PATTERNS: RegExp[] = [
+  new RegExp(`\\b(${MONTH_ALT})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(\\d{4}))?\\b`, 'i'),
+  new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${MONTH_ALT})\\.?(?:,?\\s+(\\d{4}))?\\b`, 'i'),
+]
+
+function parseMonthName(text: string): string | null {
+  // Form 1: <month> <day> [year]
+  const m1 = text.match(MONTH_NAME_PATTERNS[0])
+  if (m1) {
+    const month = MONTHS[m1[1].toLowerCase()]
+    const iso = fromMonthDay(month, parseInt(m1[2]), m1[3] ? parseInt(m1[3]) : undefined)
+    if (iso) return iso
+  }
+  // Form 2: <day> <month> [year]
+  const m2 = text.match(MONTH_NAME_PATTERNS[1])
+  if (m2) {
+    const month = MONTHS[m2[2].toLowerCase()]
+    const iso = fromMonthDay(month, parseInt(m2[1]), m2[3] ? parseInt(m2[3]) : undefined)
+    if (iso) return iso
+  }
+  return null
+}
+
+/**
+ * Extract an explicit date from text, or `null` when none is present.
+ * Unlike `parseDate`, this does NOT fall back to today — callers that need a
+ * default should do so themselves (bulk mode relies on the null signal to know
+ * whether an entry should inherit a context date from a preceding date line).
+ */
+export function findDate(text: string): string | null {
   const lower = text.toLowerCase()
   const today = new Date()
 
@@ -77,12 +141,16 @@ export function parseDate(text: string): string {
   if (slashMatch) {
     const year = slashMatch[3]
       ? slashMatch[3].length === 2
-        ? `20${slashMatch[3]}`
-        : slashMatch[3]
-      : today.getFullYear()
-    const d = new Date(`${year}-${slashMatch[1].padStart(2, '0')}-${slashMatch[2].padStart(2, '0')}`)
-    if (!isNaN(d.getTime())) return toISODate(d)
+        ? parseInt(`20${slashMatch[3]}`)
+        : parseInt(slashMatch[3])
+      : undefined
+    const iso = fromMonthDay(parseInt(slashMatch[1]), parseInt(slashMatch[2]), year)
+    if (iso) return iso
   }
+
+  // Month-name dates: "march 5", "5 mar 2026"
+  const monthName = parseMonthName(lower)
+  if (monthName) return monthName
 
   if (lower.includes('yesterday')) {
     const d = new Date(today)
@@ -90,7 +158,7 @@ export function parseDate(text: string): string {
     return toISODate(d)
   }
 
-  if (lower.includes('today') || lower.includes('now')) {
+  if (/\b(?:today|now)\b/.test(lower)) {
     return toISODate(today)
   }
 
@@ -110,12 +178,49 @@ export function parseDate(text: string): string {
 
   // Plain day name: "monday", "friday"
   for (const day of DAY_NAMES) {
-    if (lower.includes(day)) {
+    if (new RegExp(`\\b${day}\\b`).test(lower)) {
       return toISODate(getPastDayOfWeek(day, 1))
     }
   }
 
-  return toISODate(today)
+  return null
+}
+
+export function parseDate(text: string): string {
+  return findDate(text) ?? toISODate(new Date())
+}
+
+// Date-stripping patterns — shared by merchant extraction and `isDateOnly`.
+const DATE_STRIP_PATTERNS: RegExp[] = [
+  // Relative words
+  /\b(?:yesterday|today|now|last\s+(?:sunday|monday|tuesday|wednesday|thursday|friday|saturday)|\d+\s+days?\s+ago)\b/gi,
+  /\b(?:sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/gi,
+  // Month-name dates
+  new RegExp(`\\b(${MONTH_ALT})\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s+\\d{4})?\\b`, 'gi'),
+  new RegExp(`\\b\\d{1,2}(?:st|nd|rd|th)?\\s+(${MONTH_ALT})\\.?(?:,?\\s+\\d{4})?\\b`, 'gi'),
+  // ISO / slash dates
+  /\b\d{4}-\d{2}-\d{2}\b/g,
+  /\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g,
+]
+
+function stripDates(text: string): string {
+  let clean = text
+  for (const pattern of DATE_STRIP_PATTERNS) clean = clean.replace(pattern, ' ')
+  return clean
+}
+
+/**
+ * True when the (trimmed) text is *only* a date expression — i.e. a standalone
+ * date line whose date should apply to the entries that follow it. Optional
+ * leading filler like "on" / "date:" / "-" is tolerated.
+ */
+export function isDateOnly(text: string): boolean {
+  const t = text.trim().replace(/^(?:on|date)\s*:?\s+/i, '').replace(/^[-–—•*]\s*/, '').trim()
+  if (!t) return false
+  if (!findDate(t)) return false
+  // Nothing but the date (and punctuation) may remain after stripping.
+  const remainder = stripDates(t).replace(/[\s,.:;–—-]+/g, '')
+  return remainder === ''
 }
 
 // ─── Merchant Extraction ──────────────────────────────────────────────────────
@@ -124,35 +229,52 @@ export function parseDate(text: string): string {
 const STRIP_PATTERNS: RegExp[] = [
   // Currency amounts
   /[₱$]\s*[\d,]+(?:\.\d{1,2})?/g,
+  /\b(?:php|usd)\s*[\d,]+(?:\.\d{1,2})?/gi,
+  /\b[\d,]*\.?\d+\s*[km]\b/gi,
   /[\d,]+(?:\.\d{1,2})?\s*(?:dollars?|pesos?|php|usd)/gi,
   /\b[\d,]{2,}(?:\.\d{1,2})?\b/g,
-  // Date words
-  /\b(?:yesterday|today|now|last\s+(?:sunday|monday|tuesday|wednesday|thursday|friday|saturday)|\d+\s+days?\s+ago)\b/gi,
-  /\b(?:sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/gi,
-  // ISO / slash dates
-  /\b\d{4}-\d{2}-\d{2}\b/g,
-  /\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g,
   // Filler words
-  /\b(?:for|at|in|on|from|to|the|a|an|my|i|me|bought|paid|spent|got|used|went)\b/gi,
+  /\b(?:for|at|in|on|from|to|the|a|an|my|i|me|bought|paid|spent|got|used|went|worth|of)\b/gi,
 ]
 
 const MERCHANT_NORMALIZATIONS: Array<[RegExp, string]> = [
   [/\bmcd(?:onalds?)?\b/i, "McDonald's"],
   [/\bjollibee\b/i, 'Jollibee'],
+  [/\bjbee\b/i, 'Jollibee'],
   [/\bkfc\b/i, 'KFC'],
+  [/\bchowking\b/i, 'Chowking'],
+  [/\bgreenwich\b/i, 'Greenwich'],
+  [/\bmang\s*inasal\b/i, 'Mang Inasal'],
+  [/\bmax'?s\b/i, "Max's"],
+  [/\bgoldilocks\b/i, 'Goldilocks'],
+  [/\bred\s*ribbon\b/i, 'Red Ribbon'],
+  [/\bdunkin'?\b/i, 'Dunkin'],
   [/\bstarbucks?\b/i, 'Starbucks'],
-  [/\bgrab(?:food|taxi|express|mart)?\b/i, 'Grab'],
+  [/\bbo'?s\s*coffee\b/i, "Bo's Coffee"],
+  [/\bfoodpanda\b/i, 'Foodpanda'],
+  [/\bgrab(?:food|taxi|express|mart|car)?\b/i, 'Grab'],
   [/\bangkas\b/i, 'Angkas'],
+  [/\bjoyride\b/i, 'JoyRide'],
   [/\bnetflix\b/i, 'Netflix'],
   [/\bspotify\b/i, 'Spotify'],
+  [/\byoutube\b/i, 'YouTube'],
   [/\blazada\b/i, 'Lazada'],
   [/\bshopee\b/i, 'Shopee'],
+  [/\btiktok\b/i, 'TikTok'],
   [/\bmeralco\b/i, 'Meralco'],
   [/\bpldt\b/i, 'PLDT'],
   [/\bglobe\b/i, 'Globe'],
   [/\bsmart\b/i, 'Smart'],
+  [/\bconverge\b/i, 'Converge'],
+  [/\bmaynilad\b/i, 'Maynilad'],
   [/\bwatsons?\b/i, 'Watsons'],
-  [/\bmercury drug\b/i, 'Mercury Drug'],
+  [/\bmercury\s*drug\b/i, 'Mercury Drug'],
+  [/\b7[\s-]?eleven\b/i, '7-Eleven'],
+  [/\bministop\b/i, 'Ministop'],
+  [/\bfamily\s*mart\b/i, 'FamilyMart'],
+  [/\bnational\s*book\s*store\b/i, 'National Book Store'],
+  [/\bgcash\b/i, 'GCash'],
+  [/\bmaya\b/i, 'Maya'],
   [/\bsm\b/i, 'SM'],
   [/\bpuregold\b/i, 'Puregold'],
   [/\blanders\b/i, "Lander's"],
@@ -161,7 +283,7 @@ const MERCHANT_NORMALIZATIONS: Array<[RegExp, string]> = [
 ]
 
 export function parseMerchant(text: string): string {
-  let clean = text
+  let clean = stripDates(text)
 
   for (const pattern of STRIP_PATTERNS) {
     clean = clean.replace(pattern, ' ')
@@ -188,14 +310,20 @@ export function parseMerchant(text: string): string {
 
 // ─── Compose ──────────────────────────────────────────────────────────────────
 
-export function parseTransaction(raw: string): TransactionDraft {
+export function parseTransaction(raw: string, contextDate?: string): TransactionDraft {
   const trimmed = raw.trim()
+
+  // Prefer a date written on the entry's own line. When none is present, fall
+  // back to a context date (e.g. a standalone date line above this entry in a
+  // bulk paste), and only then to today.
+  const inlineDate = findDate(trimmed)
+  const date = inlineDate ?? contextDate ?? toISODate(new Date())
 
   return {
     raw: trimmed,
     amount: parseAmount(trimmed),
     merchant: parseMerchant(trimmed),
     type: parseDirection(trimmed),
-    date: parseDate(trimmed),
+    date,
   }
 }

@@ -41,7 +41,12 @@ const getClosedTopPx = () => window.innerHeight
 
 export default function SmartEntrySheet({ open, onClose }: Props) {
   const labelId = useId()
-  const [mode, setMode] = useState<'quick' | 'bulk'>('quick')
+  // Quick / single entry is disabled for now — bulk entry is the only mode.
+  // The quick-entry state, UI, and handlers below are commented out but kept
+  // in place so the mode can be re-enabled later without rewriting.
+  // `setMode` is intentionally unused while the mode toggle is disabled; the
+  // setter returns when the Quick/Multi-Entry toggle above is restored.
+  const [mode] = useState<'quick' | 'bulk'>('bulk')
   const [input, setInput] = useState('')
   const [bulkText, setBulkText] = useState('')
   const [parseResult, setParseResult] = useState<ParseResult | null>(null)
@@ -227,10 +232,11 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
     [learnedMerchants, historyMerchants],
   )
 
-  const handleModeChange = useCallback((m: 'quick' | 'bulk') => {
-    setMode(m)
-    setSuccess(false)
-  }, [])
+  // Used by the disabled mode toggle — restore alongside it to re-enable quick entry.
+  // const handleModeChange = useCallback((m: 'quick' | 'bulk') => {
+  //   setMode(m)
+  //   setSuccess(false)
+  // }, [])
 
   const handleBulkComplete = useCallback(() => {
     setBulkText('')
@@ -295,6 +301,13 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
             <X size={14} weight="bold" aria-hidden="true" />
           </motion.button>
         </div>
+        {/* ── Mode toggle (Quick / Multi-Entry) — DISABLED for now ─────────
+            Bulk entry is currently the only mode. The quick/single-entry flow
+            is kept in the code (guarded by `mode === 'quick'`, which can no
+            longer become true) so it can be re-enabled by restoring this
+            toggle. To bring it back, un-comment this block and default `mode`
+            to 'quick' again.
+
         <div className="flex rounded-xl p-1" style={{ background: '#f0f4f2' }}>
           {(['quick', 'bulk'] as const).map((m) => (
             <button
@@ -311,6 +324,7 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
             </button>
           ))}
         </div>
+        ──────────────────────────────────────────────────────────────── */}
       </div>
 
       {/* ── Scrollable body ─────────────────────────────────────────── */}
