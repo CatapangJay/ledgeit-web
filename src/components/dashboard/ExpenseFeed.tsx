@@ -43,7 +43,13 @@ export default function ExpenseFeed() {
   const maxFeed = isDesktop ? MAX_FEED_DESKTOP : MAX_FEED_MOBILE
 
   const recentExpenses = useMemo(
-    () => transactions.filter((t) => t.type === 'expense').slice(0, maxFeed),
+    () =>
+      transactions
+        .filter((t) => t.type === 'expense')
+        // Latest transaction date first (ties broken by created time), so a
+        // back-dated older entry can't outrank a more recent day.
+        .sort((a, b) => (a.date === b.date ? b.createdAt.localeCompare(a.createdAt) : b.date.localeCompare(a.date)))
+        .slice(0, maxFeed),
     [transactions, maxFeed],
   )
 

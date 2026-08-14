@@ -28,6 +28,7 @@ import {
   UsersThree,
   Baby,
   CreditCard,
+  ArrowsLeftRight,
   // ─── Additional custom-picker icons ────────────────────────────────────────────
   Heart,
   HandHeart,
@@ -89,6 +90,7 @@ export const PHOSPHOR_ICON_MAP: Record<string, Icon> = {
   UsersThree,
   Baby,
   CreditCard,
+  ArrowsLeftRight,
   // Custom category icon options
   Coffee,
   Airplane,
@@ -161,6 +163,7 @@ const PRESET_ICON_BG: Record<string, string> = {
   kids:          '#db2777',
   subscriptions: '#334155',
   income:        '#1f6950',
+  transfers:     '#475569',
   other:         '#64748b',
 }
 

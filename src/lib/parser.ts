@@ -72,8 +72,18 @@ const INCOME_KEYWORDS = [
   'allowance', 'commission', 'profit', 'revenue', 'paid', 'payout', 'reimbursement',
 ]
 
-export function parseDirection(text: string): 'expense' | 'income' {
+// A transfer moves money between the user's own pockets (paying a credit card,
+// moving to savings). Checked BEFORE income so phrasing like "cc payment" isn't
+// mis-read as income by the shared 'paid'/'payment' keywords.
+const TRANSFER_KEYWORDS = [
+  'credit card payment', 'cc payment', 'card payment', 'pay credit card',
+  'pay cc', 'pay off card', 'creditcard payment', 'statement payment',
+  'move to savings', 'transfer to savings', 'fund transfer', 'bank transfer',
+]
+
+export function parseDirection(text: string): 'expense' | 'income' | 'transfer' {
   const lower = text.toLowerCase()
+  if (TRANSFER_KEYWORDS.some((kw) => lower.includes(kw))) return 'transfer'
   if (INCOME_KEYWORDS.some((kw) => lower.includes(kw))) return 'income'
   return 'expense'
 }

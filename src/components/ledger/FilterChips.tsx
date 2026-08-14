@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion'
 import { CATEGORIES } from '@/types'
 
-export type FilterValue = 'all' | 'expense' | 'income' | string
+export type FilterValue = 'all' | 'expense' | 'income' | 'transfer' | string
 
 interface Chip {
   value: FilterValue
@@ -14,12 +14,17 @@ const BASE_CHIPS: Chip[] = [
   { value: 'all', label: 'All' },
   { value: 'expense', label: 'Expense' },
   { value: 'income', label: 'Income' },
+  { value: 'transfer', label: 'Transfers' },
 ]
 
-const PRESET_CATEGORY_CHIPS: Chip[] = CATEGORIES.filter((c) => c.id !== 'other' && c.id !== 'income').map((c) => ({
-  value: c.id as FilterValue,
-  label: c.label,
-}))
+// `transfers` is surfaced via the top-level "Transfers" type chip above, so it's
+// excluded here to avoid a duplicate category chip.
+const PRESET_CATEGORY_CHIPS: Chip[] = CATEGORIES
+  .filter((c) => c.id !== 'other' && c.id !== 'income' && c.id !== 'transfers')
+  .map((c) => ({
+    value: c.id as FilterValue,
+    label: c.label,
+  }))
 
 interface Props {
   active: FilterValue

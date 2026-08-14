@@ -473,6 +473,12 @@ export const useStore = create<AppStore>()((set, get) => ({
       .transactions.filter(
         (t) => t.date === date && (type ? t.type === type : true)
       )
-      .reduce((sum, t) => sum + (t.type === 'expense' ? -t.amount : t.amount), 0)
+      // Transfers move money between the user's own pockets — they net to zero
+      // and must not shift the daily total. Only expense/income affect it.
+      .reduce((sum, t) => {
+        if (t.type === 'expense') return sum - t.amount
+        if (t.type === 'income') return sum + t.amount
+        return sum
+      }, 0)
   },
 }))

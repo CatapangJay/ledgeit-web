@@ -123,6 +123,7 @@ export default function ParsePreview({ draft, category, confidence, customCatego
   const [merchantInput, setMerchantInput] = useState('')
   const merchantInputRef = useRef<HTMLInputElement>(null)
   const isIncome = draft.type === 'income'
+  const isTransfer = draft.type === 'transfer'
   const isBulk = onToggleSelect !== undefined
 
   function startEditMerchant() {
@@ -272,6 +273,13 @@ export default function ParsePreview({ draft, category, confidence, customCatego
           />
         )}
       </motion.div>
+
+      {/* Transfer hint — clarifies it won't count toward spending */}
+      {isTransfer && !logged && (
+        <p className="mt-2 text-[11px] font-medium" style={{ color: '#6e9990' }}>
+          Transfer — not counted as spending.
+        </p>
+      )}
 
       {/* Inline category picker */}
       <AnimatePresence>

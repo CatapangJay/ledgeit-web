@@ -121,7 +121,8 @@ function LedgerContent() {
       // Category / type chip
       if (filter === 'expense' && t.type !== 'expense') return false
       else if (filter === 'income' && t.type !== 'income') return false
-      else if (filter !== 'all' && filter !== 'expense' && filter !== 'income' && t.category.id !== filter) return false
+      else if (filter === 'transfer' && t.type !== 'transfer') return false
+      else if (filter !== 'all' && filter !== 'expense' && filter !== 'income' && filter !== 'transfer' && t.category.id !== filter) return false
       // Date period
       if (range && (t.date < range.start || t.date > range.end)) return false
       // Free-text search across merchant, category, and raw note

@@ -18,6 +18,7 @@ export type CategoryId =
   | 'kids'
   | 'subscriptions'
   | 'income'
+  | 'transfers'
   | 'other'
 
 export interface Category {
@@ -237,6 +238,21 @@ export const CATEGORIES: Category[] = [
     ],
   },
   {
+    id: 'transfers',
+    label: 'Transfer / Payment',
+    icon: 'ArrowsLeftRight',
+    color: 'text-slate-600',
+    bgColor: 'bg-slate-100',
+    // A transfer moves money between your own pockets (e.g. paying a credit
+    // card, moving to savings). It is NOT spending — it's excluded from expense
+    // totals, budgets, and the trend. Keywords route matching entries here.
+    keywords: [
+      'credit card payment', 'cc payment', 'card payment', 'pay credit card',
+      'pay cc', 'creditcard payment', 'transfer', 'transferred', 'fund transfer',
+      'move to savings', 'bank transfer', 'statement payment', 'bill payment cc',
+    ],
+  },
+  {
     id: 'other',
     label: 'Other',
     icon: 'DotsThree',
@@ -248,6 +264,15 @@ export const CATEGORIES: Category[] = [
 
 // ─── Transaction ──────────────────────────────────────────────────────────────
 
+/**
+ * expense  — money spent (counts toward spending, budgets, trend)
+ * income   — money received
+ * transfer — money moved between your own pockets (e.g. paying a credit card,
+ *            moving to savings). Recorded but EXCLUDED from spending/income
+ *            analytics so it isn't double-counted against the purchases it settles.
+ */
+export type TransactionType = 'expense' | 'income' | 'transfer'
+
 export interface Transaction {
   id: string
   raw: string               // Original text input e.g. "$20 mcdonalds lunch"
@@ -255,7 +280,7 @@ export interface Transaction {
   merchant: string          // Resolved merchant name
   category: Category
   date: string              // ISO 8601 date string (YYYY-MM-DD)
-  type: 'expense' | 'income'
+  type: TransactionType
   confidence: number        // 0–1 categorization confidence
   isRecurring?: boolean
   note?: string
@@ -268,7 +293,7 @@ export interface TransactionDraft {
   raw: string
   amount: number | null
   merchant: string
-  type: 'expense' | 'income'
+  type: TransactionType
   date: string              // ISO 8601 date string
 }
 

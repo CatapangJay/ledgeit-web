@@ -13,6 +13,7 @@ import WeeklyTrendChart from '@/components/dashboard/WeeklyTrendChart'
 import SpendingHeatmap from '@/components/dashboard/SpendingHeatmap'
 import TopCategoryBars from '@/components/dashboard/TopCategoryBars'
 import BiggestExpenseCard from '@/components/dashboard/BiggestExpenseCard'
+import TransferInfoCard from '@/components/dashboard/TransferInfoCard'
 import RecurringPaymentsCard from '@/components/dashboard/RecurringPaymentsCard'
 import CoachLine from '@/components/dashboard/CoachLine'
 import HeroSideStats from '@/components/dashboard/HeroSideStats'
@@ -197,9 +198,10 @@ export default function DashboardPage() {
               <TopCategoryBars />
             </motion.div>
 
-            {/* ── Biggest single expense this month ────────────────────────────── */}
-            <motion.div variants={item}>
+            {/* ── Biggest expense + transfers explainer, side by side ─────────── */}
+            <motion.div variants={item} className="grid grid-cols-1 gap-3 md:gap-4 sm:grid-cols-2">
               <BiggestExpenseCard />
+              <TransferInfoCard />
             </motion.div>
           </motion.div>
 

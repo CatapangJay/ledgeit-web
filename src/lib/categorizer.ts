@@ -64,6 +64,14 @@ export function categorize(
     }
   }
 
+  // Transfers (e.g. credit-card payments) map to the neutral Transfer category
+  if (draft.type === 'transfer') {
+    return {
+      category: CATEGORIES.find((c) => c.id === 'transfers')!,
+      confidence: 0.99,
+    }
+  }
+
   // ── User-learned override (highest priority) ──────────────────────────────
   if (learnedOverrides && Object.keys(learnedOverrides).length > 0) {
     const key = getMerchantKey(draft)

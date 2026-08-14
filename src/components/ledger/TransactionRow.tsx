@@ -41,6 +41,11 @@ export default function TransactionRow({ tx, onDelete, onDateChange }: Props) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const Icon = PHOSPHOR_ICON_MAP[tx.category.icon]
   const isIncome = tx.type === 'income'
+  const isTransfer = tx.type === 'transfer'
+  // Transfers move money between the user's own pockets — shown neutrally with no
+  // +/− since they're neither spending nor income.
+  const amountColor = isTransfer ? '#6e9990' : isIncome ? '#1f6950' : '#ba1a1a'
+  const amountSign = isTransfer ? '' : isIncome ? '+' : '−'
 
   return (
     <motion.div
@@ -87,9 +92,9 @@ export default function TransactionRow({ tx, onDelete, onDateChange }: Props) {
             <span className="truncate text-sm font-semibold" style={{ color: '#191c1c' }}>{tx.merchant}</span>
             <span
               className="shrink-0 font-mono text-sm font-medium"
-              style={{ color: isIncome ? '#1f6950' : '#ba1a1a' }}
+              style={{ color: amountColor }}
             >
-              {isIncome ? '+' : '−'}
+              {amountSign}
               {formatCurrency(tx.amount)}
             </span>
           </div>
