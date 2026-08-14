@@ -1,5 +1,5 @@
 import { PAYMENT_METHODS, DEFAULT_PAYMENT_METHOD } from '@/types'
-import type { TransactionDraft, PaymentMethodId } from '@/types'
+import type { TransactionDraft, PaymentMethodId, DebtDirection } from '@/types'
 
 // ─── Amount Extraction ────────────────────────────────────────────────────────
 
@@ -87,6 +87,85 @@ export function parseDirection(text: string): 'expense' | 'income' | 'transfer' 
   if (TRANSFER_KEYWORDS.some((kw) => lower.includes(kw))) return 'transfer'
   if (INCOME_KEYWORDS.some((kw) => lower.includes(kw))) return 'income'
   return 'expense'
+}
+
+// ─── Debt Direction & Person Inference ─────────────────────────────────────────
+
+// Phrases that clearly mean the money is coming back to you eventually — someone
+// owes you (a receivable). "lent", "utang sa akin" (owed to me), etc.
+const OWED_TO_ME_KEYWORDS = [
+  'lent', 'lend', 'loaned', 'i lent', 'owes me', 'owe me', 'owes',
+  'utang sa akin', 'utang niya', 'pautang', 'pinautang', 'nangutang sa akin',
+]
+
+// Phrases that clearly mean YOU owe someone (a liability): "borrowed", "I owe".
+const I_OWE_KEYWORDS = [
+  'borrowed', 'borrow', 'i owe', 'owe ', 'utang ko', 'nangutang ako',
+  'inutang', 'hiniram', 'hiram',
+]
+
+/**
+ * Infer the direction of a debt entry from its text. Returns `null` when the
+ * phrasing is ambiguous (e.g. a bare "utang 500 juan") so callers can apply
+ * their own default. Checked most-specific first.
+ */
+export function parseDebtDirection(text: string): DebtDirection | null {
+  const lower = text.toLowerCase()
+  // "owed to me" cues take priority over the generic "owe" substring in the
+  // "i owe" list so "owes me 500" isn't mis-read as a liability.
+  if (OWED_TO_ME_KEYWORDS.some((kw) => lower.includes(kw))) return 'owed_to_me'
+  if (I_OWE_KEYWORDS.some((kw) => lower.includes(kw))) return 'i_owe'
+  return null
+}
+
+// Pronouns and connectors that are never a counterparty name — filtered out so
+// "owes me" doesn't capture "me", etc.
+const PERSON_STOPWORDS = new Set([
+  'me', 'you', 'him', 'her', 'them', 'us', 'i', 'to', 'from', 'kay', 'sa',
+])
+
+// A currency/amount chunk that may sit between the connector and the name
+// ("borrowed 1000 from mama", "lent to juan 500"): skipped during capture.
+const AMT = String.raw`(?:[₱$]?\s*[\d,]+(?:\.\d{1,2})?\s*(?:php|usd|pesos?|dollars?|k|m)?\s*)?`
+
+// Debt verbs / connectors that sit around the person's name, used to isolate it.
+const DEBT_PERSON_PATTERNS: RegExp[] = [
+  // "<subject> owes/owe me" — the person is the SUBJECT, before the verb.
+  /\b([a-z][a-z.'-]{0,30}?)\s+owes?\s+me\b/i,
+  // "to/from/kay/sa [amount] <name>" — explicit connector, amount tolerated.
+  new RegExp(String.raw`\b(?:to|from|kay|sa)\s+${AMT}([a-z][a-z .'-]{0,30}?)(?=\s|$)`, 'i'),
+  // "<verb> [amount] <name>" — verb directly followed by the name. `owe`/`owes`
+  // come last (the subject-first "X owes me" pattern above already ran) so
+  // "i owe ana" captures "ana" while "ana owes me" stays subject-anchored.
+  new RegExp(String.raw`\b(?:lent|loaned|borrowed|borrow|repaid|repay|paid\s+back|owes?)\s+${AMT}([a-z][a-z .'-]{0,30}?)(?=\s|$)`, 'i'),
+]
+
+/**
+ * Best-effort extraction of the counterparty's name from a debt entry. Returns
+ * null when nothing usable is found so callers can fall back to the merchant.
+ */
+export function parseDebtPerson(text: string): string | null {
+  const stripped = stripDates(text)
+  for (const pattern of DEBT_PERSON_PATTERNS) {
+    const m = stripped.match(pattern)
+    if (m && m[1]) {
+      // Drop amount words / noise, then reject pure stopwords/pronouns.
+      const cleaned = m[1]
+        .replace(/\b(?:php|usd|pesos?|dollars?)\b/gi, '')
+        .replace(/[\d,₱$]+/g, '')
+        .trim()
+      const words = cleaned
+        .split(/\s+/)
+        .filter((w) => w && !PERSON_STOPWORDS.has(w.toLowerCase()))
+      if (words.length > 0) {
+        return words
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+          .slice(0, 3)
+          .join(' ')
+      }
+    }
+  }
+  return null
 }
 
 // ─── Payment Method Detection ───────────────────────────────────────────────────

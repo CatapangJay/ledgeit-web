@@ -9,7 +9,6 @@ import { createClient } from '@/lib/supabase/client'
 import { useStore } from '@/lib/store'
 import { debtOutstanding } from '@/types'
 import BudgetAllocationSheet from '@/components/budget/BudgetAllocationSheet'
-import DebtSheet from '@/components/debt/DebtSheet'
 
 type Section = 'profile' | 'password'
 
@@ -34,7 +33,6 @@ export default function AccountPage() {
 
   const [activeSection, setActiveSection] = useState<Section>('profile')
   const [budgetSheetOpen, setBudgetSheetOpen] = useState(false)
-  const [debtSheetOpen, setDebtSheetOpen] = useState(false)
 
   const budgetAllocations = useStore((s) => s.budgetAllocations)
   const activePlan = budgetAllocations.find((a) => a.isActive) ?? null
@@ -254,7 +252,7 @@ export default function AccountPage() {
 
             {/* Debts & Loans */}
             <button
-              onClick={() => setDebtSheetOpen(true)}
+              onClick={() => router.push('/debts')}
               aria-label="Manage debts and loans"
               className="flex items-center gap-3 rounded-xl border border-ledge-border bg-ledge-surface p-4 text-left transition-colors hover:bg-ledge-surface2 active:scale-[0.99]"
               style={{ boxShadow: '0 2px 12px rgba(0,53,46,0.04)' }}
@@ -388,7 +386,6 @@ export default function AccountPage() {
       </AnimatePresence>
 
       <BudgetAllocationSheet open={budgetSheetOpen} onClose={() => setBudgetSheetOpen(false)} />
-      <DebtSheet open={debtSheetOpen} onClose={() => setDebtSheetOpen(false)} />
     </div>
   )
 }

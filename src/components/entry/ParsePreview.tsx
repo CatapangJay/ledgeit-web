@@ -8,7 +8,7 @@ import DatePickerSheet from '@/components/ui/DatePickerSheet'
 import { formatCurrency, formatDate } from '@/lib/formatters'
 import { getIconComponent } from '@/lib/iconMap'
 import { CATEGORIES, PAYMENT_METHODS, resolvePaymentMethod } from '@/types'
-import type { Category, TransactionDraft, CustomCategory, PaymentMethodId } from '@/types'
+import type { Category, TransactionDraft, CustomCategory, PaymentMethodId, DebtDirection } from '@/types'
 
 // Renders a Phosphor icon by its string name. Declared at module scope and uses
 // createElement (not <Icon/>) so it's a stable component, not one created during render.
@@ -99,6 +99,12 @@ interface Props {
   onMerchantChange?: (name: string) => void
   onDateChange?: (date: string) => void
   onPaymentMethodChange?: (method: PaymentMethodId) => void
+  /** Debt entries only: current lent-out vs borrowed direction. */
+  debtDirection?: DebtDirection
+  onDebtDirectionChange?: (direction: DebtDirection) => void
+  /** Debt entries only: optional expected-repayment date (ISO YYYY-MM-DD). */
+  debtDueDate?: string
+  onDebtDueDateChange?: (date: string | undefined) => void
   /** Bulk mode: whether this entry is selected for logging */
   selected?: boolean
   onToggleSelect?: () => void
@@ -123,15 +129,17 @@ const itemVariants = {
   },
 }
 
-export default function ParsePreview({ draft, category, confidence, customCategories = [], onCategoryChange, onMerchantChange, onDateChange, onPaymentMethodChange, selected, onToggleSelect, logged = false }: Props) {
+export default function ParsePreview({ draft, category, confidence, customCategories = [], onCategoryChange, onMerchantChange, onDateChange, onPaymentMethodChange, debtDirection, onDebtDirectionChange, debtDueDate, onDebtDueDateChange, selected, onToggleSelect, logged = false }: Props) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [datePickerOpen, setDatePickerOpen] = useState(false)
+  const [duePickerOpen, setDuePickerOpen] = useState(false)
   const [methodPickerOpen, setMethodPickerOpen] = useState(false)
   const [editingMerchant, setEditingMerchant] = useState(false)
   const [merchantInput, setMerchantInput] = useState('')
   const merchantInputRef = useRef<HTMLInputElement>(null)
   const isIncome = draft.type === 'income'
   const isTransfer = draft.type === 'transfer'
+  const isDebt = category.id === 'debts'
   const isBulk = onToggleSelect !== undefined
   const method = resolvePaymentMethod(draft.paymentMethod)
 
@@ -340,6 +348,73 @@ export default function ParsePreview({ draft, category, confidence, customCatego
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Debt direction toggle — lets the user confirm/correct the inferred
+          lent-out vs borrowed direction before logging. Person = merchant. */}
+      {isDebt && onDebtDirectionChange && !logged && (
+        <motion.div variants={itemVariants} className="mt-3">
+          <div className="flex rounded-xl p-1" style={{ background: '#f0f4f2' }}>
+            {([
+              { id: 'owed_to_me' as const, label: 'They owe me' },
+              { id: 'i_owe' as const, label: 'I owe them' },
+            ]).map((opt) => {
+              const active = (debtDirection ?? 'owed_to_me') === opt.id
+              return (
+                <button
+                  key={opt.id}
+                  onClick={() => onDebtDirectionChange(opt.id)}
+                  className="flex-1 rounded-lg py-1.5 text-[11px] font-bold transition-colors"
+                  style={{
+                    background: active ? '#ffffff' : 'transparent',
+                    color: active ? '#00352e' : '#6e9990',
+                    boxShadow: active ? '0 1px 4px rgba(0,53,46,0.10)' : 'none',
+                  }}
+                >
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+          <p className="mt-1.5 text-[11px] leading-relaxed" style={{ color: '#6e9990' }}>
+            {(debtDirection ?? 'owed_to_me') === 'owed_to_me'
+              ? 'Tracked in Debts as money out now; repayments come back as income.'
+              : 'Tracked in Debts as money in now; your repayments go out as expense.'}
+          </p>
+
+          {/* Optional expected-repayment date — drives the due-soon reminder. */}
+          {onDebtDueDateChange && (
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setDuePickerOpen(true)}
+                className="flex flex-1 items-center gap-1.5 rounded-lg px-3 py-2 text-left text-[11px] font-semibold transition-colors"
+                style={{ background: '#f0f4f2', color: debtDueDate ? '#3f4946' : '#6e9990' }}
+              >
+                <CalendarBlank size={12} weight="regular" style={{ color: '#6e9990' }} aria-hidden="true" />
+                {debtDueDate ? `Due ${formatDate(debtDueDate)}` : 'Set a due date'}
+              </button>
+              {debtDueDate && (
+                <button
+                  type="button"
+                  onClick={() => onDebtDueDateChange(undefined)}
+                  aria-label="Clear due date"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+                  style={{ background: '#f0f4f2', color: '#6e9990' }}
+                >
+                  <X size={11} weight="bold" aria-hidden="true" />
+                </button>
+              )}
+              <DatePickerSheet
+                open={duePickerOpen}
+                value={debtDueDate ?? draft.date}
+                max="2099-12-31"
+                onSelect={(d) => onDebtDueDateChange(d)}
+                onClose={() => setDuePickerOpen(false)}
+              />
+            </div>
+          )}
+        </motion.div>
+      )}
 
       {/* Transfer hint — clarifies it won't count toward spending */}
       {isTransfer && !logged && (

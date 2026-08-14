@@ -15,6 +15,7 @@ import TopCategoryBars from '@/components/dashboard/TopCategoryBars'
 import BiggestExpenseCard from '@/components/dashboard/BiggestExpenseCard'
 import TransferInfoCard from '@/components/dashboard/TransferInfoCard'
 import RecurringPaymentsCard from '@/components/dashboard/RecurringPaymentsCard'
+import DebtSummaryCard from '@/components/dashboard/DebtSummaryCard'
 import CoachLine from '@/components/dashboard/CoachLine'
 import HeroSideStats from '@/components/dashboard/HeroSideStats'
 import SmartEntrySheet from '@/components/entry/SmartEntrySheet'
@@ -223,6 +224,11 @@ export default function DashboardPage() {
             {/* ── Recent activity — flex-1 so it stretches to fill vertical space ── */}
             <motion.div variants={item} className="flex flex-col flex-1">
               <ExpenseFeed />
+            </motion.div>
+
+            {/* ── Debt position + nearest due reminder (self-hides when empty) ── */}
+            <motion.div variants={item}>
+              <DebtSummaryCard />
             </motion.div>
 
             {/* ── Recurring bills — additional density for desktop right column ── */}

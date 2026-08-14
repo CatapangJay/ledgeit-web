@@ -1,11 +1,13 @@
 'use client'
 
 import { useMemo } from 'react'
+import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
+import { CaretRight } from '@phosphor-icons/react'
 import { formatCurrencyCompact, formatDate } from '@/lib/formatters'
 import { useStore } from '@/lib/store'
 import { useIsDesktop } from '@/lib/useIsDesktop'
-import { PHOSPHOR_ICON_MAP } from '@/lib/iconMap'
+import { PHOSPHOR_ICON_MAP, getIconBg } from '@/lib/iconMap'
 import type { Transaction } from '@/types'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -15,17 +17,11 @@ import type { Transaction } from '@/types'
 const MAX_FEED_MOBILE = 5
 const MAX_FEED_DESKTOP = 8
 
-// Light-tinted icon badge backgrounds (iOS-style) + matching icon tint
-const ICON_TINT: Record<string, { bg: string; icon: string }> = {
-  restaurants:   { bg: 'rgba(224,92,42,0.12)',  icon: '#e05c2a' },
-  groceries:     { bg: 'rgba(40,164,106,0.12)', icon: '#1f8a56' },
-  transport:     { bg: 'rgba(2,132,199,0.12)',  icon: '#0284c7' },
-  shopping:      { bg: 'rgba(124,58,237,0.12)', icon: '#7c3aed' },
-  utilities:     { bg: 'rgba(217,119,6,0.12)',  icon: '#d97706' },
-  entertainment: { bg: 'rgba(219,39,119,0.12)', icon: '#db2777' },
-  health:        { bg: 'rgba(233,30,99,0.12)',  icon: '#e91e63' },
-  income:        { bg: 'rgba(31,105,80,0.12)',  icon: '#1f6950' },
-  other:         { bg: 'rgba(110,153,144,0.12)',icon: '#6e9990' },
+/** Amount sign + color per type. Transfers are neutral (money you still own). */
+function amountStyle(tx: Transaction): { sign: string; color: string } {
+  if (tx.type === 'income') return { sign: '+', color: '#1f6950' }
+  if (tx.type === 'transfer') return { sign: '', color: '#6e9990' }
+  return { sign: '−', color: '#ba1a1a' }
 }
 
 // ─── Date badge — mirrors the "% change" badge in Live Portfolio Feed ──────────
@@ -42,29 +38,26 @@ export default function ExpenseFeed() {
   const isDesktop = useIsDesktop()
   const maxFeed = isDesktop ? MAX_FEED_DESKTOP : MAX_FEED_MOBILE
 
-  const recentExpenses = useMemo(
+  // ALL activity — income, expenses, transfers, debts — newest date first
+  // (ties broken by created time so a back-dated entry can't outrank a newer day).
+  const sorted = useMemo(
     () =>
-      transactions
-        .filter((t) => t.type === 'expense')
-        // Latest transaction date first (ties broken by created time), so a
-        // back-dated older entry can't outrank a more recent day.
-        .sort((a, b) => (a.date === b.date ? b.createdAt.localeCompare(a.createdAt) : b.date.localeCompare(a.date)))
-        .slice(0, maxFeed),
-    [transactions, maxFeed],
-  )
-
-  const expenseCount = useMemo(
-    () => transactions.filter((t) => t.type === 'expense').length,
+      [...transactions].sort((a, b) =>
+        a.date === b.date ? b.createdAt.localeCompare(a.createdAt) : b.date.localeCompare(a.date)
+      ),
     [transactions],
   )
+  const recent = useMemo(() => sorted.slice(0, maxFeed), [sorted, maxFeed])
+  const totalCount = transactions.length
 
-  const totalExpenses = useMemo(
-    () =>
-      transactions
-        .filter((t) => t.type === 'expense')
-        .reduce((s, t) => s + t.amount, 0),
-    [transactions],
-  )
+  // Net this month across income (+) and expense (−); transfers are excluded.
+  const monthNet = useMemo(() => {
+    const now = new Date()
+    const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    return transactions
+      .filter((t) => t.date.startsWith(ym))
+      .reduce((s, t) => (t.type === 'income' ? s + t.amount : t.type === 'expense' ? s - t.amount : s), 0)
+  }, [transactions])
 
   return (
     <div
@@ -83,24 +76,24 @@ export default function ExpenseFeed() {
           className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold"
           style={{ background: '#f0f4f2', color: '#6e9990' }}
         >
-          {expenseCount}
+          {totalCount}
         </span>
       </div>
 
-      {recentExpenses.length === 0 ? (
+      {recent.length === 0 ? (
         <div className="px-5 pb-5">
           <p className="text-sm" style={{ color: '#6e9990' }}>
-            No expenses recorded yet.
+            Nothing recorded yet.
           </p>
         </div>
       ) : (
         <>
           {/* Feed rows */}
           <AnimatePresence initial={false}>
-            {recentExpenses.map((tx, i) => {
+            {recent.map((tx, i) => {
               const Icon = PHOSPHOR_ICON_MAP[tx.category.icon]
-              const tint = ICON_TINT[tx.category.id] ?? { bg: 'rgba(110,153,144,0.12)', icon: '#6e9990' }
-              const isIncome = tx.type === 'income'
+              const hex = getIconBg({ id: tx.category.id, color: tx.category.color })
+              const { sign, color } = amountStyle(tx)
               return (
                 <motion.div
                   key={tx.id}
@@ -114,9 +107,9 @@ export default function ExpenseFeed() {
                   {/* Category icon — light tinted */}
                   <div
                     className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
-                    style={{ background: tint.bg }}
+                    style={{ background: `${hex}1f` }}
                   >
-                    {Icon && <Icon size={16} weight="fill" color={tint.icon} aria-hidden="true" />}
+                    {Icon && <Icon size={16} weight="fill" color={hex} aria-hidden="true" />}
                   </div>
 
                   {/* Merchant + category */}
@@ -132,27 +125,35 @@ export default function ExpenseFeed() {
                   {/* Amount */}
                   <span
                     className="shrink-0 font-mono text-[13px] font-bold tabular-nums"
-                    style={{ color: isIncome ? '#1f6950' : '#ba1a1a' }}
+                    style={{ color }}
                   >
-                    {isIncome ? '+' : '−'}{formatCurrencyCompact(tx.amount)}
+                    {sign}{formatCurrencyCompact(tx.amount)}
                   </span>
                 </motion.div>
               )
             })}
           </AnimatePresence>
 
-          {/* Footer */}
-          <div
-            className="flex items-center justify-between px-5 py-3 rounded-b-2xl"
+          {/* Footer — net this month + link to full history */}
+          <Link
+            href="/history"
+            className="flex items-center justify-between px-5 py-3 rounded-b-2xl transition-colors hover:bg-ledge-surface"
             style={{ borderTop: '1px solid #f0f4f2', background: '#fcfefe' }}
           >
-            <span className="text-[11px] font-semibold" style={{ color: '#8eaeaa' }}>
-              All-time expenses
+            <span className="flex items-center gap-1 text-[11px] font-semibold" style={{ color: '#1f695d' }}>
+              View all
+              <CaretRight size={11} weight="bold" aria-hidden="true" />
             </span>
-            <span className="font-mono text-[13px] font-bold" style={{ color: '#ba1a1a' }}>
-              −{formatCurrencyCompact(totalExpenses)}
+            <span className="flex items-baseline gap-1.5">
+              <span className="text-[11px] font-semibold" style={{ color: '#8eaeaa' }}>Net this month</span>
+              <span
+                className="font-mono text-[13px] font-bold"
+                style={{ color: monthNet >= 0 ? '#1f6950' : '#ba1a1a' }}
+              >
+                {monthNet >= 0 ? '+' : '−'}{formatCurrencyCompact(Math.abs(monthNet))}
+              </span>
             </span>
-          </div>
+          </Link>
         </>
       )}
     </div>

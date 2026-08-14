@@ -3,11 +3,12 @@
 import { Suspense, useEffect, useState, useMemo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MagnifyingGlass, X } from '@phosphor-icons/react'
+import { MagnifyingGlass, X, SlidersHorizontal, CaretDown } from '@phosphor-icons/react'
 import FilterChips from '@/components/ledger/FilterChips'
 import DateFilterBar from '@/components/ledger/DateFilterBar'
 import DateGroup from '@/components/ledger/DateGroup'
 import TransactionRow from '@/components/ledger/TransactionRow'
+import TransactionEditSheet from '@/components/ledger/TransactionEditSheet'
 import CategoryBreakdownBar from '@/components/ledger/CategoryBreakdownBar'
 import { useStore } from '@/lib/store'
 import { formatCurrency } from '@/lib/formatters'
@@ -78,12 +79,19 @@ function LedgerContent() {
   const [customDate, setCustomDate] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [methodFilter, setMethodFilter] = useState<PaymentMethodId | 'all'>('all')
+  // Whether the filter controls (date, category, method) are expanded. Search
+  // stays outside so it's always reachable. Collapsed by default to keep the
+  // list the focus; auto-expands below when arriving with an active filter.
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  // The transaction currently open in the edit sheet, if any.
+  const [editingTx, setEditingTx] = useState<Transaction | null>(null)
 
   // Seed the custom-day filter when arriving via a heatmap deep-link.
   useEffect(() => {
     if (linkedDate) {
       setPeriod('custom')
       setCustomDate(linkedDate)
+      setFiltersOpen(true) // reveal the panel so the active day filter is visible
       // Strip the query param so it's a normal in-page filter from here on.
       router.replace('/ledger')
     }
@@ -100,6 +108,9 @@ function LedgerContent() {
   const range = useMemo(() => periodRange(period, customDate), [period, customDate])
   const query = search.trim().toLowerCase()
   const hasActiveFilters = filter !== 'all' || period !== 'all' || query !== '' || methodFilter !== 'all'
+  // Count of active controls inside the collapsible panel (search excluded — it
+  // has its own always-visible field). Surfaced as a badge on the toggle.
+  const activePanelFilters = (filter !== 'all' ? 1 : 0) + (period !== 'all' ? 1 : 0) + (methodFilter !== 'all' ? 1 : 0)
 
   function clearAll() {
     setFilter('all')
@@ -192,61 +203,104 @@ function LedgerContent() {
         )}
       </div>
 
-      {/* Date period filter */}
-      <div className="mb-2.5">
-        <DateFilterBar
-          period={period}
-          customDate={customDate}
-          onPeriodChange={handlePeriodChange}
-          onCustomDateChange={handleCustomDate}
-        />
-      </div>
-
-      {/* Category / type chips */}
-      <div className="mb-2.5">
-        <FilterChips active={filter} onChange={setFilter} customChips={customChips} />
-      </div>
-
-      {/* Payment-method chips */}
-      <div
-        className="mb-3 flex gap-2 overflow-x-auto pb-1 scrollbar-hide"
-        style={{ msOverflowStyle: 'none', scrollbarWidth: 'none' }}
-        role="group"
-        aria-label="Filter by payment method"
-      >
-        {([{ id: 'all' as const, short: 'Any method' }, ...PAYMENT_METHODS]).map((m) => {
-          const active = methodFilter === m.id
-          return (
-            <button
-              key={m.id}
-              onClick={() => setMethodFilter(m.id as PaymentMethodId | 'all')}
-              aria-pressed={active}
-              className="shrink-0 rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-colors"
-              style={
-                active
-                  ? { background: '#475569', color: '#ffffff' }
-                  : { background: '#f0f4f2', color: '#3f4946' }
-              }
+      {/* Filters toggle — expands the date / category / method controls */}
+      <div className="mb-2.5 flex items-center justify-between gap-2">
+        <button
+          onClick={() => setFiltersOpen((o) => !o)}
+          aria-expanded={filtersOpen}
+          aria-controls="ledger-filters"
+          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-colors"
+          style={{ background: '#f0f4f2', color: '#3f4946' }}
+        >
+          <SlidersHorizontal size={13} weight="bold" aria-hidden="true" />
+          Filters
+          {activePanelFilters > 0 && (
+            <span
+              className="flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
+              style={{ background: '#1f695d' }}
             >
-              {m.short}
-            </button>
-          )
-        })}
-      </div>
+              {activePanelFilters}
+            </span>
+          )}
+          <motion.span
+            animate={{ rotate: filtersOpen ? 180 : 0 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+            className="flex items-center"
+            aria-hidden="true"
+          >
+            <CaretDown size={12} weight="bold" />
+          </motion.span>
+        </button>
 
-      {/* Clear-all shortcut when any filter is active */}
-      {hasActiveFilters && (
-        <div className="mb-3 flex justify-end">
+        {/* Clear-all shortcut when any filter is active */}
+        {hasActiveFilters && (
           <button
             onClick={clearAll}
-            className="flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold"
+            className="flex items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-semibold"
             style={{ background: '#e7edeb', color: '#1f695d' }}
           >
-            Clear all filters
+            Clear all
             <X size={10} weight="bold" aria-hidden="true" />
           </button>
-        </div>
-      )}
+        )}
+      </div>
+
+      {/* Collapsible filter controls */}
+      <AnimatePresence initial={false}>
+        {filtersOpen && (
+          <motion.div
+            id="ledger-filters"
+            key="ledger-filters"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+            className="overflow-hidden"
+          >
+            {/* Date period filter */}
+            <div className="mb-2.5">
+              <DateFilterBar
+                period={period}
+                customDate={customDate}
+                onPeriodChange={handlePeriodChange}
+                onCustomDateChange={handleCustomDate}
+              />
+            </div>
+
+            {/* Category / type chips */}
+            <div className="mb-2.5">
+              <FilterChips active={filter} onChange={setFilter} customChips={customChips} />
+            </div>
+
+            {/* Payment-method chips */}
+            <div
+              className="mb-3 flex gap-2 overflow-x-auto pb-1 scrollbar-hide"
+              style={{ msOverflowStyle: 'none', scrollbarWidth: 'none' }}
+              role="group"
+              aria-label="Filter by payment method"
+            >
+              {([{ id: 'all' as const, short: 'Any method' }, ...PAYMENT_METHODS]).map((m) => {
+                const active = methodFilter === m.id
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => setMethodFilter(m.id as PaymentMethodId | 'all')}
+                    aria-pressed={active}
+                    className="shrink-0 rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-colors"
+                    style={
+                      active
+                        ? { background: '#475569', color: '#ffffff' }
+                        : { background: '#f0f4f2', color: '#3f4946' }
+                    }
+                  >
+                    {m.short}
+                  </button>
+                )
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Category breakdown bar */}
       <CategoryBreakdownBar transactions={filtered} />
@@ -281,6 +335,7 @@ function LedgerContent() {
                             tx={tx}
                             onDelete={deleteTransaction}
                             onDateChange={(id, date) => updateTransaction(id, { date })}
+                            onEdit={setEditingTx}
                           />
                         </div>
                       ))}
@@ -292,6 +347,14 @@ function LedgerContent() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <TransactionEditSheet
+        tx={editingTx}
+        customCategories={customCategories}
+        onClose={() => setEditingTx(null)}
+        onSave={updateTransaction}
+        onDelete={deleteTransaction}
+      />
     </div>
   )
 }

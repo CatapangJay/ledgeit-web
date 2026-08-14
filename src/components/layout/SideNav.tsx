@@ -2,21 +2,25 @@
 
 import { usePathname, useRouter } from 'next/navigation'
 import {
-  ChartPieSlice,
-  House,
-  List,
-  PlusCircle,
-  UserCircle,
+  ChartPieSliceIcon,
+  GridFourIcon,
+  HandPalmIcon,
+  HouseIcon,
+  ListIcon,
+  PlusCircleIcon,
+  UserCircleIcon,
 } from '@phosphor-icons/react'
 import { motion } from 'framer-motion'
 import { useState } from 'react'
 import SmartEntrySheet from '@/components/entry/SmartEntrySheet'
 
 const NAV_ITEMS = [
-  { label: 'Dashboard', icon: House, href: '/dashboard' },
-  { label: 'Ledger', icon: List, href: '/ledger' },
-  { label: 'Insights', icon: ChartPieSlice, href: '/insights' },
-  { label: 'Account', icon: UserCircle, href: '/account' },
+  { label: 'Dashboard', icon: HouseIcon, href: '/dashboard' },
+  { label: 'Ledger', icon: GridFourIcon, href: '/ledger' },
+  { label: 'Insights', icon: ChartPieSliceIcon, href: '/insights' },
+  { label: 'Debts', icon: HandPalmIcon, href: '/debts' },
+  { label: 'History', icon: ListIcon, href: '/history' },
+  // { label: 'Account', icon: UserCircleIcon, href: '/account' },
 ]
 
 export default function SideNav() {
@@ -66,7 +70,7 @@ export default function SideNav() {
               color: '#ffffff',
             }}
           >
-            <PlusCircle size={16} weight="bold" aria-hidden="true" />
+            <PlusCircleIcon size={16} weight="bold" aria-hidden="true" />
             <span className="text-sm font-semibold">Log Entry</span>
           </motion.button>
         </div>

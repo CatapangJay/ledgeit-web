@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, useId, useMemo } from 'react'
 import { motion, AnimatePresence, useMotionValue, animate } from 'framer-motion'
 import type { PanInfo } from 'framer-motion'
 import { X, CheckCircle, ArrowsOutSimple, ArrowsInSimple, Sparkle } from '@phosphor-icons/react'
-import { parseTransaction } from '@/lib/parser'
+import { parseTransaction, parseDebtDirection, parseDebtPerson } from '@/lib/parser'
 import { categorize, getMerchantKey } from '@/lib/categorizer'
 import { getMerchantSuggestions, resolveMerchant } from '@/lib/fuzzy'
 import { useStore } from '@/lib/store'
@@ -72,6 +72,7 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const addTransaction = useStore((s) => s.addTransaction)
+  const addDebt = useStore((s) => s.addDebt)
   const learnCategory = useStore((s) => s.learnCategory)
   const learnedMerchants = useStore((s) => s.learnedMerchants)
   const transactions = useStore((s) => s.transactions)
@@ -270,19 +271,32 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
 
   const handleLog = useCallback(() => {
     if (!parseResult?.draft.amount) return
-    const tx: Transaction = {
-      id: crypto.randomUUID(),
-      raw: parseResult.draft.raw,
-      amount: parseResult.draft.amount,
-      merchant: parseResult.draft.merchant,
-      category: parseResult.category,
-      date: parseResult.draft.date,
-      type: parseResult.draft.type,
-      paymentMethod: parseResult.draft.paymentMethod,
-      confidence: parseResult.confidence,
-      createdAt: new Date().toISOString(),
+    // Debt entries route to the Debts ledger; addDebt creates the linked ledger
+    // transaction itself, so addTransaction is skipped to avoid double-counting.
+    if (parseResult.category.id === 'debts') {
+      const direction = parseDebtDirection(parseResult.draft.raw) ?? 'owed_to_me'
+      const person = parseDebtPerson(parseResult.draft.raw) ?? parseResult.draft.merchant
+      addDebt({
+        personName: person || 'Someone',
+        direction,
+        principal: parseResult.draft.amount,
+        date: parseResult.draft.date,
+      })
+    } else {
+      const tx: Transaction = {
+        id: crypto.randomUUID(),
+        raw: parseResult.draft.raw,
+        amount: parseResult.draft.amount,
+        merchant: parseResult.draft.merchant,
+        category: parseResult.category,
+        date: parseResult.draft.date,
+        type: parseResult.draft.type,
+        paymentMethod: parseResult.draft.paymentMethod,
+        confidence: parseResult.confidence,
+        createdAt: new Date().toISOString(),
+      }
+      addTransaction(tx)
     }
-    addTransaction(tx)
     setSuccess(true)
     const t = setTimeout(() => {
       triggerClose()
@@ -291,7 +305,7 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
       setSuccess(false)
     }, 1000)
     return () => clearTimeout(t)
-  }, [parseResult, addTransaction, triggerClose])
+  }, [parseResult, addTransaction, addDebt, triggerClose])
 
   const canLog = !success && (parseResult?.draft.amount ?? null) !== null
 

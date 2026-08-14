@@ -11,6 +11,7 @@ interface DebtRow {
   principal: number
   note: string | null
   is_settled: boolean
+  due_date: string | null
   transaction_id: string | null
   created_at: string
   debt_repayments: DebtRepaymentRow[]
@@ -45,6 +46,7 @@ function rowToDebt(row: DebtRow): Debt {
     principal: Number(row.principal),
     note: row.note ?? undefined,
     isSettled: row.is_settled,
+    dueDate: row.due_date ? String(row.due_date).slice(0, 10) : undefined,
     transactionId: row.transaction_id ?? undefined,
     repayments: (row.debt_repayments ?? [])
       .map(rowToRepayment)
@@ -73,6 +75,7 @@ export async function createDebt(
     direction: DebtDirection
     principal: number
     note?: string
+    dueDate?: string
     transactionId?: string
   }
 ): Promise<Debt> {
@@ -85,6 +88,7 @@ export async function createDebt(
       direction: payload.direction,
       principal: payload.principal,
       note: payload.note ?? null,
+      due_date: payload.dueDate ?? null,
       transaction_id: payload.transactionId ?? null,
     })
     .select('*, debt_repayments(*)')
@@ -110,6 +114,29 @@ export async function insertDebtRepayment(
     .single()
   if (error) throw new Error(error.message)
   return rowToRepayment(data as DebtRepaymentRow)
+}
+
+export async function patchDebt(
+  debtId: string,
+  patch: {
+    personName?: string
+    direction?: DebtDirection
+    principal?: number
+    note?: string | null
+    dueDate?: string | null
+  }
+): Promise<void> {
+  const supabase = createClient()
+  const dbPatch: Record<string, unknown> = {}
+  if (patch.personName !== undefined) dbPatch.person_name = patch.personName
+  if (patch.direction !== undefined) dbPatch.direction = patch.direction
+  if (patch.principal !== undefined) dbPatch.principal = patch.principal
+  if (patch.note !== undefined) dbPatch.note = patch.note
+  if (patch.dueDate !== undefined) dbPatch.due_date = patch.dueDate
+  if (Object.keys(dbPatch).length === 0) return
+
+  const { error } = await supabase.from('debts').update(dbPatch).eq('id', debtId)
+  if (error) throw new Error(error.message)
 }
 
 export async function setDebtSettled(debtId: string, settled: boolean): Promise<void> {

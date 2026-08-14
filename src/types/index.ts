@@ -366,6 +366,9 @@ export interface Debt {
   principal: number         // Original amount lent/borrowed
   note?: string
   isSettled: boolean
+  /** Expected repayment date (ISO YYYY-MM-DD), if the user set one. Drives the
+   *  due-soon / overdue reminders. */
+  dueDate?: string
   /** Linked ledger transaction created when the debt originated, if any. */
   transactionId?: string
   repayments: DebtRepayment[]
@@ -376,6 +379,32 @@ export interface Debt {
 export function debtOutstanding(debt: Debt): number {
   const repaid = debt.repayments.reduce((s, r) => s + r.amount, 0)
   return Math.max(debt.principal - repaid, 0)
+}
+
+/**
+ * Due-status of a debt relative to `today` (ISO YYYY-MM-DD). Only meaningful for
+ * unsettled debts with a due date — otherwise returns `{ state: 'none' }`.
+ *
+ *  overdue   — due date has passed
+ *  due_soon  — due within the next `soonDays` days (inclusive of today)
+ *  upcoming  — has a due date further out
+ *
+ * `days` is the signed day delta (negative = days overdue, 0 = today).
+ */
+export function debtDueStatus(
+  debt: Debt,
+  today: string,
+  soonDays = 3,
+): { state: 'none' | 'overdue' | 'due_soon' | 'upcoming'; days: number } {
+  if (debt.isSettled || !debt.dueDate) return { state: 'none', days: 0 }
+  const toDays = (iso: string) => {
+    const [y, m, d] = iso.split('-').map(Number)
+    return Math.floor(Date.UTC(y, m - 1, d) / 86_400_000)
+  }
+  const days = toDays(debt.dueDate) - toDays(today)
+  if (days < 0) return { state: 'overdue', days }
+  if (days <= soonDays) return { state: 'due_soon', days }
+  return { state: 'upcoming', days }
 }
 
 // ─── Budget ───────────────────────────────────────────────────────────────────

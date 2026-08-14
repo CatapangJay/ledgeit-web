@@ -35,11 +35,16 @@ interface Props {
   onDelete: (id: string) => void
   /** When provided, the date becomes tappable and opens a native date picker. */
   onDateChange?: (id: string, date: string) => void
+  /** When provided, tapping the row (not the date) opens the edit sheet. */
+  onEdit?: (tx: Transaction) => void
 }
 
-export default function TransactionRow({ tx, onDelete, onDateChange }: Props) {
+export default function TransactionRow({ tx, onDelete, onDateChange, onEdit }: Props) {
   const x = useMotionValue(0)
   const [pickerOpen, setPickerOpen] = useState(false)
+  // Tracks whether the last pointer interaction was a drag (vs. a tap) so a
+  // swipe-to-delete gesture doesn't also trigger the edit sheet.
+  const [didDrag, setDidDrag] = useState(false)
   const Icon = PHOSPHOR_ICON_MAP[tx.category.icon]
   const isIncome = tx.type === 'income'
   const isTransfer = tx.type === 'transfer'
@@ -70,14 +75,18 @@ export default function TransactionRow({ tx, onDelete, onDateChange }: Props) {
         drag="x"
         dragConstraints={{ right: 0, left: -80 }}
         dragElastic={{ right: 0, left: 0.2 }}
+        onDragStart={() => setDidDrag(true)}
         onDragEnd={(_, info) => {
           if (info.offset.x < -52) {
             onDelete(tx.id)
           } else {
             animate(x, 0, { type: 'spring', stiffness: 300, damping: 26 })
           }
+          // Clear the drag flag after the click event would have fired.
+          setTimeout(() => setDidDrag(false), 0)
         }}
-        className="relative flex cursor-grab items-center gap-3 px-4 py-3.5 active:cursor-grabbing"
+        onClick={() => { if (!didDrag) onEdit?.(tx) }}
+        className={`relative flex items-center gap-3 px-4 py-3.5 ${onEdit ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'}`}
       >
         {/* Icon — rounded-xl */}
         <div
@@ -107,7 +116,7 @@ export default function TransactionRow({ tx, onDelete, onDateChange }: Props) {
             {onDateChange ? (
               <button
                 type="button"
-                onClick={() => setPickerOpen(true)}
+                onClick={(e) => { e.stopPropagation(); setPickerOpen(true) }}
                 onPointerDownCapture={(e) => e.stopPropagation()}
                 aria-label={`Change date — currently ${formatDate(tx.date)}`}
                 className="flex items-center gap-1 rounded-md px-1 py-0.5 font-mono text-xs transition-colors hover:bg-ledge-surface"

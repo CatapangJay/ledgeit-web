@@ -29,6 +29,7 @@ import {
 import {
   fetchDebts,
   createDebt,
+  patchDebt,
   insertDebtRepayment,
   setDebtSettled,
   deleteDebt,
@@ -134,7 +135,8 @@ interface StoreActions {
   hasSetupBudget: () => boolean
   // ── Debts ──────────────────────────────────────────────────────────────────
   loadDebts: (userId: string) => Promise<void>
-  addDebt: (payload: { personName: string; direction: DebtDirection; principal: number; note?: string; date: string }) => Promise<void>
+  addDebt: (payload: { personName: string; direction: DebtDirection; principal: number; note?: string; dueDate?: string; date: string }) => Promise<void>
+  updateDebt: (debtId: string, payload: { personName: string; direction: DebtDirection; principal: number; note?: string; dueDate?: string }) => Promise<void>
   recordDebtRepayment: (debtId: string, payload: { amount: number; date: string }) => Promise<void>
   toggleDebtSettled: (debtId: string) => Promise<void>
   removeDebt: (debtId: string) => Promise<void>
@@ -510,7 +512,7 @@ export const useStore = create<AppStore>()((set, get) => ({
     }
   },
 
-  async addDebt({ personName, direction, principal, note, date }) {
+  async addDebt({ personName, direction, principal, note, dueDate, date }) {
     const userId = get().userId
     if (!userId) return
 
@@ -534,11 +536,50 @@ export const useStore = create<AppStore>()((set, get) => ({
     }
 
     try {
-      const debt = await createDebt(userId, { personName, direction, principal, note, transactionId: txId })
+      const debt = await createDebt(userId, { personName, direction, principal, note, dueDate, transactionId: txId })
       set((state) => ({ debts: [debt, ...state.debts] }))
       get().addTransaction(tx) // optimistic + background DB write
     } catch (err) {
       console.error('[store] addDebt failed:', err)
+    }
+  },
+
+  async updateDebt(debtId, { personName, direction, principal, note, dueDate }) {
+    const debt = get().debts.find((d) => d.id === debtId)
+    if (!debt) return
+    const prevDebts = get().debts
+
+    // Optimistically apply the debt edits.
+    set((state) => ({
+      debts: state.debts.map((d) =>
+        d.id === debtId ? { ...d, personName, direction, principal, note, dueDate } : d
+      ),
+    }))
+
+    // Keep the linked origination transaction in step with the edited debt:
+    // its label, amount, and direction (expense when lent out, income when
+    // borrowed) all derive from these fields.
+    if (debt.transactionId) {
+      const label = direction === 'owed_to_me' ? `Lent to ${personName}` : `Borrowed from ${personName}`
+      get().updateTransaction(debt.transactionId, {
+        merchant: label,
+        amount: principal,
+        type: direction === 'owed_to_me' ? 'expense' : 'income',
+        note,
+      })
+    }
+
+    try {
+      await patchDebt(debtId, {
+        personName,
+        direction,
+        principal,
+        note: note ?? null,
+        dueDate: dueDate ?? null,
+      })
+    } catch (err) {
+      console.error('[store] updateDebt failed:', err)
+      set({ debts: prevDebts })
     }
   },
 
