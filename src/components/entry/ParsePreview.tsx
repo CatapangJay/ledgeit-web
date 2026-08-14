@@ -4,6 +4,7 @@ import { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, CalendarBlank, CheckCircle, Circle } from '@phosphor-icons/react'
 import CategoryBadge from './CategoryBadge'
+import DatePickerSheet from '@/components/ui/DatePickerSheet'
 import { formatCurrency, formatDate } from '@/lib/formatters'
 import { getIconComponent } from '@/lib/iconMap'
 import { CATEGORIES } from '@/types'
@@ -117,10 +118,10 @@ const itemVariants = {
 
 export default function ParsePreview({ draft, category, confidence, customCategories = [], onCategoryChange, onMerchantChange, onDateChange, selected, onToggleSelect, logged = false }: Props) {
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [datePickerOpen, setDatePickerOpen] = useState(false)
   const [editingMerchant, setEditingMerchant] = useState(false)
   const [merchantInput, setMerchantInput] = useState('')
   const merchantInputRef = useRef<HTMLInputElement>(null)
-  const dateInputRef = useRef<HTMLInputElement>(null)
   const isIncome = draft.type === 'income'
   const isBulk = onToggleSelect !== undefined
 
@@ -253,7 +254,7 @@ export default function ParsePreview({ draft, category, confidence, customCatego
           )}
         </div>
         <button
-          onClick={() => { if (!logged && onDateChange) dateInputRef.current?.showPicker() }}
+          onClick={() => { if (!logged && onDateChange) setDatePickerOpen(true) }}
           disabled={logged || !onDateChange}
           aria-label="Change date"
           className="flex shrink-0 items-center gap-1 text-[11px] font-medium transition-colors"
@@ -262,17 +263,12 @@ export default function ParsePreview({ draft, category, confidence, customCatego
           <CalendarBlank size={11} weight="regular" aria-hidden="true" />
           {formatDate(draft.date)}
         </button>
-        {/* Hidden native date input — triggered programmatically */}
         {onDateChange && (
-          <input
-            ref={dateInputRef}
-            type="date"
+          <DatePickerSheet
+            open={datePickerOpen}
             value={draft.date}
-            max={new Date().toISOString().split('T')[0]}
-            onChange={(e) => { if (e.target.value) onDateChange(e.target.value) }}
-            className="sr-only"
-            aria-hidden="true"
-            tabIndex={-1}
+            onSelect={(date) => onDateChange(date)}
+            onClose={() => setDatePickerOpen(false)}
           />
         )}
       </motion.div>

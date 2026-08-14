@@ -1,9 +1,11 @@
 'use client'
 
+import { useState } from 'react'
 import { useMotionValue, motion, animate } from 'framer-motion'
-import { Trash } from '@phosphor-icons/react'
+import { Trash, CalendarBlank } from '@phosphor-icons/react'
 import { PHOSPHOR_ICON_MAP, CUSTOM_COLOR_OPTIONS } from '@/lib/iconMap'
-import { formatCurrency, formatTime } from '@/lib/formatters'
+import { formatCurrency, formatDate, formatTime } from '@/lib/formatters'
+import DatePickerSheet from '@/components/ui/DatePickerSheet'
 import type { Transaction } from '@/types'
 
 // Preset icon background colors (saturated shade of each category color)
@@ -30,10 +32,13 @@ function getCategoryIconBg(cat: Transaction['category']): string {
 interface Props {
   tx: Transaction
   onDelete: (id: string) => void
+  /** When provided, the date becomes tappable and opens a native date picker. */
+  onDateChange?: (id: string, date: string) => void
 }
 
-export default function TransactionRow({ tx, onDelete }: Props) {
+export default function TransactionRow({ tx, onDelete, onDateChange }: Props) {
   const x = useMotionValue(0)
+  const [pickerOpen, setPickerOpen] = useState(false)
   const Icon = PHOSPHOR_ICON_MAP[tx.category.icon]
   const isIncome = tx.type === 'income'
 
@@ -91,10 +96,35 @@ export default function TransactionRow({ tx, onDelete }: Props) {
           <div className="mt-0.5 flex items-center gap-1.5">
             <span className="text-xs" style={{ color: getCategoryIconBg(tx.category), opacity: 0.9 }}>{tx.category.label}</span>
             <span className="text-xs" style={{ color: '#cde0db' }}>·</span>
+            {onDateChange ? (
+              <button
+                type="button"
+                onClick={() => setPickerOpen(true)}
+                onPointerDownCapture={(e) => e.stopPropagation()}
+                aria-label={`Change date — currently ${formatDate(tx.date)}`}
+                className="flex items-center gap-1 rounded-md px-1 py-0.5 font-mono text-xs transition-colors hover:bg-ledge-surface"
+                style={{ color: '#6e9990' }}
+              >
+                <CalendarBlank size={11} weight="regular" aria-hidden="true" />
+                {formatDate(tx.date)}
+              </button>
+            ) : (
+              <span className="font-mono text-xs" style={{ color: '#6e9990' }}>{formatDate(tx.date)}</span>
+            )}
+            <span className="text-xs" style={{ color: '#cde0db' }}>·</span>
             <span className="font-mono text-xs" style={{ color: '#6e9990' }}>{formatTime(tx.createdAt)}</span>
           </div>
         </div>
       </motion.div>
+
+      {onDateChange && (
+        <DatePickerSheet
+          open={pickerOpen}
+          value={tx.date}
+          onSelect={(date) => onDateChange(tx.id, date)}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
     </motion.div>
   )
 }

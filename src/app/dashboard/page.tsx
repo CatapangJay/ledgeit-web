@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { motion, useReducedMotion } from 'framer-motion'
 import { Bell, UserCircle, Sparkle } from '@phosphor-icons/react'
 import BalanceMetric from '@/components/dashboard/BalanceMetric'
@@ -9,6 +10,7 @@ import ExpenseFeed from '@/components/dashboard/ExpenseFeed'
 import SpendStrip from '@/components/dashboard/SpendStrip'
 import MonthOverview from '@/components/dashboard/MonthOverview'
 import WeeklyTrendChart from '@/components/dashboard/WeeklyTrendChart'
+import SpendingHeatmap from '@/components/dashboard/SpendingHeatmap'
 import RecurringPaymentsCard from '@/components/dashboard/RecurringPaymentsCard'
 import CoachLine from '@/components/dashboard/CoachLine'
 import HeroSideStats from '@/components/dashboard/HeroSideStats'
@@ -48,7 +50,10 @@ function getDateLabel() {
 }
 
 export default function DashboardPage() {
+  const router = useRouter()
   const [sheetOpen, setSheetOpen] = useState(false)
+  // When set, Smart Entry opens pre-dated to this ISO day (from the heatmap).
+  const [entryDate, setEntryDate] = useState<string | undefined>(undefined)
   const [budgetSheetOpen, setBudgetSheetOpen] = useState(false)
   const greeting = useMemo(() => getGreeting(), [])
   const dateLabel = useMemo(() => getDateLabel(), [])
@@ -79,7 +84,7 @@ export default function DashboardPage() {
             {/* Desktop-only Log Entry shortcut — mirrors the hero CTA at eye level */}
             <button
               aria-label="Quick log entry"
-              onClick={() => setSheetOpen(true)}
+              onClick={() => { setEntryDate(undefined); setSheetOpen(true) }}
               className="hidden h-11 items-center gap-2 rounded-full px-[18px] text-[12px] font-bold tracking-wide text-white transition-opacity hover:opacity-90 active:scale-95 lg:flex"
               style={{ background: 'linear-gradient(135deg, #1f695d, #00352e)' }}
             >
@@ -156,7 +161,7 @@ export default function DashboardPage() {
 
                   {/* Smart Entry CTA */}
                   <motion.button
-                    onClick={() => setSheetOpen(true)}
+                    onClick={() => { setEntryDate(undefined); setSheetOpen(true) }}
                     className="mt-5 flex w-fit items-center gap-2 rounded-full px-4 py-2"
                     style={{
                       background: 'rgba(255,255,255,0.11)',
@@ -193,6 +198,14 @@ export default function DashboardPage() {
               <SpendStrip />
             </motion.div>
 
+            {/* ── Monthly spending heatmap — which days ran hot vs. no entry ──── */}
+            <motion.div variants={item}>
+              <SpendingHeatmap
+                onAddForDate={(iso) => { setEntryDate(iso); setSheetOpen(true) }}
+                onViewDate={(iso) => router.push(`/ledger?date=${iso}`)}
+              />
+            </motion.div>
+
             {/* ── Recent activity — flex-1 so it stretches to fill vertical space ── */}
             <motion.div variants={item} className="flex flex-col flex-1">
               <ExpenseFeed />
@@ -206,7 +219,7 @@ export default function DashboardPage() {
         </motion.div>
       </div>
 
-      <SmartEntrySheet open={sheetOpen} onClose={() => setSheetOpen(false)} />
+      <SmartEntrySheet open={sheetOpen} onClose={() => setSheetOpen(false)} initialDate={entryDate} />
       <BudgetAllocationSheet open={budgetSheetOpen} onClose={() => setBudgetSheetOpen(false)} />
       <OnboardingBudgetSetup />
     </>

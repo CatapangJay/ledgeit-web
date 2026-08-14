@@ -32,6 +32,20 @@ interface ParseResult {
 interface Props {
   open: boolean
   onClose: () => void
+  /** When set (ISO YYYY-MM-DD), the bulk entry is pre-dated to this day: the
+   *  textarea is seeded with a standalone date line so entries typed below it
+   *  inherit that date via the bulk parser's context-date mechanism. */
+  initialDate?: string
+}
+
+/** Human date line the bulk parser recognizes as a standalone context date. */
+function isoToDateLine(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  })
 }
 
 // ─── Snap points ─────────────────────────────────────────────────────────────
@@ -39,7 +53,7 @@ const PARTIAL_FRACTION = 0.40 // 60% from top → 40% sheet height
 const getPartialTopPx = () => Math.round(window.innerHeight * PARTIAL_FRACTION)
 const getClosedTopPx = () => window.innerHeight
 
-export default function SmartEntrySheet({ open, onClose }: Props) {
+export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
   const labelId = useId()
   // Quick / single entry is disabled for now — bulk entry is the only mode.
   // The quick-entry state, UI, and handlers below are commented out but kept
@@ -183,13 +197,19 @@ export default function SmartEntrySheet({ open, onClose }: Props) {
   useEffect(() => {
     if (open) {
       setSuccess(false)
+      // Pre-date the bulk entry: seed a standalone date line so anything typed
+      // below inherits that day. Only seed when the box is empty so we never
+      // clobber text a user is already editing.
+      if (initialDate) {
+        setBulkText((prev) => (prev.trim() ? prev : `${isoToDateLine(initialDate)}\n`))
+      }
       const t = setTimeout(() => {
         if (mode === 'quick') textareaRef.current?.focus()
       }, 120)
       return () => clearTimeout(t)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  }, [open, initialDate])
 
   // Debounced parsing
   const handleChange = useCallback(
