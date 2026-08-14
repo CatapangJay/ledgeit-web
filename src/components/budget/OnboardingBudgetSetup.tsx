@@ -12,6 +12,7 @@ import { CATEGORIES } from '@/types'
 import type { BudgetAllocationItem, CustomCategory } from '@/types'
 import { getIconComponent } from '@/lib/iconMap'
 import { formatCurrency } from '@/lib/formatters'
+import { PLAN_TEMPLATES } from '@/lib/budgetTemplates'
 import AddCategoryForm from './AddCategoryForm'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -19,35 +20,6 @@ import AddCategoryForm from './AddCategoryForm'
 const EXPENSE_CATEGORIES = CATEGORIES.filter(
   (c) => c.id !== 'income' && c.id !== 'other'
 )
-
-type PlanTemplate = {
-  label: string
-  description: string
-  percents: Record<string, number>
-}
-
-const PLAN_TEMPLATES: PlanTemplate[] = [
-  {
-    label: 'Regular Month',
-    description: 'Balanced spending across all categories',
-    percents: { restaurants: 15, groceries: 20, transport: 10, shopping: 10, utilities: 10, entertainment: 5, health: 5, savings: 10, investments: 8, education: 4, personal_care: 3 },
-  },
-  {
-    label: 'Tight Month',
-    description: 'Cut spending to essentials only',
-    percents: { restaurants: 8, groceries: 28, transport: 15, shopping: 3, utilities: 18, entertainment: 3, health: 6, savings: 12, investments: 5, education: 1, personal_care: 1 },
-  },
-  {
-    label: 'Vacation Mode',
-    description: 'More dining, fun & transport; fewer essentials',
-    percents: { restaurants: 22, groceries: 12, transport: 18, shopping: 14, utilities: 6, entertainment: 10, health: 3, savings: 5, investments: 3, education: 2, personal_care: 5 },
-  },
-  {
-    label: 'Savings Mode',
-    description: 'Bare minimum — maximise savings this month',
-    percents: { restaurants: 6, groceries: 26, transport: 13, shopping: 3, utilities: 16, entertainment: 2, health: 6, savings: 15, investments: 10, education: 2, personal_care: 1 },
-  },
-]
 
 const INCOME_SOURCES = [
   { id: 'salary',      label: 'Salary / Employment',    description: 'Monthly wages or fixed employment pay',       Icon: Briefcase },

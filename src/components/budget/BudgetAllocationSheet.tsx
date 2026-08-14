@@ -9,6 +9,7 @@ import {
   PencilSimple,
   Trash,
   Plus,
+  Sparkle,
 } from '@phosphor-icons/react'
 import { useStore } from '@/lib/store'
 import { DEFAULT_BUDGETS } from '@/lib/store'
@@ -17,6 +18,7 @@ import { CATEGORIES } from '@/types'
 import type { BudgetAllocationItem, CustomCategory } from '@/types'
 import { formatCurrency } from '@/lib/formatters'
 import { getIconComponent } from '@/lib/iconMap'
+import { PLAN_TEMPLATES } from '@/lib/budgetTemplates'
 import AddCategoryForm from './AddCategoryForm'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -226,6 +228,24 @@ export default function BudgetAllocationSheet({ open, onClose }: Props) {
       )
     }
     setAllocationMode(mode)
+  }
+
+  /** Apply a template's percentages to the current category rows. Amounts are
+   *  recomputed against the total budget when one is set; otherwise the plan
+   *  switches to percent mode so the split is meaningful without a total. */
+  function applyTemplate(percentsByCat: Record<string, number>) {
+    const nextPercents: Record<string, number> = {}
+    for (const item of items) nextPercents[item.categoryId] = percentsByCat[item.categoryId] ?? 0
+    setPercents(nextPercents)
+    setAllocationMode('percent')
+    if (totalBudget > 0) {
+      setItems((prev) =>
+        prev.map((item) => ({
+          ...item,
+          limit: Math.round(((nextPercents[item.categoryId] ?? 0) / 100) * totalBudget),
+        }))
+      )
+    }
   }
 
   function handlePercentChange(categoryId: string, raw: string) {
@@ -500,6 +520,33 @@ export default function BudgetAllocationSheet({ open, onClose }: Props) {
                             {mode === 'amount' ? '₱ Amount' : '% Percent'}
                           </button>
                         ))}
+                      </div>
+
+                      {/* Quick-apply templates */}
+                      <div className="mb-4">
+                        <div className="mb-2 flex items-center gap-1.5">
+                          <Sparkle size={12} weight="fill" style={{ color: '#1f695d' }} aria-hidden="true" />
+                          <p className="text-[11px] font-bold uppercase tracking-widest" style={{ color: '#6e9990' }}>
+                            Quick templates
+                          </p>
+                        </div>
+                        <div
+                          className="flex gap-2 overflow-x-auto pb-1"
+                          style={{ scrollbarWidth: 'none' }}
+                        >
+                          {PLAN_TEMPLATES.map((t) => (
+                            <motion.button
+                              key={t.label}
+                              whileTap={{ scale: 0.94 }}
+                              onClick={() => applyTemplate(t.percents)}
+                              title={t.description}
+                              className="shrink-0 rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-colors"
+                              style={{ background: '#f0f4f2', color: '#1f695d', border: '1px solid #cde0db' }}
+                            >
+                              {t.label}
+                            </motion.button>
+                          ))}
+                        </div>
                       </div>
 
                       {/* Category limits header + allocation summary */}

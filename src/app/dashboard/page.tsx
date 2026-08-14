@@ -11,6 +11,8 @@ import SpendStrip from '@/components/dashboard/SpendStrip'
 import MonthOverview from '@/components/dashboard/MonthOverview'
 import WeeklyTrendChart from '@/components/dashboard/WeeklyTrendChart'
 import SpendingHeatmap from '@/components/dashboard/SpendingHeatmap'
+import TopCategoryBars from '@/components/dashboard/TopCategoryBars'
+import BiggestExpenseCard from '@/components/dashboard/BiggestExpenseCard'
 import RecurringPaymentsCard from '@/components/dashboard/RecurringPaymentsCard'
 import CoachLine from '@/components/dashboard/CoachLine'
 import HeroSideStats from '@/components/dashboard/HeroSideStats'
@@ -188,6 +190,16 @@ export default function DashboardPage() {
             {/* ── 7-day spending trend (the one chart the dashboard carries) ──── */}
             <motion.div variants={item}>
               <WeeklyTrendChart />
+            </motion.div>
+
+            {/* ── Top categories this month — tap a row to filter the ledger ──── */}
+            <motion.div variants={item}>
+              <TopCategoryBars />
+            </motion.div>
+
+            {/* ── Biggest single expense this month ────────────────────────────── */}
+            <motion.div variants={item}>
+              <BiggestExpenseCard />
             </motion.div>
           </motion.div>
 

@@ -26,7 +26,10 @@ function rowToTransaction(row: TransactionRow, customCats: CustomCategory[] = []
     amount: Number(row.amount),
     merchant: row.merchant,
     category: resolveCategory(row.category_id, customCats),
-    date: row.date,
+    // Normalize to YYYY-MM-DD. A Postgres DATE can surface with a time/zone
+    // suffix depending on the client; slicing enforces the documented contract
+    // so exact-match comparisons (7-day trend, today's spend) work reliably.
+    date: String(row.date).slice(0, 10),
     type: row.type as 'expense' | 'income',
     confidence: Number(row.confidence),
     isRecurring: row.is_recurring,

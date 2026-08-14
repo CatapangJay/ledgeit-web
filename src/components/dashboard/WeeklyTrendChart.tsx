@@ -1,8 +1,15 @@
 'use client'
 
 import { useMemo } from 'react'
-import { motion } from 'framer-motion'
-import { formatCurrencyCompact } from '@/lib/formatters'
+import {
+  Area,
+  AreaChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import { formatCurrency, formatCurrencyCompact } from '@/lib/formatters'
 import { useStore } from '@/lib/store'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -25,15 +32,48 @@ function weekdayLabel(dateStr: string): string {
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 2)
 }
 
+interface DayDatum {
+  date: string
+  expense: number
+  income: number
+  label: string
+}
+
+// ─── Custom tooltip ────────────────────────────────────────────────────────────
+
+interface TooltipProps {
+  active?: boolean
+  payload?: { payload: DayDatum }[]
+}
+
+function TrendTooltip({ active, payload }: TooltipProps) {
+  if (!active || !payload || payload.length === 0) return null
+  const d = payload[0].payload
+  return (
+    <div
+      className="rounded-xl px-3 py-2"
+      style={{ background: '#00352e', boxShadow: '0 6px 20px rgba(0,53,46,0.28)' }}
+    >
+      <p className="font-mono text-[13px] font-bold" style={{ color: '#ffffff' }}>
+        {formatCurrency(d.expense)}
+      </p>
+      {d.income > 0 && (
+        <p className="font-mono text-[10px] font-semibold" style={{ color: '#8fc0b4' }}>
+          +{formatCurrency(d.income)} income
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function WeeklyTrendChart() {
   const transactions = useStore((s) => s.transactions)
 
   const days = useMemo(() => getLastNDays(7), [])
-  const todayStr = days[days.length - 1]
 
-  const data = useMemo(() => {
+  const data = useMemo<DayDatum[]>(() => {
     return days.map((date) => {
       const dayTxns = transactions.filter((t) => t.date === date)
       const expense = dayTxns
@@ -48,7 +88,6 @@ export default function WeeklyTrendChart() {
 
   const totalWeek = data.reduce((s, d) => s + d.expense, 0)
   const avgDay = totalWeek / 7
-  const maxExpense = Math.max(...data.map((d) => d.expense), 1)
   const isEmpty = totalWeek === 0 && data.every((d) => d.income === 0)
 
   return (
@@ -72,41 +111,43 @@ export default function WeeklyTrendChart() {
         </span>
       </div>
 
-      {/* Bars */}
-      <div className="flex items-end justify-between gap-2" style={{ height: 88 }}>
-        {data.map((d, i) => {
-          const heightPct =
-            d.expense > 0 ? Math.max((d.expense / maxExpense) * 100, 6) : 2
-          const isToday = d.date === todayStr
-
-          return (
-            <div key={d.date} className="flex flex-1 flex-col items-center gap-1.5">
-              <div className="relative flex h-full w-full items-end justify-center">
-                {d.income > 0 && (
-                  <div
-                    className="absolute top-0 h-1.5 w-1.5 rounded-full"
-                    style={{ background: '#1f6950' }}
-                  />
-                )}
-                <motion.div
-                  initial={{ height: 0 }}
-                  animate={{ height: `${heightPct}%` }}
-                  transition={{ type: 'spring', stiffness: 80, damping: 18, delay: i * 0.05 }}
-                  className="w-full max-w-[22px] rounded-md"
-                  style={{
-                    background: isToday ? '#00352e' : d.expense > 0 ? '#a9c9c2' : '#f0f4f2',
-                  }}
-                />
-              </div>
-              <span
-                className="text-[10px] font-semibold"
-                style={{ color: isToday ? '#00352e' : '#a9c2bd' }}
-              >
-                {d.label}
-              </span>
-            </div>
-          )
-        })}
+      {/* Line chart */}
+      <div style={{ width: '100%', height: 120 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data} margin={{ top: 8, right: 6, bottom: 0, left: 6 }}>
+            <defs>
+              <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#1f695d" stopOpacity={0.24} />
+                <stop offset="100%" stopColor="#1f695d" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <XAxis
+              dataKey="label"
+              tickLine={false}
+              axisLine={false}
+              tick={{ fontSize: 10, fontWeight: 600, fill: '#a9c2bd' }}
+              dy={4}
+              interval={0}
+            />
+            {/* Hidden Y axis — used only to give the line vertical headroom */}
+            <YAxis hide domain={[0, (max: number) => (max <= 0 ? 1 : max * 1.15)]} />
+            <Tooltip
+              content={<TrendTooltip />}
+              cursor={{ stroke: '#cde0db', strokeWidth: 1, strokeDasharray: '3 3' }}
+            />
+            <Area
+              type="monotone"
+              dataKey="expense"
+              stroke="#1f695d"
+              strokeWidth={2.5}
+              fill="url(#trendFill)"
+              dot={{ r: 3, fill: '#ffffff', stroke: '#1f695d', strokeWidth: 2 }}
+              activeDot={{ r: 5, fill: '#00352e', stroke: '#ffffff', strokeWidth: 2 }}
+              isAnimationActive
+              animationDuration={700}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
       </div>
 
       {/* Legend */}
@@ -116,16 +157,10 @@ export default function WeeklyTrendChart() {
             Log an expense to start your weekly trend.
           </span>
         ) : (
-          <>
-            <div className="flex items-center gap-1.5">
-              <div className="h-2 w-2 rounded-sm" style={{ background: '#00352e' }} />
-              <span className="text-[10px] font-medium" style={{ color: '#6e9990' }}>Spending</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="h-1.5 w-1.5 rounded-full" style={{ background: '#1f6950' }} />
-              <span className="text-[10px] font-medium" style={{ color: '#6e9990' }}>Income day</span>
-            </div>
-          </>
+          <div className="flex items-center gap-1.5">
+            <div className="h-2 w-2 rounded-full" style={{ background: '#1f695d' }} />
+            <span className="text-[10px] font-medium" style={{ color: '#6e9990' }}>Daily spending</span>
+          </div>
         )}
       </div>
     </div>
