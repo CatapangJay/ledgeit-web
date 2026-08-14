@@ -15,7 +15,39 @@ const AMOUNT_PATTERNS = [
   /\b([\d,]{2,}(?:\.\d{1,2})?)\b/,
 ]
 
+// Arithmetic expression: two or more numbers joined by + or × (x / *). Requires
+// a real operator *between digits* so "337+130" or "3x150" match, but "3x kiddie
+// meal" (quantity prefix) and "1,246/cc" (payment suffix) do not. `-` and `/`
+// are deliberately excluded — they collide with dates (2026-08-08) and slash
+// dates / payment suffixes.
+const ARITHMETIC_PATTERN = /\d[\d,]*(?:\.\d{1,2})?(?:\s*[+x*×]\s*\d[\d,]*(?:\.\d{1,2})?)+/i
+
+/** Evaluate a +/× expression with correct precedence (× before +). Returns null
+ *  if any factor fails to parse or the total is non-positive. */
+function evalArithmetic(expr: string): number | null {
+  const normalized = expr.replace(/,/g, '').replace(/[x×]/gi, '*')
+  let total = 0
+  for (const term of normalized.split('+')) {
+    let product = 1
+    for (const factor of term.split('*')) {
+      const n = parseFloat(factor)
+      if (isNaN(n)) return null
+      product *= n
+    }
+    total += product
+  }
+  return total > 0 ? total : null
+}
+
 export function parseAmount(text: string): number | null {
+  // Arithmetic first: "337+130" → 467, "3x150" → 450. Only matches when an
+  // operator sits between two numbers, so plain amounts fall through untouched.
+  const arith = text.match(ARITHMETIC_PATTERN)
+  if (arith) {
+    const value = evalArithmetic(arith[0])
+    if (value !== null) return value
+  }
+
   for (const pattern of AMOUNT_PATTERNS) {
     const match = text.match(pattern)
     if (match) {
@@ -99,9 +131,11 @@ function fromMonthDay(month: number, day: number, year?: number): string | null 
 }
 
 // Month-name dates: "march 5", "mar 5 2026", "march 5, 2026", "5 march", "5 mar 2026"
+// The month↔day gap is `\s*` (optional) so glued forms like "Aug8" / "8aug"
+// — common in quickly-typed logs — parse just like their spaced equivalents.
 const MONTH_NAME_PATTERNS: RegExp[] = [
-  new RegExp(`\\b(${MONTH_ALT})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(\\d{4}))?\\b`, 'i'),
-  new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${MONTH_ALT})\\.?(?:,?\\s+(\\d{4}))?\\b`, 'i'),
+  new RegExp(`\\b(${MONTH_ALT})\\.?\\s*(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(\\d{4}))?\\b`, 'i'),
+  new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s*(${MONTH_ALT})\\.?(?:,?\\s+(\\d{4}))?\\b`, 'i'),
 ]
 
 function parseMonthName(text: string): string | null {
@@ -195,9 +229,10 @@ const DATE_STRIP_PATTERNS: RegExp[] = [
   // Relative words
   /\b(?:yesterday|today|now|last\s+(?:sunday|monday|tuesday|wednesday|thursday|friday|saturday)|\d+\s+days?\s+ago)\b/gi,
   /\b(?:sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/gi,
-  // Month-name dates
-  new RegExp(`\\b(${MONTH_ALT})\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s+\\d{4})?\\b`, 'gi'),
-  new RegExp(`\\b\\d{1,2}(?:st|nd|rd|th)?\\s+(${MONTH_ALT})\\.?(?:,?\\s+\\d{4})?\\b`, 'gi'),
+  // Month-name dates — `\s*` mirrors the optional gap in MONTH_NAME_PATTERNS so
+  // glued forms ("Aug8") are stripped from merchant text and read as date-only.
+  new RegExp(`\\b(${MONTH_ALT})\\.?\\s*\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s+\\d{4})?\\b`, 'gi'),
+  new RegExp(`\\b\\d{1,2}(?:st|nd|rd|th)?\\s*(${MONTH_ALT})\\.?(?:,?\\s+\\d{4})?\\b`, 'gi'),
   // ISO / slash dates
   /\b\d{4}-\d{2}-\d{2}\b/g,
   /\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g,
@@ -232,7 +267,14 @@ const STRIP_PATTERNS: RegExp[] = [
   /\b(?:php|usd)\s*[\d,]+(?:\.\d{1,2})?/gi,
   /\b[\d,]*\.?\d+\s*[km]\b/gi,
   /[\d,]+(?:\.\d{1,2})?\s*(?:dollars?|pesos?|php|usd)/gi,
+  // Arithmetic amounts ("337+130", "3x150") — stripped whole so no stray
+  // operator survives into the merchant name. Must precede the plain-number
+  // rule, which would otherwise leave the operator behind.
+  new RegExp(ARITHMETIC_PATTERN.source, 'gi'),
   /\b[\d,]{2,}(?:\.\d{1,2})?\b/g,
+  // Colon that separates a name from its amount ("Dali: 376" → "Dali"). Dropped
+  // here so it never leaks into the merchant name.
+  /:/g,
   // Filler words
   /\b(?:for|at|in|on|from|to|the|a|an|my|i|me|bought|paid|spent|got|used|went|worth|of)\b/gi,
 ]

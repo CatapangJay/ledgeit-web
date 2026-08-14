@@ -12,6 +12,11 @@ export type CategoryId =
   | 'investments'
   | 'education'
   | 'personal_care'
+  | 'church'
+  | 'gifts'
+  | 'family'
+  | 'kids'
+  | 'subscriptions'
   | 'income'
   | 'other'
 
@@ -157,6 +162,66 @@ export const CATEGORIES: Category[] = [
       'salon', 'haircut', 'barbershop', 'barber', 'beauty', 'spa', 'nails',
       'nail', 'massage', 'facial', 'skincare', 'skin care', 'grooming',
       'waxing', 'threading', 'lash', 'brow', 'manicure', 'pedicure',
+    ],
+  },
+  {
+    id: 'church',
+    label: 'Church & Giving',
+    icon: 'Church',
+    color: 'text-amber-800',
+    bgColor: 'bg-amber-50',
+    keywords: [
+      'church', 'tithe', 'tithes', 'offering', 'offerings', 'donation', 'donate',
+      'charity', 'ministry', 'missions', 'mission', 'love offering', 'pledge',
+      'alms', 'zakat', 'temple', 'mosque', 'diezmo',
+    ],
+  },
+  {
+    id: 'gifts',
+    label: 'Gifts',
+    icon: 'Gift',
+    color: 'text-red-700',
+    bgColor: 'bg-red-50',
+    keywords: [
+      'gift', 'gifts', 'present', 'presents', 'birthday', 'anniversary',
+      'wedding', 'christmas', 'pasalubong', 'aguinaldo', 'regalo', 'souvenir',
+      'flowers', 'bouquet',
+    ],
+  },
+  {
+    id: 'family',
+    label: 'Family & Support',
+    icon: 'UsersThree',
+    color: 'text-cyan-700',
+    bgColor: 'bg-cyan-50',
+    keywords: [
+      'family', 'parents', 'inay', 'tatay', 'nanay', 'mama', 'papa', 'mom',
+      'dad', 'lola', 'lolo', 'support', 'padala', 'remittance', 'ayuda',
+      'sustento', 'household', 'helper', 'yaya', 'kasambahay',
+    ],
+  },
+  {
+    id: 'kids',
+    label: 'Kids & Childcare',
+    icon: 'Baby',
+    color: 'text-pink-600',
+    bgColor: 'bg-pink-50',
+    keywords: [
+      'kids', 'kid', 'child', 'children', 'baby', 'diapers', 'diaper', 'milk',
+      'formula', 'toys', 'toy', 'daycare', 'childcare', 'kiddie', 'playground',
+      'stroller', 'nursery', 'pediatrician',
+    ],
+  },
+  {
+    id: 'subscriptions',
+    label: 'Subscriptions',
+    icon: 'CreditCard',
+    color: 'text-slate-700',
+    bgColor: 'bg-slate-50',
+    keywords: [
+      'subscription', 'subscriptions', 'membership', 'plan', 'icloud',
+      'google one', 'dropbox', 'notion', 'chatgpt', 'openai', 'canva',
+      'adobe', 'patreon', 'substack', 'domain', 'hosting', 'saas', 'renewal',
     ],
   },
   {

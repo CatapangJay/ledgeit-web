@@ -65,11 +65,14 @@ export default function AddCategoryForm({ onConfirm, onCancel, saving }: Props) 
         onKeyDown={(e) => e.key === 'Enter' && handleConfirm()}
       />
 
-      {/* Icon picker */}
+      {/* Icon picker — wrapped grid, scrolls vertically when tall */}
       <p className="mb-2 text-[10px] font-bold uppercase tracking-widest" style={{ color: '#6e9990' }}>
         Icon
       </p>
-      <div className="mb-3 flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+      <div
+        className="mb-3 grid max-h-36 grid-cols-7 gap-2 overflow-y-auto pr-0.5"
+        style={{ scrollbarWidth: 'none' }}
+      >
         {CUSTOM_ICON_OPTIONS.map((iconName) => {
           const Icon = getIconComponent(iconName)
           const isSelected = selectedIcon === iconName
@@ -80,7 +83,7 @@ export default function AddCategoryForm({ onConfirm, onCancel, saving }: Props) 
               aria-pressed={isSelected}
               whileTap={{ scale: 0.88 }}
               onClick={() => setSelectedIcon(iconName)}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+              className="flex aspect-square items-center justify-center rounded-xl"
               style={{
                 background: isSelected ? '#1f695d' : '#f0f4f2',
               }}
@@ -96,11 +99,11 @@ export default function AddCategoryForm({ onConfirm, onCancel, saving }: Props) 
         })}
       </div>
 
-      {/* Color picker */}
+      {/* Color picker — wrapped grid */}
       <p className="mb-2 text-[10px] font-bold uppercase tracking-widest" style={{ color: '#6e9990' }}>
         Color
       </p>
-      <div className="mb-4 flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+      <div className="mb-4 grid grid-cols-9 gap-2">
         {CUSTOM_COLOR_OPTIONS.map((opt) => {
           const isSelected = selectedColor.label === opt.label
           return (
@@ -110,7 +113,7 @@ export default function AddCategoryForm({ onConfirm, onCancel, saving }: Props) 
               aria-pressed={isSelected}
               whileTap={{ scale: 0.88 }}
               onClick={() => setSelectedColor(opt)}
-              className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+              className="relative flex h-7 w-7 items-center justify-center justify-self-center rounded-full"
               style={{ background: opt.swatch }}
             >
               {isSelected && (
