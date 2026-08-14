@@ -19,6 +19,7 @@ export type CategoryId =
   | 'subscriptions'
   | 'income'
   | 'transfers'
+  | 'debts'
   | 'other'
 
 export interface Category {
@@ -253,6 +254,17 @@ export const CATEGORIES: Category[] = [
     ],
   },
   {
+    id: 'debts',
+    label: 'Debts & Loans',
+    icon: 'HandCoins',
+    color: 'text-amber-700',
+    bgColor: 'bg-amber-50',
+    // Category for money lent/borrowed and their repayments. Kept off the
+    // keyword index intent — debt entries are created from the Debt ledger, not
+    // free-text — but the keywords still let manual entries route here.
+    keywords: ['utang', 'loan', 'lend', 'borrow', 'debt', 'paid back', 'repay', 'hulog'],
+  },
+  {
     id: 'other',
     label: 'Other',
     icon: 'DotsThree',
@@ -273,6 +285,37 @@ export const CATEGORIES: Category[] = [
  */
 export type TransactionType = 'expense' | 'income' | 'transfer'
 
+// ─── Payment Method ─────────────────────────────────────────────────────────────
+
+export type PaymentMethodId = 'cash' | 'credit' | 'debit' | 'gcash' | 'maya' | 'bank'
+
+export interface PaymentMethod {
+  id: PaymentMethodId
+  label: string          // Display name, e.g. "Credit Card"
+  short: string          // Compact tag label, e.g. "Credit"
+  icon: string           // Phosphor icon name
+  /** Lower-case tokens that map an entry to this method (matched as whole words
+   *  or trailing tags like "/cc"). Cash needs none — it's the default. */
+  keywords: string[]
+}
+
+/** Default when no method keyword is detected. */
+export const DEFAULT_PAYMENT_METHOD: PaymentMethodId = 'cash'
+
+// Ordered for the picker; cash first (the default).
+export const PAYMENT_METHODS: PaymentMethod[] = [
+  { id: 'cash',   label: 'Cash',          short: 'Cash',   icon: 'Money',       keywords: ['cash'] },
+  { id: 'credit', label: 'Credit Card',   short: 'Credit', icon: 'CreditCard',  keywords: ['cc', 'credit', 'creditcard', 'visa', 'mastercard', 'amex'] },
+  { id: 'debit',  label: 'Debit Card',    short: 'Debit',  icon: 'CreditCard',  keywords: ['db', 'debit', 'debitcard'] },
+  { id: 'gcash',  label: 'GCash',         short: 'GCash',  icon: 'Wallet',      keywords: ['gcash', 'gc'] },
+  { id: 'maya',   label: 'Maya',          short: 'Maya',   icon: 'Wallet',      keywords: ['maya', 'paymaya'] },
+  { id: 'bank',   label: 'Bank Transfer', short: 'Bank',   icon: 'Bank',        keywords: ['bank', 'banktransfer', 'online', 'instapay', 'pesonet'] },
+]
+
+export function resolvePaymentMethod(id: string | undefined): PaymentMethod {
+  return PAYMENT_METHODS.find((m) => m.id === id) ?? PAYMENT_METHODS[0]
+}
+
 export interface Transaction {
   id: string
   raw: string               // Original text input e.g. "$20 mcdonalds lunch"
@@ -281,6 +324,7 @@ export interface Transaction {
   category: Category
   date: string              // ISO 8601 date string (YYYY-MM-DD)
   type: TransactionType
+  paymentMethod: PaymentMethodId  // How it was paid; defaults to 'cash'
   confidence: number        // 0–1 categorization confidence
   isRecurring?: boolean
   note?: string
@@ -294,7 +338,44 @@ export interface TransactionDraft {
   amount: number | null
   merchant: string
   type: TransactionType
+  paymentMethod: PaymentMethodId  // Detected from the text; defaults to 'cash'
   date: string              // ISO 8601 date string
+}
+
+// ─── Debts ──────────────────────────────────────────────────────────────────────
+
+/**
+ * 'owed_to_me' — you lent money out; the person owes you (a receivable).
+ * 'i_owe'      — you borrowed; you owe the person (a liability).
+ */
+export type DebtDirection = 'owed_to_me' | 'i_owe'
+
+export interface DebtRepayment {
+  id: string
+  amount: number
+  date: string              // ISO 8601 date (YYYY-MM-DD)
+  /** Linked ledger transaction created for this repayment, if any. */
+  transactionId?: string
+  createdAt: string
+}
+
+export interface Debt {
+  id: string
+  personName: string
+  direction: DebtDirection
+  principal: number         // Original amount lent/borrowed
+  note?: string
+  isSettled: boolean
+  /** Linked ledger transaction created when the debt originated, if any. */
+  transactionId?: string
+  repayments: DebtRepayment[]
+  createdAt: string
+}
+
+/** Outstanding balance = principal minus everything repaid so far. */
+export function debtOutstanding(debt: Debt): number {
+  const repaid = debt.repayments.reduce((s, r) => s + r.amount, 0)
+  return Math.max(debt.principal - repaid, 0)
 }
 
 // ─── Budget ───────────────────────────────────────────────────────────────────

@@ -1,4 +1,5 @@
-import type { TransactionDraft } from '@/types'
+import { PAYMENT_METHODS, DEFAULT_PAYMENT_METHOD } from '@/types'
+import type { TransactionDraft, PaymentMethodId } from '@/types'
 
 // ─── Amount Extraction ────────────────────────────────────────────────────────
 
@@ -86,6 +87,39 @@ export function parseDirection(text: string): 'expense' | 'income' | 'transfer' 
   if (TRANSFER_KEYWORDS.some((kw) => lower.includes(kw))) return 'transfer'
   if (INCOME_KEYWORDS.some((kw) => lower.includes(kw))) return 'income'
   return 'expense'
+}
+
+// ─── Payment Method Detection ───────────────────────────────────────────────────
+
+// Each method's tokens as whole words. Longer/more-specific keywords are tried
+// first so "creditcard" wins over a bare "credit", etc.
+const PAYMENT_METHOD_KEYWORDS: Array<{ id: PaymentMethodId; words: string[] }> = PAYMENT_METHODS
+  .filter((m) => m.id !== DEFAULT_PAYMENT_METHOD) // cash is the fallback, no keywords needed
+  .map((m) => ({ id: m.id, words: [...m.keywords].sort((a, b) => b.length - a.length) }))
+
+/**
+ * A method tag is a word like "cc", "gcash", "debit" — commonly written as a
+ * trailing annotation: "grocery /cc", "Dali - gcash", "coffee cash". This regex
+ * matches such a token bounded by start/space/punctuation (incl. a leading
+ * slash or dash) so it can be both detected and stripped from the merchant.
+ */
+function methodTokenRegex(word: string): RegExp {
+  return new RegExp(`(?:^|[\\s/\\-–—(,])${word}(?=$|[\\s/\\-–—).,])`, 'i')
+}
+
+/** Global variant of methodTokenRegex for stripping every occurrence. Keeps the
+ *  leading boundary char via a capture so we don't glue adjacent words together. */
+function methodTokenRegex_global(word: string): RegExp {
+  return new RegExp(`(^|[\\s/\\-–—(,])${word}(?=$|[\\s/\\-–—).,])`, 'gi')
+}
+
+/** Detect the payment method from free text. Defaults to cash when none found. */
+export function parsePaymentMethod(text: string): PaymentMethodId {
+  const lower = text.toLowerCase()
+  for (const { id, words } of PAYMENT_METHOD_KEYWORDS) {
+    if (words.some((w) => methodTokenRegex(w).test(lower))) return id
+  }
+  return DEFAULT_PAYMENT_METHOD
 }
 
 // ─── Date Resolution ──────────────────────────────────────────────────────────
@@ -334,6 +368,12 @@ const MERCHANT_NORMALIZATIONS: Array<[RegExp, string]> = [
   [/\bsteam\b/i, 'Steam'],
 ]
 
+// All payment-method tokens (except cash's), longest first — used to strip a
+// trailing method tag like "/cc" or "- gcash" from the merchant name.
+const METHOD_STRIP_WORDS: string[] = PAYMENT_METHODS
+  .flatMap((m) => m.keywords)
+  .sort((a, b) => b.length - a.length)
+
 export function parseMerchant(text: string): string {
   let clean = stripDates(text)
 
@@ -341,8 +381,20 @@ export function parseMerchant(text: string): string {
     clean = clean.replace(pattern, ' ')
   }
 
-  // Collapse whitespace
-  clean = clean.replace(/\s+/g, ' ').trim()
+  // Strip payment-method tags ("grocery /cc" → "grocery"). Guarded: if removing
+  // them would empty the name (e.g. the entry IS "gcash 500"), keep the original
+  // so the method word can still serve as the merchant.
+  let withoutMethod = clean
+  for (const word of METHOD_STRIP_WORDS) {
+    withoutMethod = withoutMethod.replace(methodTokenRegex_global(word), ' ')
+  }
+  if (withoutMethod.replace(/\s+/g, ' ').trim()) {
+    clean = withoutMethod
+  }
+
+  // Collapse whitespace, then trim any orphaned separator punctuation left where
+  // a method tag was removed ("Dali - db" → "Dali -" → "Dali").
+  clean = clean.replace(/\s+/g, ' ').trim().replace(/[\s/\-–—,]+$/, '').replace(/^[\s/\-–—,]+/, '').trim()
 
   if (!clean) return 'Unknown'
 
@@ -376,6 +428,7 @@ export function parseTransaction(raw: string, contextDate?: string): Transaction
     amount: parseAmount(trimmed),
     merchant: parseMerchant(trimmed),
     type: parseDirection(trimmed),
+    paymentMethod: parsePaymentMethod(trimmed),
     date,
   }
 }

@@ -278,6 +278,7 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
       category: parseResult.category,
       date: parseResult.draft.date,
       type: parseResult.draft.type,
+      paymentMethod: parseResult.draft.paymentMethod,
       confidence: parseResult.confidence,
       createdAt: new Date().toISOString(),
     }
@@ -481,7 +482,7 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
                     )
                   }
                   onCategoryChange={(cat) => {
-                    const newType = cat.id === 'income' ? 'income' : 'expense'
+                    const newType = cat.id === 'income' ? 'income' : cat.id === 'transfers' ? 'transfer' : 'expense'
                     setParseResult((prev) =>
                       prev
                         ? { ...prev, category: cat, draft: { ...prev.draft, type: newType } }
@@ -494,6 +495,11 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
                   onDateChange={(date) =>
                     setParseResult((prev) =>
                       prev ? { ...prev, draft: { ...prev.draft, date } } : prev
+                    )
+                  }
+                  onPaymentMethodChange={(paymentMethod) =>
+                    setParseResult((prev) =>
+                      prev ? { ...prev, draft: { ...prev.draft, paymentMethod } } : prev
                     )
                   }
                 />

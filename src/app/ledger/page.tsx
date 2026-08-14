@@ -11,9 +11,10 @@ import TransactionRow from '@/components/ledger/TransactionRow'
 import CategoryBreakdownBar from '@/components/ledger/CategoryBreakdownBar'
 import { useStore } from '@/lib/store'
 import { formatCurrency } from '@/lib/formatters'
+import { PAYMENT_METHODS } from '@/types'
 import type { FilterValue } from '@/components/ledger/FilterChips'
 import type { DatePeriod } from '@/components/ledger/DateFilterBar'
-import type { Transaction } from '@/types'
+import type { Transaction, PaymentMethodId } from '@/types'
 
 function groupByDate(txns: Transaction[]): [string, Transaction[]][] {
   const map = new Map<string, Transaction[]>()
@@ -76,6 +77,7 @@ function LedgerContent() {
   const [period, setPeriod] = useState<DatePeriod>('all')
   const [customDate, setCustomDate] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [methodFilter, setMethodFilter] = useState<PaymentMethodId | 'all'>('all')
 
   // Seed the custom-day filter when arriving via a heatmap deep-link.
   useEffect(() => {
@@ -97,13 +99,14 @@ function LedgerContent() {
 
   const range = useMemo(() => periodRange(period, customDate), [period, customDate])
   const query = search.trim().toLowerCase()
-  const hasActiveFilters = filter !== 'all' || period !== 'all' || query !== ''
+  const hasActiveFilters = filter !== 'all' || period !== 'all' || query !== '' || methodFilter !== 'all'
 
   function clearAll() {
     setFilter('all')
     setPeriod('all')
     setCustomDate(null)
     setSearch('')
+    setMethodFilter('all')
   }
 
   function handlePeriodChange(next: DatePeriod) {
@@ -125,6 +128,8 @@ function LedgerContent() {
       else if (filter !== 'all' && filter !== 'expense' && filter !== 'income' && filter !== 'transfer' && t.category.id !== filter) return false
       // Date period
       if (range && (t.date < range.start || t.date > range.end)) return false
+      // Payment method
+      if (methodFilter !== 'all' && t.paymentMethod !== methodFilter) return false
       // Free-text search across merchant, category, and raw note
       if (query) {
         const haystack = `${t.merchant} ${t.category.label} ${t.raw}`.toLowerCase()
@@ -132,7 +137,7 @@ function LedgerContent() {
       }
       return true
     })
-  }, [transactions, filter, range, query])
+  }, [transactions, filter, range, query, methodFilter])
 
   const totalAmount = useMemo(
     () => filtered.reduce((s, t) => s + (t.type === 'expense' ? t.amount : 0), 0),
@@ -198,8 +203,35 @@ function LedgerContent() {
       </div>
 
       {/* Category / type chips */}
-      <div className="mb-3">
+      <div className="mb-2.5">
         <FilterChips active={filter} onChange={setFilter} customChips={customChips} />
+      </div>
+
+      {/* Payment-method chips */}
+      <div
+        className="mb-3 flex gap-2 overflow-x-auto pb-1 scrollbar-hide"
+        style={{ msOverflowStyle: 'none', scrollbarWidth: 'none' }}
+        role="group"
+        aria-label="Filter by payment method"
+      >
+        {([{ id: 'all' as const, short: 'Any method' }, ...PAYMENT_METHODS]).map((m) => {
+          const active = methodFilter === m.id
+          return (
+            <button
+              key={m.id}
+              onClick={() => setMethodFilter(m.id as PaymentMethodId | 'all')}
+              aria-pressed={active}
+              className="shrink-0 rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-colors"
+              style={
+                active
+                  ? { background: '#475569', color: '#ffffff' }
+                  : { background: '#f0f4f2', color: '#3f4946' }
+              }
+            >
+              {m.short}
+            </button>
+          )
+        })}
       </div>
 
       {/* Clear-all shortcut when any filter is active */}

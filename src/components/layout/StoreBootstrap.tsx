@@ -13,6 +13,7 @@ export default function StoreBootstrap() {
   const loadBudgetAllocations = useStore((s) => s.loadBudgetAllocations)
   const loadIncomeAllocations = useStore((s) => s.loadIncomeAllocations)
   const loadCustomCategories = useStore((s) => s.loadCustomCategories)
+  const loadDebts = useStore((s) => s.loadDebts)
   const supabase = useMemo(() => createClient(), [])
   // Track the user we've already loaded data for. `onAuthStateChange` also fires
   // on TOKEN_REFRESHED and tab re-focus (and insertTransaction's getUser() can
@@ -33,13 +34,14 @@ export default function StoreBootstrap() {
         loadTransactions(user.id)
         loadBudgetAllocations(user.id)
         loadIncomeAllocations(user.id)
+        loadDebts(user.id)
       } else {
         loadedUserIdRef.current = null
         setUserId(null)
       }
     })
     return () => subscription.unsubscribe()
-  }, [supabase, setUserId, loadTransactions, loadBudgetAllocations, loadIncomeAllocations, loadCustomCategories])
+  }, [supabase, setUserId, loadTransactions, loadBudgetAllocations, loadIncomeAllocations, loadCustomCategories, loadDebts])
 
   return null
 }

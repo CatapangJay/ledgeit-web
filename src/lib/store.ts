@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Transaction, BudgetLimit, BudgetAllocation, BudgetAllocationItem, CustomCategory, IncomeAllocation, IncomeAllocationItem } from '@/types'
+import type { Transaction, BudgetLimit, BudgetAllocation, BudgetAllocationItem, CustomCategory, IncomeAllocation, IncomeAllocationItem, Debt, DebtDirection } from '@/types'
 import {
   fetchTransactions,
   insertTransaction,
@@ -26,6 +26,13 @@ import {
   createCustomCategory,
   deleteCustomCategory,
 } from '@/lib/db/customCategories'
+import {
+  fetchDebts,
+  createDebt,
+  insertDebtRepayment,
+  setDebtSettled,
+  deleteDebt,
+} from '@/lib/db/debts'
 import { CATEGORIES } from '@/types'
 
 // ─── Income source id → human-readable label ─────────────────────────────────
@@ -93,6 +100,7 @@ interface StoreState {
   incomeAllocations: IncomeAllocation[]
   /** True once loadIncomeAllocations has resolved at least once for the current user */
   incomeAllocationsLoaded: boolean
+  debts: Debt[]
 }
 
 interface StoreActions {
@@ -124,6 +132,12 @@ interface StoreActions {
   getDailyTotal: (date: string, type?: 'expense' | 'income') => number
   /** True once the user has at least one saved allocation. */
   hasSetupBudget: () => boolean
+  // ── Debts ──────────────────────────────────────────────────────────────────
+  loadDebts: (userId: string) => Promise<void>
+  addDebt: (payload: { personName: string; direction: DebtDirection; principal: number; note?: string; date: string }) => Promise<void>
+  recordDebtRepayment: (debtId: string, payload: { amount: number; date: string }) => Promise<void>
+  toggleDebtSettled: (debtId: string) => Promise<void>
+  removeDebt: (debtId: string) => Promise<void>
 }
 
 export type AppStore = StoreState & StoreActions
@@ -141,6 +155,7 @@ export const useStore = create<AppStore>()((set, get) => ({
   budgetAllocationsLoaded: false,
   incomeAllocations: [],
   incomeAllocationsLoaded: false,
+  debts: [],
 
   setUserId(userId) {
     set({
@@ -150,6 +165,7 @@ export const useStore = create<AppStore>()((set, get) => ({
         budgetAllocations: [],
         incomeAllocationsLoaded: false,
         incomeAllocations: [],
+        debts: [],
       } : {}),
     })
   },
@@ -323,6 +339,7 @@ export const useStore = create<AppStore>()((set, get) => ({
             category: incomeCategory,
             date: dateStr,
             type: 'income',
+            paymentMethod: 'bank',
             confidence: 1,
             createdAt: new Date().toISOString(),
           }
@@ -480,5 +497,123 @@ export const useStore = create<AppStore>()((set, get) => ({
         if (t.type === 'income') return sum + t.amount
         return sum
       }, 0)
+  },
+
+  // ─── Debts ────────────────────────────────────────────────────────────────
+
+  async loadDebts(userId) {
+    try {
+      const debts = await fetchDebts(userId)
+      set({ debts })
+    } catch {
+      // Keep empty on error
+    }
+  },
+
+  async addDebt({ personName, direction, principal, note, date }) {
+    const userId = get().userId
+    if (!userId) return
+
+    // Lending money out leaves your pocket (expense); borrowing brings it in
+    // (income). The linked transaction makes the movement show in your totals.
+    const debtCategory = CATEGORIES.find((c) => c.id === 'debts')!
+    const txId = crypto.randomUUID()
+    const label = direction === 'owed_to_me' ? `Lent to ${personName}` : `Borrowed from ${personName}`
+    const tx: Transaction = {
+      id: txId,
+      raw: `${label} ${principal}`,
+      amount: principal,
+      merchant: label,
+      category: debtCategory,
+      date,
+      type: direction === 'owed_to_me' ? 'expense' : 'income',
+      paymentMethod: 'cash',
+      confidence: 1,
+      note,
+      createdAt: new Date().toISOString(),
+    }
+
+    try {
+      const debt = await createDebt(userId, { personName, direction, principal, note, transactionId: txId })
+      set((state) => ({ debts: [debt, ...state.debts] }))
+      get().addTransaction(tx) // optimistic + background DB write
+    } catch (err) {
+      console.error('[store] addDebt failed:', err)
+    }
+  },
+
+  async recordDebtRepayment(debtId, { amount, date }) {
+    const debt = get().debts.find((d) => d.id === debtId)
+    if (!debt) return
+
+    // A repayment reverses the origination direction: money owed TO you comes
+    // back in (income); repaying what YOU owe goes out (expense).
+    const debtCategory = CATEGORIES.find((c) => c.id === 'debts')!
+    const txId = crypto.randomUUID()
+    const label = debt.direction === 'owed_to_me'
+      ? `${debt.personName} repaid`
+      : `Repaid ${debt.personName}`
+    const tx: Transaction = {
+      id: txId,
+      raw: `${label} ${amount}`,
+      amount,
+      merchant: label,
+      category: debtCategory,
+      date,
+      type: debt.direction === 'owed_to_me' ? 'income' : 'expense',
+      paymentMethod: 'cash',
+      confidence: 1,
+      createdAt: new Date().toISOString(),
+    }
+
+    try {
+      const repayment = await insertDebtRepayment(debtId, { amount, date, transactionId: txId })
+      set((state) => ({
+        debts: state.debts.map((d) =>
+          d.id === debtId ? { ...d, repayments: [...d.repayments, repayment] } : d
+        ),
+      }))
+      get().addTransaction(tx)
+    } catch (err) {
+      console.error('[store] recordDebtRepayment failed:', err)
+    }
+  },
+
+  async toggleDebtSettled(debtId) {
+    const debt = get().debts.find((d) => d.id === debtId)
+    if (!debt) return
+    const next = !debt.isSettled
+    set((state) => ({
+      debts: state.debts.map((d) => (d.id === debtId ? { ...d, isSettled: next } : d)),
+    }))
+    try {
+      await setDebtSettled(debtId, next)
+    } catch (err) {
+      console.error('[store] toggleDebtSettled failed:', err)
+      set((state) => ({
+        debts: state.debts.map((d) => (d.id === debtId ? { ...d, isSettled: !next } : d)),
+      }))
+    }
+  },
+
+  async removeDebt(debtId) {
+    const debt = get().debts.find((d) => d.id === debtId)
+    if (!debt) return
+    const prev = get().debts
+
+    // Remove the debt optimistically, then clean up its linked ledger
+    // transactions (origination + every repayment) so nothing is orphaned.
+    set((state) => ({ debts: state.debts.filter((d) => d.id !== debtId) }))
+    const linkedTxIds = [debt.transactionId, ...debt.repayments.map((r) => r.transactionId)].filter(
+      (id): id is string => Boolean(id)
+    )
+    for (const id of linkedTxIds) get().deleteTransaction(id)
+
+    try {
+      await deleteDebt(debtId)
+    } catch (err) {
+      console.error('[store] removeDebt failed:', err)
+      set({ debts: prev })
+    }
   },
 }))

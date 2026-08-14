@@ -164,6 +164,7 @@ const PRESET_ICON_BG: Record<string, string> = {
   subscriptions: '#334155',
   income:        '#1f6950',
   transfers:     '#475569',
+  debts:         '#b45309',
   other:         '#64748b',
 }
 

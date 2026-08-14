@@ -1,14 +1,20 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { createElement, useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, CalendarBlank, CheckCircle, Circle } from '@phosphor-icons/react'
 import CategoryBadge from './CategoryBadge'
 import DatePickerSheet from '@/components/ui/DatePickerSheet'
 import { formatCurrency, formatDate } from '@/lib/formatters'
 import { getIconComponent } from '@/lib/iconMap'
-import { CATEGORIES } from '@/types'
-import type { Category, TransactionDraft, CustomCategory } from '@/types'
+import { CATEGORIES, PAYMENT_METHODS, resolvePaymentMethod } from '@/types'
+import type { Category, TransactionDraft, CustomCategory, PaymentMethodId } from '@/types'
+
+// Renders a Phosphor icon by its string name. Declared at module scope and uses
+// createElement (not <Icon/>) so it's a stable component, not one created during render.
+function MethodIcon({ name, size = 12, weight = 'bold' }: { name: string; size?: number; weight?: 'bold' | 'fill' | 'regular' }) {
+  return createElement(getIconComponent(name), { size, weight, 'aria-hidden': true })
+}
 
 // ─── Re-used inline category picker ──────────────────────────────────────────
 
@@ -92,6 +98,7 @@ interface Props {
   onCategoryChange?: (cat: Category) => void
   onMerchantChange?: (name: string) => void
   onDateChange?: (date: string) => void
+  onPaymentMethodChange?: (method: PaymentMethodId) => void
   /** Bulk mode: whether this entry is selected for logging */
   selected?: boolean
   onToggleSelect?: () => void
@@ -116,15 +123,17 @@ const itemVariants = {
   },
 }
 
-export default function ParsePreview({ draft, category, confidence, customCategories = [], onCategoryChange, onMerchantChange, onDateChange, selected, onToggleSelect, logged = false }: Props) {
+export default function ParsePreview({ draft, category, confidence, customCategories = [], onCategoryChange, onMerchantChange, onDateChange, onPaymentMethodChange, selected, onToggleSelect, logged = false }: Props) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [datePickerOpen, setDatePickerOpen] = useState(false)
+  const [methodPickerOpen, setMethodPickerOpen] = useState(false)
   const [editingMerchant, setEditingMerchant] = useState(false)
   const [merchantInput, setMerchantInput] = useState('')
   const merchantInputRef = useRef<HTMLInputElement>(null)
   const isIncome = draft.type === 'income'
   const isTransfer = draft.type === 'transfer'
   const isBulk = onToggleSelect !== undefined
+  const method = resolvePaymentMethod(draft.paymentMethod)
 
   function startEditMerchant() {
     if (!onMerchantChange) return
@@ -273,6 +282,64 @@ export default function ParsePreview({ draft, category, confidence, customCatego
           />
         )}
       </motion.div>
+
+      {/* Row 3: Payment method chip */}
+      <motion.div variants={itemVariants} className="mt-2 flex items-center gap-2">
+        {onPaymentMethodChange && !logged ? (
+          <button
+            onClick={() => setMethodPickerOpen((o) => !o)}
+            aria-label={`Payment method: ${method.label}. Tap to change`}
+            className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold transition-all ${methodPickerOpen ? 'ring-1 ring-[#1f695d]/40' : ''}`}
+            style={{ background: '#f0f4f2', color: '#3f4946' }}
+          >
+            <MethodIcon name={method.icon} />
+            {method.label}
+            <span className="opacity-50">▾</span>
+          </button>
+        ) : (
+          <span
+            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold"
+            style={{ background: '#f0f4f2', color: '#6e9990' }}
+          >
+            <MethodIcon name={method.icon} />
+            {method.label}
+          </span>
+        )}
+      </motion.div>
+
+      {/* Inline payment-method picker */}
+      <AnimatePresence>
+        {methodPickerOpen && onPaymentMethodChange && (
+          <motion.div
+            initial={{ opacity: 0, y: -4, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.97 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+            className="mt-2 grid grid-cols-3 gap-1.5 rounded-2xl p-2"
+            style={{ background: '#f0f4f2', border: '1px solid #e7edeb' }}
+          >
+            {PAYMENT_METHODS.map((m) => {
+              const Icon = getIconComponent(m.icon)
+              const active = m.id === draft.paymentMethod
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => { onPaymentMethodChange(m.id); setMethodPickerOpen(false) }}
+                  className="flex items-center justify-center gap-1.5 rounded-xl py-2 text-[11px] font-semibold transition-colors"
+                  style={
+                    active
+                      ? { background: '#1f695d', color: '#ffffff' }
+                      : { background: '#ffffff', color: '#3f4946' }
+                  }
+                >
+                  <Icon size={13} weight={active ? 'fill' : 'regular'} aria-hidden="true" />
+                  {m.short}
+                </button>
+              )
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Transfer hint — clarifies it won't count toward spending */}
       {isTransfer && !logged && (

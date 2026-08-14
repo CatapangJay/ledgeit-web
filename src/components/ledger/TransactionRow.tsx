@@ -4,8 +4,9 @@ import { useState } from 'react'
 import { useMotionValue, motion, animate } from 'framer-motion'
 import { Trash, CalendarBlank } from '@phosphor-icons/react'
 import { PHOSPHOR_ICON_MAP, CUSTOM_COLOR_OPTIONS } from '@/lib/iconMap'
-import { formatCurrency, formatDate, formatTime } from '@/lib/formatters'
+import { formatCurrency, formatDate } from '@/lib/formatters'
 import DatePickerSheet from '@/components/ui/DatePickerSheet'
+import { resolvePaymentMethod } from '@/types'
 import type { Transaction } from '@/types'
 
 // Preset icon background colors (saturated shade of each category color)
@@ -46,6 +47,8 @@ export default function TransactionRow({ tx, onDelete, onDateChange }: Props) {
   // +/− since they're neither spending nor income.
   const amountColor = isTransfer ? '#6e9990' : isIncome ? '#1f6950' : '#ba1a1a'
   const amountSign = isTransfer ? '' : isIncome ? '+' : '−'
+  const method = resolvePaymentMethod(tx.paymentMethod)
+  const MethodIcon = PHOSPHOR_ICON_MAP[method.icon]
 
   return (
     <motion.div
@@ -116,8 +119,17 @@ export default function TransactionRow({ tx, onDelete, onDateChange }: Props) {
             ) : (
               <span className="font-mono text-xs" style={{ color: '#6e9990' }}>{formatDate(tx.date)}</span>
             )}
-            <span className="text-xs" style={{ color: '#cde0db' }}>·</span>
-            <span className="font-mono text-xs" style={{ color: '#6e9990' }}>{formatTime(tx.createdAt)}</span>
+            {/* Payment method tag — cash is the quiet default, so only show a
+                distinct label for non-cash methods to keep the line clean. */}
+            {tx.paymentMethod !== 'cash' && (
+              <>
+                <span className="text-xs" style={{ color: '#cde0db' }}>·</span>
+                <span className="flex items-center gap-1 text-xs" style={{ color: '#6e9990' }}>
+                  {MethodIcon && <MethodIcon size={11} weight="regular" aria-hidden="true" />}
+                  {method.short}
+                </span>
+              </>
+            )}
           </div>
         </div>
       </motion.div>

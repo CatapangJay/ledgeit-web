@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
 import { resolveCategory } from '@/types'
-import type { Transaction, CustomCategory } from '@/types'
+import type { Transaction, CustomCategory, PaymentMethodId, TransactionType } from '@/types'
 
 // ── DB row shape returned from Supabase ───────────────────────────────────────
 interface TransactionRow {
@@ -10,6 +10,7 @@ interface TransactionRow {
   type: string
   merchant: string
   category_id: string
+  payment_method: string | null
   notes: string | null
   raw: string
   confidence: number
@@ -30,7 +31,9 @@ function rowToTransaction(row: TransactionRow, customCats: CustomCategory[] = []
     // suffix depending on the client; slicing enforces the documented contract
     // so exact-match comparisons (7-day trend, today's spend) work reliably.
     date: String(row.date).slice(0, 10),
-    type: row.type as 'expense' | 'income',
+    type: row.type as TransactionType,
+    // Legacy rows (before payment methods existed) have null → default to cash.
+    paymentMethod: (row.payment_method ?? 'cash') as PaymentMethodId,
     confidence: Number(row.confidence),
     isRecurring: row.is_recurring,
     note: row.notes ?? undefined,
@@ -72,6 +75,7 @@ export async function insertTransaction(tx: Transaction): Promise<void> {
     type: tx.type,
     merchant: tx.merchant,
     category_id: tx.category.id,
+    payment_method: tx.paymentMethod,
     notes: tx.note ?? null,
     raw: tx.raw,
     confidence: tx.confidence,
@@ -102,6 +106,7 @@ export async function patchTransaction(
   if (patch.type !== undefined) dbPatch.type = patch.type
   if (patch.merchant !== undefined) dbPatch.merchant = patch.merchant
   if (patch.category !== undefined) dbPatch.category_id = patch.category.id
+  if (patch.paymentMethod !== undefined) dbPatch.payment_method = patch.paymentMethod
   if (patch.note !== undefined) dbPatch.notes = patch.note
   if (patch.date !== undefined) dbPatch.date = patch.date
   if (patch.raw !== undefined) dbPatch.raw = patch.raw

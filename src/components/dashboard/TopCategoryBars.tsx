@@ -5,21 +5,9 @@ import { motion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { ArrowRight } from '@phosphor-icons/react'
 import { formatCurrencyCompact } from '@/lib/formatters'
-import { getIconComponent } from '@/lib/iconMap'
+import { getIconComponent, getIconBg } from '@/lib/iconMap'
 import { useStore } from '@/lib/store'
 import { CATEGORIES } from '@/types'
-
-const CATEGORY_HEX: Record<string, string> = {
-  restaurants:   '#c2410c',
-  groceries:     '#4d7c0f',
-  transport:     '#0369a1',
-  shopping:      '#7c3aed',
-  utilities:     '#b45309',
-  entertainment: '#be185d',
-  health:        '#be123c',
-  income:        '#1f6950',
-  other:         '#64748b',
-}
 
 const TOP_N = 4
 
@@ -38,11 +26,19 @@ export default function TopCategoryBars() {
       byCategory[tx.category.id] = (byCategory[tx.category.id] ?? 0) + tx.amount
     }
 
+    // Max spend across the tracked categories — used to size bars for entries
+    // that have no budget limit, so every row shows a proportional bar.
+    const maxSpent = Math.max(...Object.values(byCategory), 1)
+
     return Object.entries(byCategory)
       .map(([id, spent]) => {
         const limit = budgetLimits.find((b) => b.categoryId === id)?.limit ?? 0
         const cat = CATEGORIES.find((c) => c.id === id)
-        const pct = limit > 0 ? Math.min((spent / limit) * 100, 100) : 0
+        // Budget usage % when a limit is set; otherwise spend relative to the
+        // biggest category so no-budget rows still render a visible bar.
+        const pct = limit > 0
+          ? Math.min((spent / limit) * 100, 100)
+          : (spent / maxSpent) * 100
         return {
           id,
           spent,
@@ -50,6 +46,7 @@ export default function TopCategoryBars() {
           pct,
           label: cat?.label ?? id,
           icon: cat?.icon ?? 'DotsThree',
+          color: cat?.color ?? 'text-slate-500',
         }
       })
       .sort((a, b) => b.spent - a.spent)
@@ -89,9 +86,13 @@ export default function TopCategoryBars() {
       <div className="flex flex-col gap-4">
         {categories.map((cat, i) => {
           const Icon = getIconComponent(cat.icon)
-          const hex = CATEGORY_HEX[cat.id] ?? '#64748b'
+          const hex = getIconBg({ id: cat.id, color: cat.color })
+          // Over-budget red/amber only applies when a real budget limit exists.
+          // No-budget bars are sized relatively, so keep them the category color.
           const barColor =
-            cat.pct > 90 ? '#ba1a1a' : cat.pct > 70 ? '#d97706' : hex
+            cat.limit > 0 && cat.pct > 90 ? '#ba1a1a'
+            : cat.limit > 0 && cat.pct > 70 ? '#d97706'
+            : hex
 
           return (
             <motion.div
@@ -137,7 +138,7 @@ export default function TopCategoryBars() {
               >
                 <motion.div
                   initial={{ width: 0 }}
-                  animate={{ width: cat.limit > 0 ? `${cat.pct}%` : '0%' }}
+                  animate={{ width: `${cat.pct}%` }}
                   transition={{
                     type: 'spring',
                     stiffness: 55,

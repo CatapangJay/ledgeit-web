@@ -1,11 +1,10 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
-import { CaretLeft, CaretRight } from '@phosphor-icons/react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { CaretLeft, CaretRight, Plus, ArrowRight } from '@phosphor-icons/react'
 import { useStore } from '@/lib/store'
 import { formatCurrency, formatCurrencyCompact } from '@/lib/formatters'
-import ConfirmDialog from '@/components/ui/ConfirmDialog'
 
 // ─── Local-date helpers ─────────────────────────────────────────────────────────
 
@@ -48,8 +47,8 @@ export default function SpendingHeatmap({ onAddForDate, onViewDate }: Props) {
   const now = useMemo(() => new Date(), [])
   const todayISO = useMemo(() => toISO(now), [now])
 
-  // Which day the user tapped, and whether it has entries — drives the prompt.
-  const [prompt, setPrompt] = useState<{ iso: string; hasSpend: boolean } | null>(null)
+  // The day the user tapped — drives the inline detail panel below the grid.
+  const [selectedIso, setSelectedIso] = useState<string | null>(null)
 
   // Month currently displayed (first-of-month). Starts on the current month.
   const [viewMonth, setViewMonth] = useState(() => new Date(now.getFullYear(), now.getMonth(), 1))
@@ -94,8 +93,11 @@ export default function SpendingHeatmap({ onAddForDate, onViewDate }: Props) {
   const monthLabel = viewMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
   function shiftMonth(delta: number) {
+    setSelectedIso(null) // a selection from the previous month no longer applies
     setViewMonth((m) => new Date(m.getFullYear(), m.getMonth() + delta, 1))
   }
+
+  const selectedAmount = selectedIso ? (dailyTotals[selectedIso] ?? 0) : 0
 
   return (
     <div
@@ -155,6 +157,7 @@ export default function SpendingHeatmap({ onAddForDate, onViewDate }: Props) {
           const isToday = iso === todayISO
           const day = Number(iso.slice(-2))
           const hasSpend = amount > 0
+          const isSelected = iso === selectedIso
           // No color at all for days with no logged transaction (or the future).
           const bg = isFuture || !hasSpend ? 'transparent' : rampColor(amount, maxDay)
           // Text stays legible: white on the darkest two buckets, ink otherwise.
@@ -168,12 +171,13 @@ export default function SpendingHeatmap({ onAddForDate, onViewDate }: Props) {
               animate={{ opacity: 1, scale: 1 }}
               whileTap={{ scale: isFuture ? 1 : 0.88 }}
               transition={{ duration: 0.18, delay: Math.min(i * 0.006, 0.12) }}
-              onClick={() => !isFuture && setPrompt({ iso, hasSpend })}
+              onClick={() => !isFuture && setSelectedIso((cur) => (cur === iso ? null : iso))}
               aria-label={
                 isFuture
                   ? formatDateLabel(iso)
                   : `${formatDateLabel(iso)} — ${hasSpend ? formatCurrency(amount) : 'no entry'}`
               }
+              aria-pressed={isSelected}
               className="relative flex aspect-square items-center justify-center rounded-md font-mono text-[9px] font-semibold transition-transform disabled:cursor-default"
               style={{
                 background: bg,
@@ -183,7 +187,11 @@ export default function SpendingHeatmap({ onAddForDate, onViewDate }: Props) {
                   : !hasSpend
                     ? '1px dashed #d4e4e0'
                     : '1px solid transparent',
-                boxShadow: isToday ? '0 0 0 1.5px #00352e' : 'none',
+                boxShadow: isSelected
+                  ? '0 0 0 2px #1f695d'
+                  : isToday
+                    ? '0 0 0 1.5px #00352e'
+                    : 'none',
               }}
             >
               {day}
@@ -191,6 +199,72 @@ export default function SpendingHeatmap({ onAddForDate, onViewDate }: Props) {
           )
         })}
       </div>
+
+      {/* Selected-day detail panel */}
+      <AnimatePresence initial={false}>
+        {selectedIso && (
+          <motion.div
+            key="day-detail"
+            initial={{ opacity: 0, height: 0, marginTop: 0 }}
+            animate={{ opacity: 1, height: 'auto', marginTop: 10 }}
+            exit={{ opacity: 0, height: 0, marginTop: 0 }}
+            transition={{ type: 'spring', stiffness: 320, damping: 30 }}
+            className="overflow-hidden"
+          >
+            <div
+              className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5"
+              style={{ background: '#f4f6f5' }}
+            >
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#6e9990' }}>
+                  {formatDateLabel(selectedIso)}
+                </p>
+                <p
+                  className="font-mono text-[15px] font-bold leading-tight"
+                  style={{ color: selectedAmount > 0 ? '#00352e' : '#8aa8a1' }}
+                >
+                  {selectedAmount > 0 ? formatCurrency(selectedAmount) : 'No spending'}
+                </p>
+              </div>
+
+              {selectedAmount > 0 ? (
+                <div className="flex shrink-0 items-center gap-2">
+                  {/* Secondary circular add button — log another entry for this day */}
+                  <motion.button
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => onAddForDate(selectedIso)}
+                    aria-label="Add a transaction for this day"
+                    className="flex h-9 w-9 items-center justify-center rounded-full"
+                    style={{ background: '#e7edeb', color: '#1f695d' }}
+                  >
+                    <Plus size={14} weight="bold" aria-hidden="true" />
+                  </motion.button>
+                  {/* Primary — view the day's transactions in the ledger */}
+                  <motion.button
+                    whileTap={{ scale: 0.96 }}
+                    onClick={() => onViewDate(selectedIso)}
+                    className="flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[12px] font-bold text-white"
+                    style={{ background: 'linear-gradient(135deg, #1f695d 0%, #00352e 100%)' }}
+                  >
+                    View details
+                    <ArrowRight size={12} weight="bold" aria-hidden="true" />
+                  </motion.button>
+                </div>
+              ) : (
+                <motion.button
+                  whileTap={{ scale: 0.96 }}
+                  onClick={() => onAddForDate(selectedIso)}
+                  className="flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[12px] font-bold text-white"
+                  style={{ background: 'linear-gradient(135deg, #1f695d 0%, #00352e 100%)' }}
+                >
+                  <Plus size={12} weight="bold" aria-hidden="true" />
+                  Add transaction
+                </motion.button>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Footer — summary + legend */}
       <div className="mt-2.5 flex items-center justify-between" style={{ borderTop: '1px solid #f0f4f2', paddingTop: '8px' }}>
@@ -212,28 +286,6 @@ export default function SpendingHeatmap({ onAddForDate, onViewDate }: Props) {
         </div>
       </div>
 
-      {/* Tap a day → confirm before adding (empty day) or viewing (has entries) */}
-      <ConfirmDialog
-        open={prompt !== null}
-        title={
-          prompt?.hasSpend
-            ? `View ${prompt ? formatDateLabel(prompt.iso) : ''}?`
-            : `No entries on ${prompt ? formatDateLabel(prompt.iso) : ''}`
-        }
-        message={
-          prompt?.hasSpend
-            ? 'See the transactions logged on this date in your ledger.'
-            : 'Nothing was logged this day. Add a transaction?'
-        }
-        confirmLabel={prompt?.hasSpend ? 'View' : 'Add Transaction'}
-        cancelLabel={prompt?.hasSpend ? 'Cancel' : 'Not now'}
-        onConfirm={() => {
-          if (!prompt) return
-          if (prompt.hasSpend) onViewDate(prompt.iso)
-          else onAddForDate(prompt.iso)
-        }}
-        onClose={() => setPrompt(null)}
-      />
     </div>
   )
 }
