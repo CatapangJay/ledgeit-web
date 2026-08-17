@@ -1,0 +1,103 @@
+import { View, Text } from 'react-native';
+import { CATEGORIES, formatCurrency } from '@ledgeit/core';
+import { useStore } from '@/lib/store';
+
+const CATEGORY_HEX: Record<string, string> = {
+  restaurants: '#e05c2a',
+  groceries: '#28a46a',
+  transport: '#0284c7',
+  shopping: '#7c3aed',
+  utilities: '#d97706',
+  entertainment: '#db2777',
+  health: '#e91e63',
+  income: '#1f6950',
+  other: '#6e9990',
+};
+
+function todayISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+export default function SpendStrip() {
+  const transactions = useStore((s) => s.transactions);
+  const getDailyTotal = useStore((s) => s.getDailyTotal);
+  const today = todayISO();
+  const todayExpenses = transactions.filter((t) => t.date === today && t.type === 'expense');
+  const total = todayExpenses.reduce((sum, t) => sum + t.amount, 0);
+  const todayIncome = getDailyTotal(today, 'income');
+
+  const breakdown = todayExpenses.reduce<Record<string, number>>((acc, t) => {
+    acc[t.category.id] = (acc[t.category.id] ?? 0) + t.amount;
+    return acc;
+  }, {});
+
+  const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+  return (
+    <View
+      className="rounded-2xl px-5 py-4"
+      style={{ backgroundColor: '#ffffff', shadowColor: '#00352e', shadowOpacity: 0.06, shadowRadius: 16, elevation: 1 }}
+    >
+      <View className="mb-3 flex-row items-center justify-between">
+        <Text className="text-[12px] font-bold uppercase tracking-[1.6px]" style={{ color: '#00352e' }}>
+          Today
+        </Text>
+        <Text className="font-mono text-[11px]" style={{ color: '#6e9990' }}>
+          {dateLabel}
+        </Text>
+      </View>
+
+      {todayExpenses.length === 0 ? (
+        <View className="gap-1">
+          <View className="h-2 w-full rounded-full" style={{ backgroundColor: '#f0f4f2' }} />
+          <Text className="mt-2 text-[12px]" style={{ color: '#6e9990' }}>
+            Nothing logged yet today.
+          </Text>
+        </View>
+      ) : (
+        <>
+          <View className="mb-2 flex-row items-baseline justify-between">
+            <Text className="font-mono text-base font-bold" style={{ color: '#ba1a1a' }}>
+              −{formatCurrency(total)}
+            </Text>
+            {todayIncome > 0 && (
+              <Text className="font-mono text-[13px] font-semibold" style={{ color: '#1f6950' }}>
+                +{formatCurrency(todayIncome)}
+              </Text>
+            )}
+          </View>
+
+          <View className="h-2 w-full flex-row overflow-hidden rounded-full gap-0.5">
+            {Object.entries(breakdown).map(([catId, amount]) => (
+              <View
+                key={catId}
+                style={{
+                  width: `${(amount / total) * 100}%`,
+                  backgroundColor: CATEGORY_HEX[catId] ?? '#6e9990',
+                }}
+              />
+            ))}
+          </View>
+
+          <View className="mt-2.5 flex-row flex-wrap gap-2">
+            {Object.entries(breakdown).map(([catId, amount]) => {
+              const cat = CATEGORIES.find((c) => c.id === catId);
+              return (
+                <View key={catId} className="flex-row items-center gap-1">
+                  <View className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: CATEGORY_HEX[catId] ?? '#6e9990' }} />
+                  <Text className="text-[11px] font-medium" style={{ color: '#3f4946' }}>
+                    {cat?.label ?? catId}
+                  </Text>
+                  <Text className="font-mono text-[11px]" style={{ color: '#6e9990' }}>
+                    {formatCurrency(amount)}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+        </>
+      )}
+    </View>
+  );
+}

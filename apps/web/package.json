@@ -1,5 +1,5 @@
 {
-  "name": "ledgeit-app",
+  "name": "web",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@ledgeit/core": "*",
     "@phosphor-icons/react": "^2.1.10",
     "@supabase/ssr": "^0.10.0",
     "@supabase/supabase-js": "^2.102.1",

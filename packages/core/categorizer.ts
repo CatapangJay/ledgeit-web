@@ -1,5 +1,5 @@
-import { CATEGORIES } from '@/types'
-import type { Category, CategoryId, TransactionDraft } from '@/types'
+import { CATEGORIES } from './types'
+import type { Category, CategoryId, TransactionDraft } from './types'
 
 // ─── Keyword Index ────────────────────────────────────────────────────────────
 

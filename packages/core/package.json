@@ -1,0 +1,17 @@
+{
+  "name": "@ledgeit/core",
+  "version": "0.0.0",
+  "private": true,
+  "types": "./index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./types": "./types.ts",
+    "./parser": "./parser.ts",
+    "./categorizer": "./categorizer.ts",
+    "./fuzzy": "./fuzzy.ts",
+    "./formatters": "./formatters.ts",
+    "./coach": "./coach.ts",
+    "./budgetTemplates": "./budgetTemplates.ts",
+    "./money": "./money.ts"
+  }
+}

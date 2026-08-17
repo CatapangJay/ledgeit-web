@@ -1,5 +1,5 @@
-import { PAYMENT_METHODS, DEFAULT_PAYMENT_METHOD } from '@/types'
-import type { TransactionDraft, PaymentMethodId, DebtDirection } from '@/types'
+import { PAYMENT_METHODS, DEFAULT_PAYMENT_METHOD } from './types'
+import type { TransactionDraft, PaymentMethodId, DebtDirection } from './types'
 
 // ─── Amount Extraction ────────────────────────────────────────────────────────
 

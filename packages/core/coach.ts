@@ -1,4 +1,4 @@
-import type { Transaction, BudgetLimit } from '@/types'
+import type { Transaction, BudgetLimit } from './types'
 
 // ─── Coach: a calm, gently-honest voice on the dashboard ───────────────────────
 // Produces ONE message at a time, priority-ranked, derived entirely from the
