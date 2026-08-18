@@ -7,8 +7,8 @@ import { X, CalendarBlank, Trash, ArrowsClockwise } from '@phosphor-icons/react'
 import DatePickerSheet from '@/components/ui/DatePickerSheet'
 import { getIconComponent } from '@/lib/iconMap'
 import { formatDate } from '@/lib/formatters'
-import { CATEGORIES, PAYMENT_METHODS } from '@/types'
-import type { Transaction, Category, CustomCategory, PaymentMethodId, TransactionType } from '@/types'
+import { CATEGORIES, PAYMENT_METHODS, typeForCategory } from '@/types'
+import type { Transaction, Category, CustomCategory, PaymentMethodId } from '@/types'
 
 // Stable icon renderer (createElement, not <Icon/>) so it isn't remounted per render.
 function Glyph({ name, size = 14, weight = 'regular' }: { name: string; size?: number; weight?: 'bold' | 'fill' | 'regular' }) {
@@ -24,13 +24,6 @@ interface Props {
   onClose: () => void
   onSave: (id: string, patch: Partial<Transaction>) => void
   onDelete: (id: string) => void
-}
-
-/** Category id → the transaction type it implies. */
-function typeForCategory(catId: string): TransactionType {
-  if (catId === 'income') return 'income'
-  if (catId === 'transfers') return 'transfer'
-  return 'expense'
 }
 
 /**

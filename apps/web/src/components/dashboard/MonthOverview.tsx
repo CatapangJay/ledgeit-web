@@ -69,7 +69,9 @@ export default function MonthOverview({ onManageBudget }: Props) {
     for (const t of monthTxns) {
       if (t.type === 'income') {
         income += t.amount
-      } else {
+      } else if (t.type === 'expense' && t.category.id !== 'transfers') {
+        // Transfers/payments move money between your own pockets — not real
+        // spending — so they don't count toward the month's expenses or top categories.
         expense += t.amount
         byCategory[t.category.id] = (byCategory[t.category.id] ?? 0) + t.amount
       }

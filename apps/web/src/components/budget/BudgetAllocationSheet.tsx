@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useId } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X,
@@ -10,11 +11,14 @@ import {
   Trash,
   Plus,
   Sparkle,
+  EyeSlash,
+  ArrowsLeftRight,
+  Warning,
 } from '@phosphor-icons/react'
 import { useStore } from '@/lib/store'
 import { DEFAULT_BUDGETS } from '@/lib/store'
 import { useIsDesktop } from '@/lib/useIsDesktop'
-import { CATEGORIES } from '@/types'
+import { CATEGORIES, isHideableCategory } from '@/types'
 import type { BudgetAllocationItem, CustomCategory } from '@/types'
 import { formatCurrency } from '@/lib/formatters'
 import { getIconComponent } from '@/lib/iconMap'
@@ -96,6 +100,7 @@ const viewVariants = {
 export default function BudgetAllocationSheet({ open, onClose }: Props) {
   const labelId = useId()
   const isDesktop = useIsDesktop()
+  const router = useRouter()
 
   const allocations = useStore((s) => s.budgetAllocations)
   const saveBudgetAllocation = useStore((s) => s.saveBudgetAllocation)
@@ -103,8 +108,15 @@ export default function BudgetAllocationSheet({ open, onClose }: Props) {
   const deleteAllocation = useStore((s) => s.deleteAllocation)
   const customCategories = useStore((s) => s.customCategories)
   const hiddenCategories = useStore((s) => s.hiddenCategories)
+  const hidePresetCategory = useStore((s) => s.hidePresetCategory)
+  const removeCustomCategory = useStore((s) => s.removeCustomCategory)
+  const transactions = useStore((s) => s.transactions)
   const storeAddCustomCategory = useStore((s) => s.addCustomCategory)
   const userId = useStore((s) => s.userId)
+
+  // The category the user is trying to hide, held while we confirm / warn about
+  // its logged transactions. null when no hide is in progress.
+  const [hideTarget, setHideTarget] = useState<string | null>(null)
 
   const [view, setView] = useState<View>('list')
   const [direction, setDirection] = useState(1)
@@ -216,6 +228,42 @@ export default function BudgetAllocationSheet({ open, onClose }: Props) {
     })
   }
 
+  /** How many transactions are logged under a category (any type). */
+  function txnCountFor(categoryId: string): number {
+    return transactions.reduce((n, t) => (t.category.id === categoryId ? n + 1 : n), 0)
+  }
+
+  /** Begin hiding a category: if it has transactions, warn first; else hide now. */
+  function beginHide(categoryId: string) {
+    if (txnCountFor(categoryId) > 0) {
+      setHideTarget(categoryId) // show the move-first warning
+    } else {
+      confirmHide(categoryId)
+    }
+  }
+
+  /** Actually hide the category (preset → hidden set, custom → deleted) and drop
+   *  it from the editor's rows. Called only once it has no transactions, or the
+   *  user chose to hide anyway. */
+  function confirmHide(categoryId: string) {
+    if (isHideableCategory(categoryId)) {
+      hidePresetCategory(categoryId)
+    } else {
+      // Custom category — delete it outright.
+      removeCustomCategory(categoryId)
+    }
+    removeFromItems(categoryId)
+    setHideTarget(null)
+  }
+
+  /** Send the user to the ledger, pre-filtered to the category, to recategorize
+   *  its transactions one by one. Closes the sheet so the ledger is in focus. */
+  function goMoveTransactions(categoryId: string) {
+    setHideTarget(null)
+    onClose()
+    router.push(`/ledger?category=${encodeURIComponent(categoryId)}`)
+  }
+
   function handleTotalBudgetChange(raw: string) {
     const num = parseFloat(raw.replace(/[^0-9.]/g, '')) || 0
     setTotalBudget(num)
@@ -297,7 +345,7 @@ export default function BudgetAllocationSheet({ open, onClose }: Props) {
 
   // ── Shared inner content (list + editor), used by both variants ──────────
   const body = (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="relative flex flex-1 flex-col overflow-hidden">
               <AnimatePresence mode="wait" custom={direction}>
                 {view === 'list' ? (
                   <motion.div
@@ -673,16 +721,18 @@ export default function BudgetAllocationSheet({ open, onClose }: Props) {
                                   )}
                                 </div>
                               )}
-                              {/* Remove custom category from this allocation */}
-                              {isCustom && (
+                              {/* Hide category (preset) or delete it (custom). Warns
+                                  first if it still has logged transactions. */}
+                              {(isCustom || isHideableCategory(item.categoryId)) && (
                                 <motion.button
-                                  aria-label={`Remove ${label} from plan`}
+                                  aria-label={isCustom ? `Delete ${label}` : `Hide ${label}`}
+                                  title={isCustom ? `Delete ${label}` : `Hide ${label}`}
                                   whileTap={{ scale: 0.85 }}
-                                  onClick={() => removeFromItems(item.categoryId)}
+                                  onClick={() => beginHide(item.categoryId)}
                                   className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
                                   style={{ background: '#e7edeb' }}
                                 >
-                                  <X size={10} weight="bold" style={{ color: '#ba1a1a' }} aria-hidden="true" />
+                                  <EyeSlash size={11} weight="bold" style={{ color: '#ba1a1a' }} aria-hidden="true" />
                                 </motion.button>
                               )}
                             </div>
@@ -756,6 +806,79 @@ export default function BudgetAllocationSheet({ open, onClose }: Props) {
                     </div>
                   </motion.div>
                 )}
+              </AnimatePresence>
+
+              {/* Move-first warning when hiding a category that still has transactions */}
+              <AnimatePresence>
+                {hideTarget && (() => {
+                  const { label } = getCatDisplay(hideTarget, customCategories)
+                  const count = txnCountFor(hideTarget)
+                  const isCustom = !isHideableCategory(hideTarget)
+                  return (
+                    <motion.div
+                      key="hide-warning"
+                      className="absolute inset-0 z-10 flex items-end justify-center p-4 sm:items-center"
+                      style={{ background: 'rgba(0,53,46,0.28)', backdropFilter: 'blur(3px)' }}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      onClick={() => setHideTarget(null)}
+                    >
+                      <motion.div
+                        className="w-full max-w-sm rounded-2xl p-5"
+                        style={{ background: '#ffffff', boxShadow: '0 20px 60px rgba(0,53,46,0.28)' }}
+                        initial={{ opacity: 0, y: 16, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 16, scale: 0.96 }}
+                        transition={{ type: 'spring', stiffness: 340, damping: 30 }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="mb-3 flex items-center gap-2.5">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full" style={{ background: 'rgba(180,83,9,0.12)' }}>
+                            <Warning size={17} weight="fill" style={{ color: '#b45309' }} aria-hidden="true" />
+                          </div>
+                          <h3 className="text-sm font-bold" style={{ color: '#00352e' }}>
+                            Move transactions first
+                          </h3>
+                        </div>
+                        <p className="mb-4 text-[13px] leading-relaxed" style={{ color: '#3f4946' }}>
+                          <span className="font-semibold">{label}</span> has{' '}
+                          <span className="font-semibold">{count}</span>{' '}
+                          {count === 1 ? 'transaction' : 'transactions'} logged.
+                          {' '}Recategorize {count === 1 ? 'it' : 'them'} first so your history stays accurate, then hide{' '}
+                          <span className="font-semibold">{label}</span>.
+                        </p>
+                        <div className="flex flex-col gap-2">
+                          <motion.button
+                            whileTap={{ scale: 0.97 }}
+                            onClick={() => goMoveTransactions(hideTarget)}
+                            className="flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold text-white"
+                            style={{ background: 'linear-gradient(135deg, #1f695d 0%, #00352e 100%)' }}
+                          >
+                            <ArrowsLeftRight size={15} weight="bold" aria-hidden="true" />
+                            Move transactions
+                          </motion.button>
+                          {/* <motion.button
+                            whileTap={{ scale: 0.97 }}
+                            onClick={() => confirmHide(hideTarget)}
+                            className="rounded-xl py-2.5 text-[13px] font-semibold"
+                            style={{ background: '#fbeaea', color: '#ba1a1a' }}
+                          >
+                            {isCustom ? 'Delete anyway' : 'Hide anyway'}
+                          </motion.button> */}
+                          <motion.button
+                            whileTap={{ scale: 0.97 }}
+                            onClick={() => setHideTarget(null)}
+                            className="rounded-xl py-2.5 text-[13px] font-semibold"
+                            style={{ background: '#f0f4f2', color: '#3f4946' }}
+                          >
+                            Cancel
+                          </motion.button>
+                        </div>
+                      </motion.div>
+                    </motion.div>
+                  )
+                })()}
               </AnimatePresence>
             </div>
   )

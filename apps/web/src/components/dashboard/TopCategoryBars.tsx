@@ -23,6 +23,9 @@ export default function TopCategoryBars() {
     const byCategory: Record<string, number> = {}
     for (const tx of transactions) {
       if (tx.type !== 'expense' || !tx.date.startsWith(month)) continue
+      // Transfers/payments move money between your own pockets — not real
+      // spending — so exclude them from top spending.
+      if (tx.category.id === 'transfers') continue
       byCategory[tx.category.id] = (byCategory[tx.category.id] ?? 0) + tx.amount
     }
 

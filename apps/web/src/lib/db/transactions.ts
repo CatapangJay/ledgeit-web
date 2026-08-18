@@ -95,6 +95,43 @@ export async function removeTransaction(id: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
+/** Set the category (and implied type) on many transactions in one request. */
+export async function bulkSetCategory(
+  ids: string[],
+  categoryId: string,
+  type: TransactionType
+): Promise<void> {
+  if (ids.length === 0) return
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('transactions')
+    .update({ category_id: categoryId, type })
+    .in('id', ids)
+  if (error) throw new Error(error.message)
+}
+
+/** Set the date on many transactions in one request. */
+export async function bulkSetDate(ids: string[], date: string): Promise<void> {
+  if (ids.length === 0) return
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('transactions')
+    .update({ date })
+    .in('id', ids)
+  if (error) throw new Error(error.message)
+}
+
+/** Delete many transactions in one request. */
+export async function bulkDeleteTransactions(ids: string[]): Promise<void> {
+  if (ids.length === 0) return
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('transactions')
+    .delete()
+    .in('id', ids)
+  if (error) throw new Error(error.message)
+}
+
 export async function patchTransaction(
   id: string,
   patch: Partial<Transaction>

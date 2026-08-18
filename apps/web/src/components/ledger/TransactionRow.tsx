@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useMotionValue, motion, animate } from 'framer-motion'
-import { Trash, CalendarBlank } from '@phosphor-icons/react'
+import { Trash, CalendarBlank, Check } from '@phosphor-icons/react'
 import { PHOSPHOR_ICON_MAP, CUSTOM_COLOR_OPTIONS } from '@/lib/iconMap'
 import { formatCurrency, formatDate } from '@/lib/formatters'
 import DatePickerSheet from '@/components/ui/DatePickerSheet'
@@ -37,15 +37,22 @@ interface Props {
   onDateChange?: (id: string, date: string) => void
   /** When provided, tapping the row (not the date) opens the edit sheet. */
   onEdit?: (tx: Transaction) => void
+  /** Selection mode: when true, the row shows a checkbox and taps toggle it. */
+  selectMode?: boolean
+  selected?: boolean
+  onToggleSelect?: (id: string) => void
 }
 
-export default function TransactionRow({ tx, onDelete, onDateChange, onEdit }: Props) {
+export default function TransactionRow({ tx, onDelete, onDateChange, onEdit, selectMode = false, selected = false, onToggleSelect }: Props) {
   const x = useMotionValue(0)
   const [pickerOpen, setPickerOpen] = useState(false)
   // Tracks whether the last pointer interaction was a drag (vs. a tap) so a
   // swipe-to-delete gesture doesn't also trigger the edit sheet.
   const [didDrag, setDidDrag] = useState(false)
   const Icon = PHOSPHOR_ICON_MAP[tx.category.icon]
+  // In select mode a row is selectable only if a toggle handler was provided
+  // (debt-linked rows pass none — they can't be bulk-reassigned).
+  const selectable = selectMode && !!onToggleSelect
   const isIncome = tx.type === 'income'
   const isTransfer = tx.type === 'transfer'
   // Transfers move money between the user's own pockets — shown neutrally with no
@@ -59,20 +66,22 @@ export default function TransactionRow({ tx, onDelete, onDateChange, onEdit }: P
     <motion.div
       layout
       initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
+      animate={{ opacity: selectMode && !selectable ? 0.45 : 1, y: 0 }}
       exit={{ opacity: 0, x: -32, transition: { duration: 0.16 } }}
       transition={{ type: 'spring', stiffness: 300, damping: 28 }}
       className="relative overflow-hidden"
     >
-      {/* Swipe-to-delete backdrop */}
-      <div className="absolute inset-0 flex items-center justify-end pr-5" style={{ background: 'rgba(186,26,26,0.06)' }}>
-        <Trash size={16} weight="fill" style={{ color: '#ba1a1a' }} aria-hidden="true" />
-      </div>
+      {/* Swipe-to-delete backdrop (hidden in select mode) */}
+      {!selectMode && (
+        <div className="absolute inset-0 flex items-center justify-end pr-5" style={{ background: 'rgba(186,26,26,0.06)' }}>
+          <Trash size={16} weight="fill" style={{ color: '#ba1a1a' }} aria-hidden="true" />
+        </div>
+      )}
 
-      {/* Draggable row */}
+      {/* Row — draggable when not selecting; a tap-to-toggle target when selecting */}
       <motion.div
-        style={{ x, background: '#ffffff' }}
-        drag="x"
+        style={{ x: selectMode ? 0 : x, background: selected ? '#eef5f2' : '#ffffff' }}
+        drag={selectMode ? false : 'x'}
         dragConstraints={{ right: 0, left: -80 }}
         dragElastic={{ right: 0, left: 0.2 }}
         onDragStart={() => setDidDrag(true)}
@@ -85,9 +94,31 @@ export default function TransactionRow({ tx, onDelete, onDateChange, onEdit }: P
           // Clear the drag flag after the click event would have fired.
           setTimeout(() => setDidDrag(false), 0)
         }}
-        onClick={() => { if (!didDrag) onEdit?.(tx) }}
-        className={`relative flex items-center gap-3 px-4 py-3.5 ${onEdit ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'}`}
+        onClick={() => {
+          if (selectMode) { if (selectable) onToggleSelect!(tx.id); return }
+          if (!didDrag) onEdit?.(tx)
+        }}
+        className={`relative flex items-center gap-3 px-4 py-3.5 ${selectMode ? (selectable ? 'cursor-pointer' : 'cursor-default') : onEdit ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'}`}
       >
+        {/* Selection checkbox (hidden for non-selectable rows, e.g. debts) */}
+        {selectMode && (
+          selectable ? (
+            <div
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-colors"
+              style={{
+                background: selected ? '#1f695d' : '#ffffff',
+                border: `1.5px solid ${selected ? '#1f695d' : '#cde0db'}`,
+              }}
+              aria-hidden="true"
+            >
+              {selected && <Check size={12} weight="bold" color="#ffffff" />}
+            </div>
+          ) : (
+            // Placeholder keeps alignment; debt rows are dimmed and not selectable.
+            <div className="h-5 w-5 shrink-0" aria-hidden="true" />
+          )
+        )}
+
         {/* Icon — rounded-xl */}
         <div
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
@@ -113,7 +144,7 @@ export default function TransactionRow({ tx, onDelete, onDateChange, onEdit }: P
           <div className="mt-0.5 flex items-center gap-1.5">
             <span className="text-xs" style={{ color: getCategoryIconBg(tx.category), opacity: 0.9 }}>{tx.category.label}</span>
             <span className="text-xs" style={{ color: '#cde0db' }}>·</span>
-            {onDateChange ? (
+            {onDateChange && !selectMode ? (
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); setPickerOpen(true) }}

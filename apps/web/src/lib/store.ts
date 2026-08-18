@@ -1,10 +1,13 @@
 import { create } from 'zustand'
-import type { Transaction, BudgetLimit, BudgetAllocation, BudgetAllocationItem, CustomCategory, IncomeAllocation, IncomeAllocationItem, Debt, DebtDirection } from '@/types'
+import type { Transaction, BudgetLimit, BudgetAllocation, BudgetAllocationItem, CustomCategory, IncomeAllocation, IncomeAllocationItem, Debt, DebtDirection, Category } from '@/types'
 import {
   fetchTransactions,
   insertTransaction,
   removeTransaction,
   patchTransaction,
+  bulkSetCategory,
+  bulkSetDate,
+  bulkDeleteTransactions,
 } from '@/lib/db/transactions'
 import { fetchBudgetLimits } from '@/lib/db/budgetLimits'
 import {
@@ -38,7 +41,7 @@ import {
   setDebtSettled,
   deleteDebt,
 } from '@/lib/db/debts'
-import { CATEGORIES } from '@/types'
+import { CATEGORIES, typeForCategory } from '@/types'
 
 // ─── Income source id → human-readable label ─────────────────────────────────
 // Mirrors the INCOME_SOURCES list in OnboardingBudgetSetup (kept here so the
@@ -136,6 +139,13 @@ interface StoreActions {
   addTransaction: (tx: Transaction) => void
   deleteTransaction: (id: string) => void
   updateTransaction: (id: string, patch: Partial<Transaction>) => void
+  /** Reassign many transactions to one category (and its implied type) at once.
+   *  Resolves true on success, false if the DB write failed (changes rolled back). */
+  bulkChangeCategory: (ids: string[], category: Category) => Promise<boolean>
+  /** Set the date on many transactions at once. Resolves true on success. */
+  bulkChangeDate: (ids: string[], date: string) => Promise<boolean>
+  /** Delete many transactions at once (debt-linked ones are skipped). Resolves true on success. */
+  bulkDelete: (ids: string[]) => Promise<boolean>
   /** Persist a user-corrected category for a merchant/keyword. */
   learnCategory: (merchantKey: string, categoryId: string) => void
   getByCategory: (categoryId: string) => Transaction[]
@@ -507,6 +517,82 @@ export const useStore = create<AppStore>()((set, get) => ({
       console.error('[store] patchTransaction failed:', err)
       set({ transactions: prev })
     })
+  },
+
+  async bulkChangeCategory(ids, category) {
+    if (ids.length === 0) return true
+    const prev = get().transactions
+    // Debt-linked entries are managed on the Debts page — never bulk-reassign
+    // them, or the debt record's totals would desync.
+    const targetIds = ids.filter((id) => {
+      const tx = prev.find((t) => t.id === id)
+      return tx && tx.category.id !== 'debts'
+    })
+    if (targetIds.length === 0) return true
+    const targetSet = new Set(targetIds)
+    const type = typeForCategory(category.id)
+
+    // Optimistic: apply category + implied type to the selected rows.
+    set((state) => ({
+      transactions: state.transactions.map((t) =>
+        targetSet.has(t.id) ? { ...t, category, type } : t
+      ),
+    }))
+    try {
+      await bulkSetCategory(targetIds, category.id, type)
+      return true
+    } catch (err) {
+      console.error('[store] bulkChangeCategory failed:', err)
+      set({ transactions: prev })
+      return false
+    }
+  },
+
+  async bulkChangeDate(ids, date) {
+    if (ids.length === 0) return true
+    const prev = get().transactions
+    const idSet = new Set(ids)
+
+    // Optimistic: apply the new date to the selected rows.
+    set((state) => ({
+      transactions: state.transactions.map((t) =>
+        idSet.has(t.id) ? { ...t, date } : t
+      ),
+    }))
+    try {
+      await bulkSetDate(ids, date)
+      return true
+    } catch (err) {
+      console.error('[store] bulkChangeDate failed:', err)
+      set({ transactions: prev })
+      return false
+    }
+  },
+
+  async bulkDelete(ids) {
+    if (ids.length === 0) return true
+    const prev = get().transactions
+    // Debt-linked entries are managed on the Debts page — deleting one here would
+    // orphan the debt record, so skip them.
+    const targetIds = ids.filter((id) => {
+      const tx = prev.find((t) => t.id === id)
+      return tx && tx.category.id !== 'debts'
+    })
+    if (targetIds.length === 0) return true
+    const targetSet = new Set(targetIds)
+
+    // Optimistic: remove the selected rows.
+    set((state) => ({
+      transactions: state.transactions.filter((t) => !targetSet.has(t.id)),
+    }))
+    try {
+      await bulkDeleteTransactions(targetIds)
+      return true
+    } catch (err) {
+      console.error('[store] bulkDelete failed:', err)
+      set({ transactions: prev })
+      return false
+    }
   },
 
   learnCategory(merchantKey, categoryId) {

@@ -458,6 +458,16 @@ export function isHideableCategory(id: string): boolean {
 }
 
 /**
+ * The transaction type a category implies. Income and Transfers are fixed;
+ * every other category (presets and custom) is spending.
+ */
+export function typeForCategory(categoryId: string): TransactionType {
+  if (categoryId === 'income') return 'income'
+  if (categoryId === 'transfers') return 'transfer'
+  return 'expense'
+}
+
+/**
  * Resolve a category object by ID, falling back to custom categories,
  * then to 'other'.
  */

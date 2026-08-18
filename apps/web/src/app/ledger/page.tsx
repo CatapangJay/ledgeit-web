@@ -3,19 +3,21 @@
 import { Suspense, useEffect, useState, useMemo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MagnifyingGlass, X, SlidersHorizontal, CaretDown } from '@phosphor-icons/react'
+import { MagnifyingGlass, X, SlidersHorizontal, CaretDown, ListChecks, Tag, CalendarBlank, Trash } from '@phosphor-icons/react'
 import FilterChips from '@/components/ledger/FilterChips'
 import DateFilterBar from '@/components/ledger/DateFilterBar'
 import DateGroup from '@/components/ledger/DateGroup'
 import TransactionRow from '@/components/ledger/TransactionRow'
 import TransactionEditSheet from '@/components/ledger/TransactionEditSheet'
 import CategoryBreakdownBar from '@/components/ledger/CategoryBreakdownBar'
+import CategoryPickerSheet from '@/components/ledger/CategoryPickerSheet'
+import DatePickerSheet from '@/components/ui/DatePickerSheet'
 import { useStore } from '@/lib/store'
 import { formatCurrency } from '@/lib/formatters'
 import { PAYMENT_METHODS, CATEGORIES } from '@/types'
 import type { FilterValue } from '@/components/ledger/FilterChips'
 import type { DatePeriod } from '@/components/ledger/DateFilterBar'
-import type { Transaction, PaymentMethodId } from '@/types'
+import type { Transaction, PaymentMethodId, Category } from '@/types'
 
 function groupByDate(txns: Transaction[]): [string, Transaction[]][] {
   const map = new Map<string, Transaction[]>()
@@ -87,6 +89,13 @@ function LedgerContent() {
   const [filtersOpen, setFiltersOpen] = useState(false)
   // The transaction currently open in the edit sheet, if any.
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
+  // Bulk selection: whether we're in select mode, and which ids are picked.
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkPickerOpen, setBulkPickerOpen] = useState(false)
+  const [bulkDatePickerOpen, setBulkDatePickerOpen] = useState(false)
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
+  const [bulkError, setBulkError] = useState(false)
 
   // Seed the custom-day filter when arriving via a heatmap deep-link.
   useEffect(() => {
@@ -119,6 +128,9 @@ function LedgerContent() {
   const transactions = useStore((s) => s.transactions)
   const deleteTransaction = useStore((s) => s.deleteTransaction)
   const updateTransaction = useStore((s) => s.updateTransaction)
+  const bulkChangeCategory = useStore((s) => s.bulkChangeCategory)
+  const bulkChangeDate = useStore((s) => s.bulkChangeDate)
+  const bulkDelete = useStore((s) => s.bulkDelete)
   const customCategories = useStore((s) => s.customCategories)
   const hiddenCategories = useStore((s) => s.hiddenCategories)
 
@@ -176,10 +188,94 @@ function LedgerContent() {
 
   const groups = groupByDate(filtered)
 
+  // Debt-linked entries can't be recategorized here (managed on the Debts page),
+  // so they're excluded from selection and select-all.
+  const selectableFiltered = useMemo(
+    () => filtered.filter((t) => t.category.id !== 'debts'),
+    [filtered]
+  )
+  // Selection is scoped to what's currently visible: a selected id only counts
+  // while its row is in view, so the count always matches what "Change category"
+  // will affect. Changing filters naturally narrows/widens the effective set.
+  const visibleSelectedIds = useMemo(
+    () => selectableFiltered.filter((t) => selectedIds.has(t.id)).map((t) => t.id),
+    [selectableFiltered, selectedIds]
+  )
+  const selectedCount = visibleSelectedIds.length
+  const allSelected = selectableFiltered.length > 0 && selectedCount === selectableFiltered.length
+
+  function enterSelectMode() {
+    setSelectMode(true)
+    setSelectedIds(new Set())
+  }
+
+  function exitSelectMode() {
+    setSelectMode(false)
+    setSelectedIds(new Set())
+    setBulkPickerOpen(false)
+    setBulkDatePickerOpen(false)
+    setBulkDeleteConfirm(false)
+    setBulkError(false)
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    // Operate only on the visible set: clear them if all are selected, else add
+    // every visible row (preserving any off-screen selections already made).
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (allSelected) {
+        for (const t of selectableFiltered) next.delete(t.id)
+      } else {
+        for (const t of selectableFiltered) next.add(t.id)
+      }
+      return next
+    })
+  }
+
+  async function handleBulkCategory(category: Category) {
+    const ids = visibleSelectedIds
+    setBulkPickerOpen(false)
+    setBulkError(false)
+    const ok = await bulkChangeCategory(ids, category)
+    if (ok) {
+      exitSelectMode()
+    } else {
+      // Keep the selection so the user can retry; surface the failure.
+      setBulkError(true)
+    }
+  }
+
+  async function handleBulkDate(date: string) {
+    const ids = visibleSelectedIds
+    setBulkDatePickerOpen(false)
+    setBulkError(false)
+    const ok = await bulkChangeDate(ids, date)
+    if (ok) exitSelectMode()
+    else setBulkError(true)
+  }
+
+  async function handleBulkDelete() {
+    const ids = visibleSelectedIds
+    setBulkDeleteConfirm(false)
+    setBulkError(false)
+    const ok = await bulkDelete(ids)
+    if (ok) exitSelectMode()
+    else setBulkError(true)
+  }
+
   return (
     <div className="px-5 pb-4 md:px-8 md:max-w-3xl md:mx-auto lg:max-w-4xl lg:px-10" style={{ background: '#f8faf9', minHeight: '100dvh' }}>
       {/* Header */}
-      <div className="flex items-baseline justify-between gap-3 pb-4 pt-12 md:pt-8">
+      <div className="flex items-center justify-between gap-3 pb-4 pt-12 md:pt-8">
         <div className="flex items-baseline gap-3">
           <h1 className="text-base font-bold tracking-tight" style={{ color: '#00352e' }}>
             Activity
@@ -188,12 +284,92 @@ function LedgerContent() {
             {filtered.length} {filtered.length === 1 ? 'entry' : 'entries'}
           </span>
         </div>
-        {totalAmount > 0 && (
-          <span className="font-mono text-xs font-semibold" style={{ color: '#ba1a1a' }}>
-            −{formatCurrency(totalAmount)}
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {totalAmount > 0 && !selectMode && (
+            <span className="font-mono text-xs font-semibold" style={{ color: '#ba1a1a' }}>
+              −{formatCurrency(totalAmount)}
+            </span>
+          )}
+          {filtered.length > 0 && (
+            <button
+              onClick={selectMode ? exitSelectMode : enterSelectMode}
+              className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-colors"
+              style={selectMode ? { background: '#00352e', color: '#ffffff' } : { background: '#f0f4f2', color: '#3f4946' }}
+            >
+              <ListChecks size={13} weight="bold" aria-hidden="true" />
+              {selectMode ? 'Done' : 'Select'}
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Bulk selection toolbar */}
+      <AnimatePresence initial={false}>
+        {selectMode && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+            className="overflow-hidden"
+          >
+            <div
+              className="mb-3 flex flex-col gap-2 rounded-xl px-3 py-2.5"
+              style={{ background: '#ffffff', boxShadow: '0 2px 12px rgba(0,53,46,0.06)' }}
+            >
+              {/* Row 1: select-all + count */}
+              <div className="flex items-center justify-between gap-2">
+                <button
+                  onClick={toggleSelectAll}
+                  className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold"
+                  style={{ background: '#f0f4f2', color: '#1f695d' }}
+                >
+                  {allSelected ? 'Clear all' : 'Select all'}
+                </button>
+                <span className="text-[12px] font-semibold" style={{ color: '#3f4946' }}>
+                  {selectedCount} selected
+                </span>
+              </div>
+
+              {/* Row 2: bulk actions */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setBulkPickerOpen(true)}
+                  disabled={selectedCount === 0}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold text-white disabled:opacity-40"
+                  style={{ background: 'linear-gradient(135deg, #1f695d 0%, #00352e 100%)' }}
+                >
+                  <Tag size={13} weight="bold" aria-hidden="true" />
+                  Category
+                </button>
+                <button
+                  onClick={() => setBulkDatePickerOpen(true)}
+                  disabled={selectedCount === 0}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold disabled:opacity-40"
+                  style={{ background: '#e7edeb', color: '#1f695d' }}
+                >
+                  <CalendarBlank size={13} weight="bold" aria-hidden="true" />
+                  Date
+                </button>
+                <button
+                  onClick={() => setBulkDeleteConfirm(true)}
+                  disabled={selectedCount === 0}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold disabled:opacity-40"
+                  style={{ background: '#fbeaea', color: '#ba1a1a' }}
+                >
+                  <Trash size={13} weight="bold" aria-hidden="true" />
+                  Delete
+                </button>
+              </div>
+            </div>
+            {bulkError && (
+              <p className="mb-3 rounded-xl px-3 py-2 text-[12px] font-semibold" style={{ background: '#fbeaea', color: '#ba1a1a' }}>
+                Couldn’t update those transactions. Check your connection and try again.
+              </p>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Search */}
       <div
@@ -355,6 +531,9 @@ function LedgerContent() {
                             onDelete={deleteTransaction}
                             onDateChange={(id, date) => updateTransaction(id, { date })}
                             onEdit={setEditingTx}
+                            selectMode={selectMode}
+                            selected={selectedIds.has(tx.id)}
+                            onToggleSelect={tx.category.id === 'debts' ? undefined : toggleSelect}
                           />
                         </div>
                       ))}
@@ -375,6 +554,80 @@ function LedgerContent() {
         onSave={updateTransaction}
         onDelete={deleteTransaction}
       />
+
+      <CategoryPickerSheet
+        open={bulkPickerOpen}
+        title={`Move ${selectedCount} to…`}
+        customCategories={customCategories}
+        hiddenCategories={hiddenCategories}
+        onSelect={handleBulkCategory}
+        onClose={() => setBulkPickerOpen(false)}
+      />
+
+      {/* Bulk date picker */}
+      <DatePickerSheet
+        open={bulkDatePickerOpen}
+        value={toISO(new Date())}
+        onSelect={handleBulkDate}
+        onClose={() => setBulkDatePickerOpen(false)}
+      />
+
+      {/* Bulk delete confirmation */}
+      <AnimatePresence>
+        {bulkDeleteConfirm && (
+          <>
+            <motion.div
+              className="fixed inset-0 z-[70]"
+              style={{ background: 'rgba(0,53,46,0.28)', backdropFilter: 'blur(4px)' }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.16 }}
+              onClick={() => setBulkDeleteConfirm(false)}
+              aria-hidden="true"
+            />
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Confirm bulk delete"
+              className="fixed left-1/2 top-1/2 z-[71] w-[min(22rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-3xl p-5"
+              style={{ background: '#ffffff', boxShadow: '0 24px 80px rgba(0,53,46,0.24)' }}
+              initial={{ opacity: 0, scale: 0.94, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 8 }}
+              transition={{ type: 'spring', stiffness: 340, damping: 30 }}
+            >
+              <div className="mb-3 flex items-center gap-2.5">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full" style={{ background: 'rgba(186,26,26,0.12)' }}>
+                  <Trash size={17} weight="fill" style={{ color: '#ba1a1a' }} aria-hidden="true" />
+                </div>
+                <h3 className="text-sm font-bold" style={{ color: '#00352e' }}>
+                  Delete {selectedCount} {selectedCount === 1 ? 'transaction' : 'transactions'}?
+                </h3>
+              </div>
+              <p className="mb-4 text-[13px] leading-relaxed" style={{ color: '#3f4946' }}>
+                This permanently removes the selected {selectedCount === 1 ? 'entry' : 'entries'}. This can’t be undone.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setBulkDeleteConfirm(false)}
+                  className="flex-1 rounded-xl py-2.5 text-[13px] font-semibold"
+                  style={{ background: '#f0f4f2', color: '#3f4946' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  className="flex-1 rounded-xl py-2.5 text-[13px] font-bold text-white"
+                  style={{ background: '#ba1a1a' }}
+                >
+                  Delete
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
