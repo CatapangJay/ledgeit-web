@@ -2,11 +2,12 @@
 
 import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { CaretLeft, CaretRight, Sliders } from '@phosphor-icons/react'
+import { CaretLeft, CaretRight, Sliders, ArrowsDownUp } from '@phosphor-icons/react'
 import MetricStrip from '@/components/insights/MetricStrip'
 import BudgetBar from '@/components/insights/BudgetBar'
+import CategoryBreakdownList from '@/components/insights/CategoryBreakdownList'
 import SpendDonut from '@/components/insights/SpendDonut'
-import WeeklyTrendChart from '@/components/dashboard/WeeklyTrendChart'
+import MonthTrendChart from '@/components/dashboard/MonthTrendChart'
 import RecurringPaymentsCard from '@/components/dashboard/RecurringPaymentsCard'
 import BiggestExpenseCard from '@/components/dashboard/BiggestExpenseCard'
 import BudgetAllocationSheet from '@/components/budget/BudgetAllocationSheet'
@@ -26,13 +27,25 @@ function getMonthBounds(offset: number): { start: string; end: string; label: st
   return { start, end, label: formatMonthLabel(start) }
 }
 
+type SortMode = 'spent' | 'remaining' | 'name'
+
+const SORT_OPTIONS: { id: SortMode; label: string }[] = [
+  { id: 'spent', label: 'Most spent' },
+  { id: 'remaining', label: 'Closest to limit' },
+  { id: 'name', label: 'A–Z' },
+]
+
 export default function InsightsPage() {
   const [monthOffset, setMonthOffset] = useState(0)
   const [allocationSheetOpen, setAllocationSheetOpen] = useState(false)
+  const [sortMode, setSortMode] = useState<SortMode>('spent')
+  // Which Budget Flow category is expanded to show its breakdown (null = none).
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null)
   const transactions = useStore((s) => s.transactions)
   const budgetLimits = useStore((s) => s.budgetLimits)
   const budgetAllocations = useStore((s) => s.budgetAllocations)
   const customCategories = useStore((s) => s.customCategories)
+  const hiddenCategories = useStore((s) => s.hiddenCategories)
 
   const activePlan = budgetAllocations.find((a) => a.isActive)
 
@@ -82,28 +95,62 @@ export default function InsightsPage() {
       }, {})
   }, [monthTxns])
 
+  // Plain-language read on cashflow so non-financial users get a clear takeaway.
+  // Savings rate = how much of what you earned you kept.
+  const savingsRate = totalIncome > 0 ? netCashflow / totalIncome : 0
+  let cashflowSub: string
+  let cashflowHint: string
+  if (totalIncome === 0 && totalExpense === 0) {
+    cashflowSub = 'no activity'
+    cashflowHint = 'No income or spending logged yet this month.'
+  } else if (netCashflow > 0 && savingsRate >= 0.2) {
+    cashflowSub = 'looking great'
+    cashflowHint = 'You kept more than you spent — great job, keep it up!'
+  } else if (netCashflow > 0) {
+    cashflowSub = 'in the green'
+    cashflowHint = 'You earned more than you spent this month. Nice work.'
+  } else if (netCashflow === 0) {
+    cashflowSub = 'breaking even'
+    cashflowHint = 'You spent exactly what you earned — try to keep a little.'
+  } else {
+    cashflowSub = 'overspending'
+    cashflowHint = 'You spent more than you earned this month. Ease up where you can.'
+  }
+
   const metrics = [
     {
-      label: 'Net Cashflow',
+      label: 'Money Left',
       value: formatCurrency(Math.abs(netCashflow)),
       color: netCashflow >= 0 ? '#1f6950' : '#ba1a1a',
-      sub: netCashflow >= 0 ? 'positive' : 'negative',
+      sub: cashflowSub,
+      hint: cashflowHint,
     },
     {
-      label: 'Avg / Day',
+      label: 'Daily Spend',
       value: formatCurrency(avgDaySpend),
-      sub: 'spending',
+      sub: 'per day',
+      hint: 'On average, this is how much you spend each day this month.',
     },
     {
-      label: 'Proj. EOM',
+      label: 'Month Forecast',
       value: formatCurrency(projectedEOM),
-      sub: 'at this rate',
+      sub: 'est. total',
+      hint: isCurrentMonth
+        ? 'If you keep spending at this pace, this is your total by month-end.'
+        : 'Your total spending for this month.',
     },
   ]
 
   const budgetCategories = useMemo(
     () => [
-      ...CATEGORIES.filter((c) => c.id !== 'income' && c.id !== 'other'),
+      ...CATEGORIES.filter(
+        (c) =>
+          c.id !== 'income' &&
+          c.id !== 'other' &&
+          c.id !== 'debts' &&
+          c.id !== 'transfers' &&
+          !hiddenCategories.includes(c.id)
+      ),
       ...customCategories.map((c) => ({
         id: c.id,
         label: c.name,
@@ -113,8 +160,41 @@ export default function InsightsPage() {
         keywords: [] as string[],
       })),
     ],
-    [customCategories]
+    [customCategories, hiddenCategories]
   )
+
+  // Categories with an effective limit/spend, filtered to those with activity,
+  // then sorted per the selected mode. `limit` mirrors the bar's fallback so
+  // "closest to limit" ranks by the same ratio the bar renders.
+  const visibleCategories = useMemo(() => {
+    const rows = budgetCategories
+      .map((cat) => {
+        const rawLimit = budgetLimits.find((b) => b.categoryId === cat.id)?.limit ?? 0
+        const spent = categorySpend[cat.id] ?? 0
+        return { cat, spent, limit: rawLimit > 0 ? rawLimit : spent * 1.5, hasLimit: rawLimit > 0 }
+      })
+      .filter((r) => !(r.limit === 0 && r.spent === 0))
+
+    const ratio = (r: { spent: number; limit: number }) => (r.limit > 0 ? r.spent / r.limit : 0)
+    rows.sort((a, b) => {
+      if (sortMode === 'name') return a.cat.label.localeCompare(b.cat.label)
+      if (sortMode === 'remaining') return ratio(b) - ratio(a)
+      return b.spent - a.spent // 'spent'
+    })
+    return rows
+  }, [budgetCategories, budgetLimits, categorySpend, sortMode])
+
+  // This month's transactions grouped by category id, for the expanded breakdown.
+  const txnsByCategory = useMemo(() => {
+    return monthTxns.reduce<Record<string, typeof monthTxns>>((acc, t) => {
+      (acc[t.category.id] ??= []).push(t)
+      return acc
+    }, {})
+  }, [monthTxns])
+
+  function toggleCategory(categoryId: string) {
+    setExpandedCategory((prev) => (prev === categoryId ? null : categoryId))
+  }
 
   return (
     <div className="px-5 pb-4 md:px-8 lg:px-10" style={{ background: '#f8faf9', minHeight: '100dvh' }}>
@@ -181,31 +261,51 @@ export default function InsightsPage() {
           <div className="mt-4">
             <SpendDonut spent={totalExpense} saved={Math.max(totalIncome - totalExpense, 0)} />
           </div>
+
+          {/* Daily spending trend for the selected month */}
+          <div className="mt-4">
+            <MonthTrendChart start={start} end={end} />
+          </div>
         </div>
 
         {/* Right col: budget breakdown */}
         <div>
-          {/* Section label */}
-          <div className="py-4 mt-2">
+          {/* Section label + sort */}
+          <div className="py-4 mt-2 flex items-center justify-between gap-2">
             <span className="text-[12px] font-bold uppercase tracking-[0.12em]" style={{ color: '#00352e' }}>
               Budget Flow
             </span>
+            {visibleCategories.length > 1 && (
+              <div className="flex items-center gap-1.5 rounded-full px-2.5 py-1" style={{ background: '#f0f4f2' }}>
+                <ArrowsDownUp size={12} weight="bold" style={{ color: '#6e9990' }} aria-hidden="true" />
+                <select
+                  aria-label="Sort categories"
+                  value={sortMode}
+                  onChange={(e) => setSortMode(e.target.value as SortMode)}
+                  className="bg-transparent text-[11px] font-semibold outline-none"
+                  style={{ color: '#3f4946' }}
+                >
+                  {SORT_OPTIONS.map((o) => (
+                    <option key={o.id} value={o.id}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
-          {/* Budget bars */}
-          {budgetCategories.map((cat) => {
-            const limit = budgetLimits.find((b) => b.categoryId === cat.id)?.limit ?? 0
-            const spent = categorySpend[cat.id] ?? 0
-            if (limit === 0 && spent === 0) return null
-            return (
-              <BudgetBar
-                key={cat.id}
-                category={cat}
-                spent={spent}
-                limit={limit > 0 ? limit : spent * 1.5}
-              />
-            )
-          })}
+          {/* Budget bars — click a category to expand its breakdown for the month */}
+          {visibleCategories.map(({ cat, spent, limit }) => (
+            <BudgetBar
+              key={cat.id}
+              category={cat}
+              spent={spent}
+              limit={limit}
+              expanded={expandedCategory === cat.id}
+              onToggle={toggleCategory}
+            >
+              <CategoryBreakdownList transactions={txnsByCategory[cat.id] ?? []} />
+            </BudgetBar>
+          ))}
 
           {/* Empty state */}
           {Object.keys(categorySpend).length === 0 && (
@@ -218,11 +318,7 @@ export default function InsightsPage() {
       </div>
 
       {/* ── Spending patterns ─────────────────────────────────────────────── */}
-      <div className="mt-8">
-        <WeeklyTrendChart />
-      </div>
-
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="mt-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <RecurringPaymentsCard />
         <BiggestExpenseCard />
       </div>

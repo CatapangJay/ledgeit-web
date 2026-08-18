@@ -21,8 +21,10 @@ interface DebtRepaymentRow {
   id: string
   debt_id: string
   amount: number
+  interest: number
   date: string
   transaction_id: string | null
+  interest_transaction_id: string | null
   created_at: string
 }
 
@@ -32,8 +34,10 @@ function rowToRepayment(row: DebtRepaymentRow): DebtRepayment {
   return {
     id: row.id,
     amount: Number(row.amount),
+    interest: Number(row.interest ?? 0),
     date: String(row.date).slice(0, 10),
     transactionId: row.transaction_id ?? undefined,
+    interestTransactionId: row.interest_transaction_id ?? undefined,
     createdAt: row.created_at,
   }
 }
@@ -99,7 +103,13 @@ export async function createDebt(
 
 export async function insertDebtRepayment(
   debtId: string,
-  payload: { amount: number; date: string; transactionId?: string }
+  payload: {
+    amount: number
+    interest?: number
+    date: string
+    transactionId?: string
+    interestTransactionId?: string
+  }
 ): Promise<DebtRepayment> {
   const supabase = createClient()
   const { data, error } = await supabase
@@ -107,8 +117,10 @@ export async function insertDebtRepayment(
     .insert({
       debt_id: debtId,
       amount: payload.amount,
+      interest: payload.interest ?? 0,
       date: payload.date,
       transaction_id: payload.transactionId ?? null,
+      interest_transaction_id: payload.interestTransactionId ?? null,
     })
     .select('*')
     .single()

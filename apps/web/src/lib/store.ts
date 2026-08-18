@@ -27,6 +27,10 @@ import {
   deleteCustomCategory,
 } from '@/lib/db/customCategories'
 import {
+  fetchHiddenCategories,
+  saveHiddenCategories,
+} from '@/lib/db/userSettings'
+import {
   fetchDebts,
   createDebt,
   patchDebt,
@@ -92,6 +96,8 @@ interface StoreState {
   budgetLimits: BudgetLimit[]
   budgetAllocations: BudgetAllocation[]
   customCategories: CustomCategory[]
+  /** Ids of preset categories the user has hidden ("deleted"). */
+  hiddenCategories: string[]
   /** Merchant key → category id (preset or custom) learned from user corrections */
   learnedMerchants: Record<string, string>
   isLoading: boolean
@@ -122,6 +128,11 @@ interface StoreActions {
   loadCustomCategories: (userId: string) => Promise<void>
   addCustomCategory: (userId: string, name: string, icon: string, textColor: string, bgColor: string) => Promise<CustomCategory>
   removeCustomCategory: (id: string) => Promise<void>
+  loadHiddenCategories: (userId: string) => Promise<void>
+  /** Hide ("delete") a preset category for the current user. Reversible. */
+  hidePresetCategory: (categoryId: string) => Promise<void>
+  /** Restore a previously hidden preset category. */
+  unhidePresetCategory: (categoryId: string) => Promise<void>
   addTransaction: (tx: Transaction) => void
   deleteTransaction: (id: string) => void
   updateTransaction: (id: string, patch: Partial<Transaction>) => void
@@ -137,7 +148,7 @@ interface StoreActions {
   loadDebts: (userId: string) => Promise<void>
   addDebt: (payload: { personName: string; direction: DebtDirection; principal: number; note?: string; dueDate?: string; date: string }) => Promise<void>
   updateDebt: (debtId: string, payload: { personName: string; direction: DebtDirection; principal: number; note?: string; dueDate?: string }) => Promise<void>
-  recordDebtRepayment: (debtId: string, payload: { amount: number; date: string }) => Promise<void>
+  recordDebtRepayment: (debtId: string, payload: { amount: number; interest?: number; date: string }) => Promise<void>
   toggleDebtSettled: (debtId: string) => Promise<void>
   removeDebt: (debtId: string) => Promise<void>
 }
@@ -151,6 +162,7 @@ export const useStore = create<AppStore>()((set, get) => ({
   budgetLimits: DEFAULT_BUDGETS,
   budgetAllocations: [],
   customCategories: [],
+  hiddenCategories: [],
   learnedMerchants: {},
   isLoading: false,
   userId: null,
@@ -419,6 +431,44 @@ export const useStore = create<AppStore>()((set, get) => ({
     }
   },
 
+  async loadHiddenCategories(userId) {
+    try {
+      const hiddenCategories = await fetchHiddenCategories(userId)
+      set({ hiddenCategories })
+    } catch {
+      // Keep empty on error
+    }
+  },
+
+  async hidePresetCategory(categoryId) {
+    const userId = get().userId
+    if (!userId) return
+    const prev = get().hiddenCategories
+    if (prev.includes(categoryId)) return
+    const next = [...prev, categoryId]
+    set({ hiddenCategories: next })
+    try {
+      await saveHiddenCategories(userId, next)
+    } catch (err) {
+      console.error('[store] hidePresetCategory failed:', err)
+      set({ hiddenCategories: prev })
+    }
+  },
+
+  async unhidePresetCategory(categoryId) {
+    const userId = get().userId
+    if (!userId) return
+    const prev = get().hiddenCategories
+    const next = prev.filter((id) => id !== categoryId)
+    set({ hiddenCategories: next })
+    try {
+      await saveHiddenCategories(userId, next)
+    } catch (err) {
+      console.error('[store] unhidePresetCategory failed:', err)
+      set({ hiddenCategories: prev })
+    }
+  },
+
   addTransaction(tx) {
     // Optimistic: add immediately
     set((state) => ({ transactions: [tx, ...state.transactions] }))
@@ -516,8 +566,10 @@ export const useStore = create<AppStore>()((set, get) => ({
     const userId = get().userId
     if (!userId) return
 
-    // Lending money out leaves your pocket (expense); borrowing brings it in
-    // (income). The linked transaction makes the movement show in your totals.
+    // A debt is not spending or earning — it's money moving between your own
+    // pockets (out when you lend, in when you borrow). So it's logged as a
+    // `transfer`, which is excluded from income/expense totals. Only interest
+    // (handled at repayment time) is a true expense/income.
     const debtCategory = CATEGORIES.find((c) => c.id === 'debts')!
     const txId = crypto.randomUUID()
     const label = direction === 'owed_to_me' ? `Lent to ${personName}` : `Borrowed from ${personName}`
@@ -528,7 +580,7 @@ export const useStore = create<AppStore>()((set, get) => ({
       merchant: label,
       category: debtCategory,
       date,
-      type: direction === 'owed_to_me' ? 'expense' : 'income',
+      type: 'transfer',
       paymentMethod: 'cash',
       confidence: 1,
       note,
@@ -556,15 +608,15 @@ export const useStore = create<AppStore>()((set, get) => ({
       ),
     }))
 
-    // Keep the linked origination transaction in step with the edited debt:
-    // its label, amount, and direction (expense when lent out, income when
-    // borrowed) all derive from these fields.
+    // Keep the linked origination transfer in step with the edited debt: its
+    // label and amount derive from these fields. It stays a `transfer` (debt
+    // principal never counts as income/expense).
     if (debt.transactionId) {
       const label = direction === 'owed_to_me' ? `Lent to ${personName}` : `Borrowed from ${personName}`
       get().updateTransaction(debt.transactionId, {
         merchant: label,
         amount: principal,
-        type: direction === 'owed_to_me' ? 'expense' : 'income',
+        type: 'transfer',
         note,
       })
     }
@@ -583,38 +635,77 @@ export const useStore = create<AppStore>()((set, get) => ({
     }
   },
 
-  async recordDebtRepayment(debtId, { amount, date }) {
+  async recordDebtRepayment(debtId, { amount, interest = 0, date }) {
     const debt = get().debts.find((d) => d.id === debtId)
     if (!debt) return
 
-    // A repayment reverses the origination direction: money owed TO you comes
-    // back in (income); repaying what YOU owe goes out (expense).
     const debtCategory = CATEGORIES.find((c) => c.id === 'debts')!
-    const txId = crypto.randomUUID()
-    const label = debt.direction === 'owed_to_me'
-      ? `${debt.personName} repaid`
-      : `Repaid ${debt.personName}`
-    const tx: Transaction = {
-      id: txId,
-      raw: `${label} ${amount}`,
-      amount,
-      merchant: label,
-      category: debtCategory,
-      date,
-      type: debt.direction === 'owed_to_me' ? 'income' : 'expense',
-      paymentMethod: 'cash',
-      confidence: 1,
-      createdAt: new Date().toISOString(),
+    const now = new Date().toISOString()
+
+    // Principal moves money between your own pockets, so it's a `transfer`
+    // (excluded from income/expense totals) — matching the origination. Skipped
+    // for interest-only payments (amount 0), where no principal changes hands.
+    let principalTxId: string | undefined
+    let principalTx: Transaction | undefined
+    if (amount > 0) {
+      principalTxId = crypto.randomUUID()
+      const principalLabel = debt.direction === 'owed_to_me'
+        ? `${debt.personName} repaid`
+        : `Repaid ${debt.personName}`
+      principalTx = {
+        id: principalTxId,
+        raw: `${principalLabel} ${amount}`,
+        amount,
+        merchant: principalLabel,
+        category: debtCategory,
+        date,
+        type: 'transfer',
+        paymentMethod: 'cash',
+        confidence: 1,
+        createdAt: now,
+      }
+    }
+
+    // Interest IS a real gain/cost: interest you collect on money owed to you is
+    // income; interest you pay on what you owe is an expense. Only this leg
+    // moves your income/expense totals. Logged as a separate transaction so it's
+    // isolated and stays linked for edits/deletes.
+    let interestTxId: string | undefined
+    let interestTx: Transaction | undefined
+    if (interest > 0) {
+      interestTxId = crypto.randomUUID()
+      const interestLabel = debt.direction === 'owed_to_me'
+        ? `Interest from ${debt.personName}`
+        : `Interest to ${debt.personName}`
+      interestTx = {
+        id: interestTxId,
+        raw: `${interestLabel} ${interest}`,
+        amount: interest,
+        merchant: interestLabel,
+        category: debtCategory,
+        date,
+        type: debt.direction === 'owed_to_me' ? 'income' : 'expense',
+        paymentMethod: 'cash',
+        confidence: 1,
+        createdAt: now,
+      }
     }
 
     try {
-      const repayment = await insertDebtRepayment(debtId, { amount, date, transactionId: txId })
+      const repayment = await insertDebtRepayment(debtId, {
+        amount,
+        interest,
+        date,
+        transactionId: principalTxId,
+        interestTransactionId: interestTxId,
+      })
       set((state) => ({
         debts: state.debts.map((d) =>
           d.id === debtId ? { ...d, repayments: [...d.repayments, repayment] } : d
         ),
       }))
-      get().addTransaction(tx)
+      if (principalTx) get().addTransaction(principalTx)
+      if (interestTx) get().addTransaction(interestTx)
     } catch (err) {
       console.error('[store] recordDebtRepayment failed:', err)
     }
@@ -645,9 +736,10 @@ export const useStore = create<AppStore>()((set, get) => ({
     // Remove the debt optimistically, then clean up its linked ledger
     // transactions (origination + every repayment) so nothing is orphaned.
     set((state) => ({ debts: state.debts.filter((d) => d.id !== debtId) }))
-    const linkedTxIds = [debt.transactionId, ...debt.repayments.map((r) => r.transactionId)].filter(
-      (id): id is string => Boolean(id)
-    )
+    const linkedTxIds = [
+      debt.transactionId,
+      ...debt.repayments.flatMap((r) => [r.transactionId, r.interestTransactionId]),
+    ].filter((id): id is string => Boolean(id))
     for (const id of linkedTxIds) get().deleteTransaction(id)
 
     try {

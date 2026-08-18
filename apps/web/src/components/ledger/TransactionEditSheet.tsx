@@ -3,7 +3,7 @@
 import { createElement, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, CalendarBlank, Trash } from '@phosphor-icons/react'
+import { X, CalendarBlank, Trash, ArrowsClockwise } from '@phosphor-icons/react'
 import DatePickerSheet from '@/components/ui/DatePickerSheet'
 import { getIconComponent } from '@/lib/iconMap'
 import { formatDate } from '@/lib/formatters'
@@ -19,6 +19,8 @@ interface Props {
   /** The transaction to edit, or null when the sheet is closed. */
   tx: Transaction | null
   customCategories?: CustomCategory[]
+  /** Preset category ids the user has hidden — excluded from the picker. */
+  hiddenCategories?: string[]
   onClose: () => void
   onSave: (id: string, patch: Partial<Transaction>) => void
   onDelete: (id: string) => void
@@ -39,13 +41,14 @@ function typeForCategory(catId: string): TransactionType {
  * Debt-linked transactions (category "debts") are read-only here — editing them
  * would desync the Debt record, so the user is pointed to the Debts page.
  */
-export default function TransactionEditSheet({ tx, customCategories = [], onClose, onSave, onDelete }: Props) {
+export default function TransactionEditSheet({ tx, customCategories = [], hiddenCategories = [], onClose, onSave, onDelete }: Props) {
   const open = tx !== null
   const [merchant, setMerchant] = useState('')
   const [amount, setAmount] = useState('')
   const [category, setCategory] = useState<Category>(CATEGORIES[0])
   const [date, setDate] = useState('')
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodId>('cash')
+  const [isRecurring, setIsRecurring] = useState(false)
   const [datePickerOpen, setDatePickerOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
@@ -60,6 +63,7 @@ export default function TransactionEditSheet({ tx, customCategories = [], onClos
     setCategory(tx.category)
     setDate(tx.date)
     setPaymentMethod(tx.paymentMethod)
+    setIsRecurring(tx.isRecurring ?? false)
     setConfirmDelete(false)
   }
   if (!tx && seededId !== null) setSeededId(null)
@@ -76,7 +80,12 @@ export default function TransactionEditSheet({ tx, customCategories = [], onClos
 
   const isDebt = tx.category.id === 'debts'
   const allCategories: Category[] = [
-    ...CATEGORIES.filter((c) => c.id !== 'debts'), // debts are managed on the Debts page
+    ...CATEGORIES.filter(
+      (c) =>
+        c.id !== 'debts' && // debts are managed on the Debts page
+        // Hidden presets are dropped, unless this entry already uses one.
+        (!hiddenCategories.includes(c.id) || c.id === tx.category.id)
+    ),
     ...customCategories.map((c) => ({
       id: c.id, label: c.name, icon: c.icon, color: c.textColor, bgColor: c.bgColor, keywords: [] as string[],
     })),
@@ -93,6 +102,7 @@ export default function TransactionEditSheet({ tx, customCategories = [], onClos
       category,
       date,
       paymentMethod,
+      isRecurring,
       type: typeForCategory(category.id),
     })
     onClose()
@@ -230,6 +240,41 @@ export default function TransactionEditSheet({ tx, customCategories = [], onClos
                       )
                     })}
                   </div>
+
+                  {/* Recurring toggle — expenses only (feeds the Recurring Bills card) */}
+                  {typeForCategory(category.id) === 'expense' && (
+                    <button
+                      type="button"
+                      onClick={() => setIsRecurring((v) => !v)}
+                      aria-pressed={isRecurring}
+                      className="mt-4 flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition-colors"
+                      style={{
+                        background: isRecurring ? 'rgba(31,105,80,0.08)' : '#ffffff',
+                        border: `1px solid ${isRecurring ? '#1f695d' : '#e7edeb'}`,
+                      }}
+                    >
+                      <div
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+                        style={{ background: isRecurring ? '#1f695d' : '#f0f4f2' }}
+                      >
+                        <ArrowsClockwise size={15} weight="bold" color={isRecurring ? '#ffffff' : '#6e9990'} aria-hidden="true" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[13px] font-semibold" style={{ color: '#191c1c' }}>Recurring bill</p>
+                        <p className="text-[11px]" style={{ color: '#6e9990' }}>Subscriptions, rent, and monthly dues</p>
+                      </div>
+                      {/* Switch */}
+                      <div
+                        className="relative h-5 w-9 shrink-0 rounded-full transition-colors"
+                        style={{ background: isRecurring ? '#1f695d' : '#cde0db' }}
+                      >
+                        <span
+                          className="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all"
+                          style={{ left: isRecurring ? '18px' : '2px' }}
+                        />
+                      </div>
+                    </button>
+                  )}
                 </>
               )}
             </div>

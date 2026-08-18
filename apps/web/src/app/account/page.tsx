@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { SignOut, PencilSimple, Check, X, Lock, User, SlidersHorizontal, CaretRight, HandCoins } from '@phosphor-icons/react'
+import { SignOut, PencilSimple, Check, X, Lock, User, SlidersHorizontal, CaretRight, HandCoins, Tag } from '@phosphor-icons/react'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import { useStore } from '@/lib/store'
 import { debtOutstanding } from '@/types'
 import BudgetAllocationSheet from '@/components/budget/BudgetAllocationSheet'
+import CategoryManagerSheet from '@/components/budget/CategoryManagerSheet'
 
 type Section = 'profile' | 'password'
 
@@ -33,11 +34,14 @@ export default function AccountPage() {
 
   const [activeSection, setActiveSection] = useState<Section>('profile')
   const [budgetSheetOpen, setBudgetSheetOpen] = useState(false)
+  const [categorySheetOpen, setCategorySheetOpen] = useState(false)
 
   const budgetAllocations = useStore((s) => s.budgetAllocations)
   const activePlan = budgetAllocations.find((a) => a.isActive) ?? null
   const debts = useStore((s) => s.debts)
   const openDebtCount = debts.filter((d) => !d.isSettled && debtOutstanding(d) > 0).length
+  const customCategories = useStore((s) => s.customCategories)
+  const hiddenCategories = useStore((s) => s.hiddenCategories)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -250,6 +254,32 @@ export default function AccountPage() {
               <CaretRight size={15} weight="bold" color="#6e9990" aria-hidden="true" />
             </button>
 
+            {/* Manage categories */}
+            <button
+              onClick={() => setCategorySheetOpen(true)}
+              aria-label="Manage categories"
+              className="flex items-center gap-3 rounded-xl border border-ledge-border bg-ledge-surface p-4 text-left transition-colors hover:bg-ledge-surface2 active:scale-[0.99]"
+              style={{ boxShadow: '0 2px 12px rgba(0,53,46,0.04)' }}
+            >
+              <div
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+                style={{ background: '#e7edeb' }}
+              >
+                <Tag size={16} weight="bold" color="#1f695d" aria-hidden="true" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-ledge-data">Categories</p>
+                <p className="truncate text-[11px] text-ledge-muted">
+                  {hiddenCategories.length > 0
+                    ? `${hiddenCategories.length} hidden${customCategories.length > 0 ? ` · ${customCategories.length} custom` : ''}`
+                    : customCategories.length > 0
+                      ? `${customCategories.length} custom`
+                      : 'Hide or restore categories'}
+                </p>
+              </div>
+              <CaretRight size={15} weight="bold" color="#6e9990" aria-hidden="true" />
+            </button>
+
             {/* Debts & Loans */}
             <button
               onClick={() => router.push('/debts')}
@@ -386,6 +416,7 @@ export default function AccountPage() {
       </AnimatePresence>
 
       <BudgetAllocationSheet open={budgetSheetOpen} onClose={() => setBudgetSheetOpen(false)} />
+      <CategoryManagerSheet open={categorySheetOpen} onClose={() => setCategorySheetOpen(false)} />
     </div>
   )
 }

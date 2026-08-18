@@ -50,6 +50,7 @@ export default function DebtLedger() {
   // Per-debt repayment input + delete confirm
   const [repayFor, setRepayFor] = useState<string | null>(null)
   const [repayAmount, setRepayAmount] = useState('')
+  const [repayInterest, setRepayInterest] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
 
   const { owedToMe, iOwe, totalOwedToMe, totalIOwe } = useMemo(() => {
@@ -96,10 +97,13 @@ export default function DebtLedger() {
 
   async function handleRepay(debtId: string) {
     const amount = parseFloat(repayAmount.replace(/[^0-9.]/g, '')) || 0
-    if (amount <= 0) return
-    await recordDebtRepayment(debtId, { amount, date: todayISO() })
+    const interest = parseFloat(repayInterest.replace(/[^0-9.]/g, '')) || 0
+    // Allow interest-only payments (principal 0) for interest-bearing loans.
+    if (amount <= 0 && interest <= 0) return
+    await recordDebtRepayment(debtId, { amount, interest, date: todayISO() })
     setRepayFor(null)
     setRepayAmount('')
+    setRepayInterest('')
   }
 
   async function handleDelete(debtId: string) {
@@ -166,7 +170,7 @@ export default function DebtLedger() {
               <motion.button
                 aria-label="Record repayment"
                 whileTap={{ scale: 0.88 }}
-                onClick={() => { setRepayFor(isRepaying ? null : debt.id); setRepayAmount('') }}
+                onClick={() => { setRepayFor(isRepaying ? null : debt.id); setRepayAmount(''); setRepayInterest('') }}
                 className="flex h-8 items-center gap-1 rounded-full px-2.5 text-[11px] font-bold"
                 style={{ background: '#e7edeb', color: accent }}
               >
@@ -216,30 +220,58 @@ export default function DebtLedger() {
               initial={{ opacity: 0, height: 0, marginTop: 0 }}
               animate={{ opacity: 1, height: 'auto', marginTop: 10 }}
               exit={{ opacity: 0, height: 0, marginTop: 0 }}
-              className="flex items-center gap-2 overflow-hidden"
+              className="overflow-hidden"
             >
-              <div className="flex flex-1 items-center gap-1 rounded-lg px-3 py-2" style={{ background: '#f8faf9', border: '1px solid #cde0db' }}>
-                <span className="font-mono text-sm font-semibold" style={{ color: '#6e9990' }}>₱</span>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  autoFocus
-                  value={repayAmount}
-                  onChange={(e) => setRepayAmount(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleRepay(debt.id)}
-                  placeholder={`Up to ${formatCurrency(outstanding)}`}
-                  className="w-full bg-transparent font-mono text-sm font-semibold outline-none"
-                  style={{ color: '#191c1c' }}
-                />
+              <div className="flex items-center gap-2">
+                <div className="flex flex-1 flex-col gap-0.5 rounded-lg px-3 py-1.5" style={{ background: '#f8faf9', border: '1px solid #cde0db' }}>
+                  <span className="text-[9px] font-bold uppercase tracking-wide" style={{ color: '#6e9990' }}>Principal</span>
+                  <div className="flex items-center gap-1">
+                    <span className="font-mono text-sm font-semibold" style={{ color: '#6e9990' }}>₱</span>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      autoFocus
+                      value={repayAmount}
+                      onChange={(e) => setRepayAmount(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleRepay(debt.id)}
+                      placeholder={`Up to ${formatCurrency(outstanding)}`}
+                      className="w-full bg-transparent font-mono text-sm font-semibold outline-none"
+                      style={{ color: '#191c1c' }}
+                    />
+                  </div>
+                </div>
+                <div className="flex w-24 flex-col gap-0.5 rounded-lg px-3 py-1.5" style={{ background: '#f8faf9', border: '1px solid #cde0db' }}>
+                  <span className="text-[9px] font-bold uppercase tracking-wide" style={{ color: '#6e9990' }}>
+                    {debt.direction === 'owed_to_me' ? 'Interest +' : 'Interest'}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <span className="font-mono text-sm font-semibold" style={{ color: '#6e9990' }}>₱</span>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      value={repayInterest}
+                      onChange={(e) => setRepayInterest(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleRepay(debt.id)}
+                      placeholder="0"
+                      className="w-full bg-transparent font-mono text-sm font-semibold outline-none"
+                      style={{ color: '#191c1c' }}
+                    />
+                  </div>
+                </div>
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => handleRepay(debt.id)}
+                  className="self-stretch rounded-lg px-4 text-[12px] font-bold text-white"
+                  style={{ background: 'linear-gradient(135deg, #1f695d 0%, #00352e 100%)' }}
+                >
+                  Record
+                </motion.button>
               </div>
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                onClick={() => handleRepay(debt.id)}
-                className="rounded-lg px-4 py-2 text-[12px] font-bold text-white"
-                style={{ background: 'linear-gradient(135deg, #1f695d 0%, #00352e 100%)' }}
-              >
-                Record
-              </motion.button>
+              <p className="mt-1 text-[10px]" style={{ color: '#6e9990' }}>
+                {debt.direction === 'owed_to_me'
+                  ? 'Principal returns to you (transfer). Any interest counts as income.'
+                  : 'Principal leaves your pocket (transfer). Any interest counts as an expense.'}
+              </p>
             </motion.div>
           )}
         </AnimatePresence>
@@ -366,8 +398,8 @@ export default function DebtLedger() {
 
         <p className="mt-4 text-[11px] leading-relaxed" style={{ color: '#6e9990' }}>
           {direction === 'owed_to_me'
-            ? 'Logged as money out now; repayments come back as income.'
-            : 'Logged as money in now; your repayments go out as expense.'}
+            ? 'Logged as a transfer (money out of your pocket), so it won’t count as spending. Repayments return as transfers; only interest counts as income.'
+            : 'Logged as a transfer (money into your pocket), so it won’t count as income. Repayments go out as transfers; only interest counts as an expense.'}
           {' '}Set a due date to get a reminder as it approaches.
         </p>
 

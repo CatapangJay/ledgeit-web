@@ -309,7 +309,16 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
   { id: 'debit',  label: 'Debit Card',    short: 'Debit',  icon: 'CreditCard',  keywords: ['db', 'debit', 'debitcard'] },
   { id: 'gcash',  label: 'GCash',         short: 'GCash',  icon: 'Wallet',      keywords: ['gcash', 'gc'] },
   { id: 'maya',   label: 'Maya',          short: 'Maya',   icon: 'Wallet',      keywords: ['maya', 'paymaya'] },
-  { id: 'bank',   label: 'Bank Transfer', short: 'Bank',   icon: 'Bank',        keywords: ['bank', 'banktransfer', 'online', 'instapay', 'pesonet'] },
+  { id: 'bank',   label: 'Bank Transfer', short: 'Bank',   icon: 'Bank',        keywords: [
+    'bank', 'banktransfer', 'online', 'instapay', 'pesonet',
+    // Traditional Philippine banks
+    'bpi', 'bdo', 'metrobank', 'mbtc', 'landbank', 'lbp', 'pnb', 'securitybank',
+    'security bank', 'rcbc', 'chinabank', 'china bank', 'eastwest', 'east west',
+    'unionbank', 'union bank', 'ubp', 'psbank', 'ps bank', 'dbp', 'aub', 'bpi direct',
+    // Digital banks / neobanks
+    'maribank', 'mari bank', 'gotyme', 'go tyme', 'seabank', 'sea bank', 'tonik',
+    'komo', 'cimb', 'diskartech', 'ownbank', 'own bank', 'gobank',
+  ] },
 ]
 
 export function resolvePaymentMethod(id: string | undefined): PaymentMethod {
@@ -352,10 +361,13 @@ export type DebtDirection = 'owed_to_me' | 'i_owe'
 
 export interface DebtRepayment {
   id: string
-  amount: number
+  amount: number            // Principal repaid — moves money between your pockets (a transfer)
+  interest: number          // Interest paid alongside — a true expense/income (0 if none)
   date: string              // ISO 8601 date (YYYY-MM-DD)
-  /** Linked ledger transaction created for this repayment, if any. */
+  /** Linked `transfer` ledger transaction for the principal movement, if any. */
   transactionId?: string
+  /** Linked `expense`/`income` ledger transaction for the interest, if any. */
+  interestTransactionId?: string
   createdAt: string
 }
 
@@ -431,6 +443,18 @@ export interface CustomCategory {
   textColor: string     // Tailwind text color class e.g. 'text-blue-700'
   bgColor: string       // Tailwind bg color class e.g. 'bg-blue-50'
   createdAt: string
+}
+
+/**
+ * Preset categories that cannot be hidden/deleted. These are load-bearing:
+ * the categorizer and store resolve them with non-null lookups, and 'other' is
+ * the universal fallback. Everything else is user-hideable.
+ */
+export const STRUCTURAL_CATEGORY_IDS: CategoryId[] = ['income', 'transfers', 'debts', 'other']
+
+/** Whether a preset category may be hidden by the user. */
+export function isHideableCategory(id: string): boolean {
+  return CATEGORIES.some((c) => c.id === id) && !STRUCTURAL_CATEGORY_IDS.includes(id as CategoryId)
 }
 
 /**

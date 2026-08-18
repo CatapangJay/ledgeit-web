@@ -7,6 +7,7 @@ import CategoryBadge from './CategoryBadge'
 import DatePickerSheet from '@/components/ui/DatePickerSheet'
 import { formatCurrency, formatDate } from '@/lib/formatters'
 import { getIconComponent } from '@/lib/iconMap'
+import { useStore } from '@/lib/store'
 import { CATEGORIES, PAYMENT_METHODS, resolvePaymentMethod } from '@/types'
 import type { Category, TransactionDraft, CustomCategory, PaymentMethodId, DebtDirection } from '@/types'
 
@@ -21,17 +22,19 @@ function MethodIcon({ name, size = 12, weight = 'bold' }: { name: string; size?:
 function InlineCategoryPicker({
   currentId,
   customCategories,
+  hiddenCategories = [],
   onSelect,
   onClose,
 }: {
   currentId: string
   customCategories: CustomCategory[]
+  hiddenCategories?: string[]
   onSelect: (cat: Category) => void
   onClose: () => void
 }) {
-  // Build full category list: presets + custom
+  // Build full category list: presets (minus hidden, unless currently selected) + custom
   const allCategories: Category[] = [
-    ...CATEGORIES,
+    ...CATEGORIES.filter((c) => !hiddenCategories.includes(c.id) || c.id === currentId),
     ...customCategories.map((c) => ({
       id: c.id,
       label: c.name,
@@ -130,6 +133,7 @@ const itemVariants = {
 }
 
 export default function ParsePreview({ draft, category, confidence, customCategories = [], onCategoryChange, onMerchantChange, onDateChange, onPaymentMethodChange, debtDirection, onDebtDirectionChange, debtDueDate, onDebtDueDateChange, selected, onToggleSelect, logged = false }: Props) {
+  const hiddenCategories = useStore((s) => s.hiddenCategories)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [datePickerOpen, setDatePickerOpen] = useState(false)
   const [duePickerOpen, setDuePickerOpen] = useState(false)
@@ -430,6 +434,7 @@ export default function ParsePreview({ draft, category, confidence, customCatego
             <InlineCategoryPicker
               currentId={category.id}
               customCategories={customCategories}
+              hiddenCategories={hiddenCategories}
               onSelect={(cat) => { onCategoryChange(cat); setPickerOpen(false) }}
               onClose={() => setPickerOpen(false)}
             />

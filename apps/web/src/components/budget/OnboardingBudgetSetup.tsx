@@ -33,11 +33,18 @@ const INCOME_SOURCES = [
   { id: 'other_inc',   label: 'Other Income',            description: 'Any other income sources',                    Icon: DotsThree },
 ]
 
-function buildDefaultItems(customCats: CustomCategory[] = []): BudgetAllocationItem[] {
-  const presetItems = EXPENSE_CATEGORIES.map((cat) => ({
-    categoryId: cat.id,
-    limit: DEFAULT_BUDGETS.find((b) => b.categoryId === cat.id)?.limit ?? 0,
-  }))
+/** Round to at most 2 decimal places (percentages allow fractional splits). */
+function round2(n: number): number {
+  return Math.round(n * 100) / 100
+}
+
+function buildDefaultItems(customCats: CustomCategory[] = [], hiddenIds: string[] = []): BudgetAllocationItem[] {
+  const presetItems = EXPENSE_CATEGORIES
+    .filter((cat) => !hiddenIds.includes(cat.id))
+    .map((cat) => ({
+      categoryId: cat.id,
+      limit: DEFAULT_BUDGETS.find((b) => b.categoryId === cat.id)?.limit ?? 0,
+    }))
   const customItems = customCats.map((cat) => ({ categoryId: cat.id, limit: 0 }))
   return [...presetItems, ...customItems]
 }
@@ -140,6 +147,7 @@ export default function OnboardingBudgetSetup() {
   const saveIncomeAllocation = useStore((s) => s.saveIncomeAllocation)
   const hasSetupBudget       = useStore((s) => s.hasSetupBudget)
   const customCategories     = useStore((s) => s.customCategories)
+  const hiddenCategories     = useStore((s) => s.hiddenCategories)
   const storeAddCustomCategory = useStore((s) => s.addCustomCategory)
   const userId               = useStore((s) => s.userId)
   const budgetAllocationsLoaded = useStore((s) => s.budgetAllocationsLoaded)
@@ -156,6 +164,9 @@ export default function OnboardingBudgetSetup() {
   const [totalBudget,     setTotalBudget]     = useState(0)
   const [allocationMode,  setAllocationMode]  = useState<'amount' | 'percent'>('amount')
   const [percents,        setPercents]        = useState<Record<string, number>>({})
+  // Raw text of the percent field being actively edited, so a trailing "." or
+  // mid-decimal entry (e.g. "12.") isn't stripped by the numeric state round-trip.
+  const [percentDraft,    setPercentDraft]    = useState<{ id: string; text: string } | null>(null)
   const [incomeAmounts,   setIncomeAmounts]   = useState<Record<string, number>>({})
 
   if (dismissed || !userId || !budgetAllocationsLoaded || hasSetupBudget()) return null
@@ -241,12 +252,13 @@ export default function OnboardingBudgetSetup() {
 
   function handleModeToggle(mode: 'amount' | 'percent') {
     if (mode === allocationMode) return
+    setPercentDraft(null)
     if (mode === 'percent') {
       const base = totalBudget > 0 ? totalBudget : items.reduce((s, i) => s + i.limit, 0)
       if (totalBudget === 0) setTotalBudget(base)
       setPercents(
         Object.fromEntries(
-          items.map((i) => [i.categoryId, base > 0 ? Math.round((i.limit / base) * 100) : 0])
+          items.map((i) => [i.categoryId, base > 0 ? round2((i.limit / base) * 100) : 0])
         )
       )
     }
@@ -254,7 +266,17 @@ export default function OnboardingBudgetSetup() {
   }
 
   function handlePercentChange(categoryId: string, raw: string) {
-    const num = Math.max(0, Math.min(100, Math.round(parseFloat(raw.replace(/[^0-9.]/g, '')) || 0)))
+    // Keep only digits and a single decimal point, capped at 2 decimal places.
+    let cleaned = raw.replace(/[^0-9.]/g, '')
+    const firstDot = cleaned.indexOf('.')
+    if (firstDot !== -1) {
+      cleaned =
+        cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '')
+      const [whole, dec] = cleaned.split('.')
+      cleaned = `${whole}.${(dec ?? '').slice(0, 2)}`
+    }
+    setPercentDraft({ id: categoryId, text: cleaned })
+    const num = Math.max(0, Math.min(100, round2(parseFloat(cleaned) || 0)))
     setPercents((prev) => ({ ...prev, [categoryId]: num }))
     setItems((prev) =>
       prev.map((item) =>
@@ -268,7 +290,7 @@ export default function OnboardingBudgetSetup() {
   async function handleFinish(skipToDefaults = false) {
     setSaving(true)
     const name       = skipToDefaults ? 'Regular Month' : planName.trim() || 'Regular Month'
-    const finalItems = skipToDefaults ? buildDefaultItems() : items
+    const finalItems = skipToDefaults ? buildDefaultItems(customCategories, hiddenCategories) : items
     await saveBudgetAllocation({ name, items: finalItems })
     const incomeItems = Object.entries(incomeAmounts)
       .filter(([, v]) => v > 0)
@@ -608,7 +630,7 @@ export default function OnboardingBudgetSetup() {
                         <div className="mb-3 flex items-center justify-end">
                           <span className="font-mono text-[11px] font-semibold" style={{ color: isOver ? '#ba1a1a' : '#1f695d' }}>
                             {allocationMode === 'percent'
-                              ? `${totalAllocated}% allocated`
+                              ? `${round2(totalAllocated)}% allocated`
                               : totalBudget > 0
                                 ? `${formatCurrency(totalAllocated)} / ${formatCurrency(totalBudget)}`
                                 : formatCurrency(totalAllocated)}
@@ -658,13 +680,16 @@ export default function OnboardingBudgetSetup() {
                               <div className="flex shrink-0 flex-col items-end gap-0.5">
                                 <div className="flex items-center gap-1">
                                   <input
-                                    type="number"
-                                    inputMode="numeric"
-                                    min={0}
-                                    max={100}
+                                    type="text"
+                                    inputMode="decimal"
                                     aria-label={`${label} budget percentage`}
-                                    value={pct === 0 ? '' : pct}
+                                    value={
+                                      percentDraft?.id === item.categoryId
+                                        ? percentDraft.text
+                                        : pct === 0 ? '' : pct
+                                    }
                                     onChange={(e) => handlePercentChange(item.categoryId, e.target.value)}
+                                    onBlur={() => setPercentDraft(null)}
                                     placeholder="0"
                                     className="w-16 rounded-lg px-2 py-1.5 text-right font-mono text-sm font-semibold outline-none"
                                     style={{ background: '#ffffff', color: '#191c1c', border: '1px solid #cde0db' }}

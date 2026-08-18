@@ -12,7 +12,7 @@ import TransactionEditSheet from '@/components/ledger/TransactionEditSheet'
 import CategoryBreakdownBar from '@/components/ledger/CategoryBreakdownBar'
 import { useStore } from '@/lib/store'
 import { formatCurrency } from '@/lib/formatters'
-import { PAYMENT_METHODS } from '@/types'
+import { PAYMENT_METHODS, CATEGORIES } from '@/types'
 import type { FilterValue } from '@/components/ledger/FilterChips'
 import type { DatePeriod } from '@/components/ledger/DateFilterBar'
 import type { Transaction, PaymentMethodId } from '@/types'
@@ -73,6 +73,8 @@ function LedgerContent() {
   // Optional day deep-link from the dashboard heatmap (?date=YYYY-MM-DD).
   const rawDate = searchParams.get('date')
   const linkedDate = rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : null
+  // Optional category deep-link from the insights breakdown (?category=<id>).
+  const linkedCategory = searchParams.get('category')
 
   const [filter, setFilter] = useState<FilterValue>('all')
   const [period, setPeriod] = useState<DatePeriod>('all')
@@ -98,10 +100,27 @@ function LedgerContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linkedDate])
 
+  // Seed the category filter when arriving via an insights deep-link. Only
+  // honor ids that map to a visible chip (known + not hidden), so the active
+  // filter always has a chip the user can see and clear.
+  useEffect(() => {
+    if (!linkedCategory) return
+    const known =
+      CATEGORIES.some((c) => c.id === linkedCategory) ||
+      customCategories.some((c) => c.id === linkedCategory)
+    if (known && !hiddenCategories.includes(linkedCategory)) {
+      setFilter(linkedCategory)
+      setFiltersOpen(true) // reveal the panel so the active category filter is visible
+    }
+    router.replace('/ledger')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkedCategory])
+
   const transactions = useStore((s) => s.transactions)
   const deleteTransaction = useStore((s) => s.deleteTransaction)
   const updateTransaction = useStore((s) => s.updateTransaction)
   const customCategories = useStore((s) => s.customCategories)
+  const hiddenCategories = useStore((s) => s.hiddenCategories)
 
   const customChips = customCategories.map((c) => ({ value: c.id, label: c.name }))
 
@@ -269,7 +288,7 @@ function LedgerContent() {
 
             {/* Category / type chips */}
             <div className="mb-2.5">
-              <FilterChips active={filter} onChange={setFilter} customChips={customChips} />
+              <FilterChips active={filter} onChange={setFilter} customChips={customChips} hiddenCategories={hiddenCategories} />
             </div>
 
             {/* Payment-method chips */}
@@ -351,6 +370,7 @@ function LedgerContent() {
       <TransactionEditSheet
         tx={editingTx}
         customCategories={customCategories}
+        hiddenCategories={hiddenCategories}
         onClose={() => setEditingTx(null)}
         onSave={updateTransaction}
         onDelete={deleteTransaction}

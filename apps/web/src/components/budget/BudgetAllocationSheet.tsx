@@ -38,14 +38,22 @@ const EXPENSE_CATEGORIES = CATEGORIES.filter(
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Merge existing allocation items with all known categories, filling missing with 0. */
+/** Round to at most 2 decimal places (percentages allow fractional splits). */
+function round2(n: number): number {
+  return Math.round(n * 100) / 100
+}
+
+/** Merge existing allocation items with all known categories, filling missing with 0.
+ *  Hidden presets are dropped unless the saved plan already allocates to them. */
 function buildEditorItems(
   existingItems: BudgetAllocationItem[],
-  customCats: CustomCategory[]
+  customCats: CustomCategory[],
+  hiddenIds: string[] = []
 ): BudgetAllocationItem[] {
   const result: BudgetAllocationItem[] = []
   for (const cat of EXPENSE_CATEGORIES) {
     const found = existingItems.find((i) => i.categoryId === cat.id)
+    if (hiddenIds.includes(cat.id) && !found) continue
     result.push({
       categoryId: cat.id,
       limit: found?.limit ?? DEFAULT_BUDGETS.find((b) => b.categoryId === cat.id)?.limit ?? 0,
@@ -94,6 +102,7 @@ export default function BudgetAllocationSheet({ open, onClose }: Props) {
   const activateAllocation = useStore((s) => s.activateAllocation)
   const deleteAllocation = useStore((s) => s.deleteAllocation)
   const customCategories = useStore((s) => s.customCategories)
+  const hiddenCategories = useStore((s) => s.hiddenCategories)
   const storeAddCustomCategory = useStore((s) => s.addCustomCategory)
   const userId = useStore((s) => s.userId)
 
@@ -112,6 +121,9 @@ export default function BudgetAllocationSheet({ open, onClose }: Props) {
   const [totalBudget, setTotalBudget] = useState(0)
   const [allocationMode, setAllocationMode] = useState<'amount' | 'percent'>('amount')
   const [percents, setPercents] = useState<Record<string, number>>({})
+  // Raw text of the percent field being actively edited, so a trailing "." or
+  // "." mid-decimal (e.g. "12.") isn't stripped by the numeric state round-trip.
+  const [percentDraft, setPercentDraft] = useState<{ id: string; text: string } | null>(null)
 
   function openEditor(id?: string) {
     let newItems: BudgetAllocationItem[]
@@ -119,11 +131,11 @@ export default function BudgetAllocationSheet({ open, onClose }: Props) {
       const alloc = allocations.find((a) => a.id === id)
       if (!alloc) return
       setPlanName(alloc.name)
-      newItems = buildEditorItems(alloc.items, customCategories)
+      newItems = buildEditorItems(alloc.items, customCategories, hiddenCategories)
       setEditId(id)
     } else {
       setPlanName('')
-      newItems = buildEditorItems([], customCategories)
+      newItems = buildEditorItems([], customCategories, hiddenCategories)
       setEditId(undefined)
     }
     setItems(newItems)
@@ -134,11 +146,12 @@ export default function BudgetAllocationSheet({ open, onClose }: Props) {
       Object.fromEntries(
         newItems.map((i) => [
           i.categoryId,
-          total > 0 ? Math.round((i.limit / total) * 100) : 0,
+          total > 0 ? round2((i.limit / total) * 100) : 0,
         ])
       )
     )
     setShowAddCatForm(false)
+    setPercentDraft(null)
     setDirection(1)
     setView('editor')
   }
@@ -218,12 +231,13 @@ export default function BudgetAllocationSheet({ open, onClose }: Props) {
 
   function handleModeToggle(mode: 'amount' | 'percent') {
     if (mode === allocationMode) return
+    setPercentDraft(null)
     if (mode === 'percent') {
       const base = totalBudget > 0 ? totalBudget : items.reduce((s, i) => s + i.limit, 0)
       if (totalBudget === 0) setTotalBudget(base)
       setPercents(
         Object.fromEntries(
-          items.map((i) => [i.categoryId, base > 0 ? Math.round((i.limit / base) * 100) : 0])
+          items.map((i) => [i.categoryId, base > 0 ? round2((i.limit / base) * 100) : 0])
         )
       )
     }
@@ -249,7 +263,17 @@ export default function BudgetAllocationSheet({ open, onClose }: Props) {
   }
 
   function handlePercentChange(categoryId: string, raw: string) {
-    const num = Math.max(0, Math.min(100, Math.round(parseFloat(raw.replace(/[^0-9.]/g, '')) || 0)))
+    // Keep only digits and a single decimal point, capped at 2 decimal places.
+    let cleaned = raw.replace(/[^0-9.]/g, '')
+    const firstDot = cleaned.indexOf('.')
+    if (firstDot !== -1) {
+      cleaned =
+        cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '')
+      const [whole, dec] = cleaned.split('.')
+      cleaned = `${whole}.${(dec ?? '').slice(0, 2)}`
+    }
+    setPercentDraft({ id: categoryId, text: cleaned })
+    const num = Math.max(0, Math.min(100, round2(parseFloat(cleaned) || 0)))
     setPercents((prev) => ({ ...prev, [categoryId]: num }))
     setItems((prev) =>
       prev.map((item) =>
@@ -569,7 +593,7 @@ export default function BudgetAllocationSheet({ open, onClose }: Props) {
                               style={{ color: isOver ? '#ba1a1a' : '#1f695d' }}
                             >
                               {allocationMode === 'percent'
-                                ? `${totalAllocated}% allocated`
+                                ? `${round2(totalAllocated)}% allocated`
                                 : totalBudget > 0
                                   ? `${formatCurrency(totalAllocated)} / ${formatCurrency(totalBudget)}`
                                   : formatCurrency(totalAllocated)}
@@ -622,13 +646,16 @@ export default function BudgetAllocationSheet({ open, onClose }: Props) {
                                 <div className="flex shrink-0 flex-col items-end gap-0.5">
                                   <div className="flex items-center gap-1">
                                     <input
-                                      type="number"
-                                      inputMode="numeric"
-                                      min={0}
-                                      max={100}
+                                      type="text"
+                                      inputMode="decimal"
                                       aria-label={`${label} budget percentage`}
-                                      value={pct === 0 ? '' : pct}
+                                      value={
+                                        percentDraft?.id === item.categoryId
+                                          ? percentDraft.text
+                                          : pct === 0 ? '' : pct
+                                      }
                                       onChange={(e) => handlePercentChange(item.categoryId, e.target.value)}
+                                      onBlur={() => setPercentDraft(null)}
                                       placeholder="0"
                                       className="w-16 rounded-lg px-2 py-1.5 text-right font-mono text-sm font-semibold outline-none"
                                       style={{

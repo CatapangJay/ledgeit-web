@@ -7,6 +7,8 @@ interface Metric {
   value: string
   sub?: string
   color?: string
+  /** Plain-language explanation shown under the value for non-financial users. */
+  hint?: string
 }
 
 interface Props {
@@ -36,6 +38,11 @@ export default function MetricStrip({ metrics }: Props) {
           </span>
           {m.sub && (
             <span className="text-[10px] font-medium" style={{ color: '#6e9990' }}>{m.sub}</span>
+          )}
+          {m.hint && (
+            <span className="mt-0.5 text-[10px] leading-snug" style={{ color: '#8aa8a1' }}>
+              {m.hint}
+            </span>
           )}
         </div>
       ))}

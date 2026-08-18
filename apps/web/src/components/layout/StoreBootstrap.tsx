@@ -13,6 +13,7 @@ export default function StoreBootstrap() {
   const loadBudgetAllocations = useStore((s) => s.loadBudgetAllocations)
   const loadIncomeAllocations = useStore((s) => s.loadIncomeAllocations)
   const loadCustomCategories = useStore((s) => s.loadCustomCategories)
+  const loadHiddenCategories = useStore((s) => s.loadHiddenCategories)
   const loadDebts = useStore((s) => s.loadDebts)
   const supabase = useMemo(() => createClient(), [])
   // Track the user we've already loaded data for. `onAuthStateChange` also fires
@@ -31,6 +32,7 @@ export default function StoreBootstrap() {
         setUserId(user.id)
         // Load custom categories first so transaction resolution has them available
         await loadCustomCategories(user.id)
+        loadHiddenCategories(user.id)
         loadTransactions(user.id)
         loadBudgetAllocations(user.id)
         loadIncomeAllocations(user.id)
@@ -41,7 +43,7 @@ export default function StoreBootstrap() {
       }
     })
     return () => subscription.unsubscribe()
-  }, [supabase, setUserId, loadTransactions, loadBudgetAllocations, loadIncomeAllocations, loadCustomCategories, loadDebts])
+  }, [supabase, setUserId, loadTransactions, loadBudgetAllocations, loadIncomeAllocations, loadCustomCategories, loadHiddenCategories, loadDebts])
 
   return null
 }
