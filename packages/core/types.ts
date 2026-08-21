@@ -468,6 +468,21 @@ export function typeForCategory(categoryId: string): TransactionType {
 }
 
 /**
+ * Whether a transaction counts as real spending for analytics: an expense that
+ * isn't in the debts category. Debt lending/borrowing/repayments (and any legacy
+ * debt rows still typed 'expense') move money between your own pockets, so they
+ * never count toward spending totals, trends, or category breakdowns.
+ */
+export function isSpend(t: { type: TransactionType; category: { id: string } }): boolean {
+  return t.type === 'expense' && t.category.id !== 'debts'
+}
+
+/** Whether a transaction counts as real income: income that isn't debt-related. */
+export function isEarn(t: { type: TransactionType; category: { id: string } }): boolean {
+  return t.type === 'income' && t.category.id !== 'debts'
+}
+
+/**
  * Resolve a category object by ID, falling back to custom categories,
  * then to 'other'.
  */

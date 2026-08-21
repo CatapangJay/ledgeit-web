@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { formatCurrencyCompact } from '@/lib/formatters'
-import { CATEGORIES } from '@/types'
+import { CATEGORIES, isSpend, isEarn } from '@/types'
 import type { Transaction } from '@/types'
 
 // Muted hex palette — matches the new muted category Tailwind classes
@@ -26,10 +26,10 @@ export default function CategoryBreakdownBar({ transactions }: Props) {
   const [active, setActive] = useState<string | null>(null)
 
   const { breakdown, total, incomeTotal } = useMemo(() => {
-    const expenses = transactions.filter((t) => t.type === 'expense')
+    const expenses = transactions.filter((t) => isSpend(t))
     const total = expenses.reduce((s, t) => s + t.amount, 0)
     const incomeTotal = transactions
-      .filter((t) => t.type === 'income')
+      .filter((t) => isEarn(t))
       .reduce((s, t) => s + t.amount, 0)
 
     const map = new Map<string, number>()

@@ -17,8 +17,11 @@ import AddCategoryForm from './AddCategoryForm'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
+// Budgetable categories exclude income, the "other" catch-all, and the
+// non-spending categories (debts + transfers move money between your own
+// pockets, so they aren't budgeted).
 const EXPENSE_CATEGORIES = CATEGORIES.filter(
-  (c) => c.id !== 'income' && c.id !== 'other'
+  (c) => c.id !== 'income' && c.id !== 'other' && c.id !== 'debts' && c.id !== 'transfers'
 )
 
 const INCOME_SOURCES = [

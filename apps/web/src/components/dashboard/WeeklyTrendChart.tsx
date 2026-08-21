@@ -11,6 +11,7 @@ import {
 } from 'recharts'
 import { formatCurrency, formatCurrencyCompact } from '@/lib/formatters'
 import { useStore } from '@/lib/store'
+import { isSpend, isEarn } from '@/types'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -77,10 +78,10 @@ export default function WeeklyTrendChart() {
     return days.map((date) => {
       const dayTxns = transactions.filter((t) => t.date === date)
       const expense = dayTxns
-        .filter((t) => t.type === 'expense')
+        .filter((t) => isSpend(t))
         .reduce((s, t) => s + t.amount, 0)
       const income = dayTxns
-        .filter((t) => t.type === 'income')
+        .filter((t) => isEarn(t))
         .reduce((s, t) => s + t.amount, 0)
       return { date, expense, income, label: weekdayLabel(date) }
     })

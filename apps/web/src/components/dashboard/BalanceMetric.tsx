@@ -5,6 +5,7 @@ import { motion } from 'framer-motion'
 import { ArrowFatLineUp, ArrowFatLineDown } from '@phosphor-icons/react'
 import { formatCurrency } from '@/lib/formatters'
 import { useStore } from '@/lib/store'
+import { isSpend, isEarn } from '@/types'
 
 function useCountUp(target: number, duration = 1000) {
   const [display, setDisplay] = useState(0)
@@ -35,11 +36,13 @@ export default function BalanceMetric() {
   const now = new Date()
   const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 
+  // Exclude the debts category entirely — lending/borrowing/repayments move money
+  // between your own pockets and shouldn't shift your net for the month.
   const monthlyIncome = transactions
-    .filter((t) => t.type === 'income' && t.date.startsWith(yearMonth))
+    .filter((t) => isEarn(t) && t.date.startsWith(yearMonth))
     .reduce((sum, t) => sum + t.amount, 0)
   const monthlyExpense = transactions
-    .filter((t) => t.type === 'expense' && t.date.startsWith(yearMonth))
+    .filter((t) => isSpend(t) && t.date.startsWith(yearMonth))
     .reduce((sum, t) => sum + t.amount, 0)
   const monthlyNet = monthlyIncome - monthlyExpense
   const isPositive = monthlyNet >= 0

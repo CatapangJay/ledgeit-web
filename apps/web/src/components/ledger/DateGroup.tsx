@@ -7,8 +7,10 @@ interface Props {
 }
 
 export default function DateGroup({ date, transactions }: Props) {
+  // Transfers (incl. debt principal) move money between the user's own pockets —
+  // they're neither income nor spending, so they don't affect the day's net.
   const subtotal = transactions.reduce(
-    (sum, t) => sum + (t.type === 'income' ? t.amount : -t.amount),
+    (sum, t) => sum + (t.type === 'income' ? t.amount : t.type === 'expense' ? -t.amount : 0),
     0
   )
   const isNet = subtotal >= 0

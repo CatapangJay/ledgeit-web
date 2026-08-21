@@ -11,6 +11,7 @@ import {
 } from 'recharts'
 import { formatCurrency, formatCurrencyCompact } from '@/lib/formatters'
 import { useStore } from '@/lib/store'
+import { isSpend, isEarn } from '@/types'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -93,9 +94,10 @@ export default function MonthTrendChart({ start, end }: Props) {
     const byDate = new Map<string, { expense: number; income: number }>()
     for (const t of transactions) {
       if (t.date < start || t.date > end) continue
-      if (t.type !== 'expense' && t.type !== 'income') continue
+      // Debts + transfers move money between your own pockets — never charted.
+      if (!isSpend(t) && !isEarn(t)) continue
       const bucket = byDate.get(t.date) ?? { expense: 0, income: 0 }
-      if (t.type === 'expense') bucket.expense += t.amount
+      if (isSpend(t)) bucket.expense += t.amount
       else bucket.income += t.amount
       byDate.set(t.date, bucket)
     }

@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CaretLeft, CaretRight, Plus, ArrowRight } from '@phosphor-icons/react'
 import { useStore } from '@/lib/store'
+import { isSpend } from '@/types'
 import { formatCurrency, formatCurrencyCompact } from '@/lib/formatters'
 
 // ─── Local-date helpers ─────────────────────────────────────────────────────────
@@ -61,7 +62,7 @@ export default function SpendingHeatmap({ onAddForDate, onViewDate }: Props) {
     const prefix = `${viewMonth.getFullYear()}-${String(viewMonth.getMonth() + 1).padStart(2, '0')}-`
     const totals: Record<string, number> = {}
     for (const t of transactions) {
-      if (t.type !== 'expense') continue
+      if (!isSpend(t)) continue
       if (!t.date.startsWith(prefix)) continue
       totals[t.date] = (totals[t.date] ?? 0) + t.amount
     }

@@ -9,6 +9,7 @@ import { useStore } from '@/lib/store'
 import { useIsDesktop } from '@/lib/useIsDesktop'
 import { PHOSPHOR_ICON_MAP, getIconBg } from '@/lib/iconMap'
 import type { Transaction } from '@/types'
+import { isSpend, isEarn } from '@/types'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -50,13 +51,13 @@ export default function ExpenseFeed() {
   const recent = useMemo(() => sorted.slice(0, maxFeed), [sorted, maxFeed])
   const totalCount = transactions.length
 
-  // Net this month across income (+) and expense (−); transfers are excluded.
+  // Net this month across income (+) and expense (−); transfers and debts excluded.
   const monthNet = useMemo(() => {
     const now = new Date()
     const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
     return transactions
       .filter((t) => t.date.startsWith(ym))
-      .reduce((s, t) => (t.type === 'income' ? s + t.amount : t.type === 'expense' ? s - t.amount : s), 0)
+      .reduce((s, t) => (isEarn(t) ? s + t.amount : isSpend(t) ? s - t.amount : s), 0)
   }, [transactions])
 
   return (

@@ -6,6 +6,7 @@ import { Trophy } from '@phosphor-icons/react'
 import { formatCurrency, formatDate } from '@/lib/formatters'
 import { getIconComponent } from '@/lib/iconMap'
 import { useStore } from '@/lib/store'
+import { isSpend } from '@/types'
 
 const CATEGORY_HEX: Record<string, string> = {
   restaurants:   '#c2410c',
@@ -29,8 +30,8 @@ export default function BiggestExpenseCard() {
     const now = new Date()
     const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 
-    const thisMonth = transactions.filter((t) => t.type === 'expense' && t.date.startsWith(month))
-    const pool = thisMonth.length > 0 ? thisMonth : transactions.filter((t) => t.type === 'expense')
+    const thisMonth = transactions.filter((t) => isSpend(t) && t.date.startsWith(month))
+    const pool = thisMonth.length > 0 ? thisMonth : transactions.filter((t) => isSpend(t))
 
     return pool.reduce<typeof transactions[number] | null>((max, tx) => {
       if (!max || tx.amount > max.amount) return tx

@@ -5,6 +5,7 @@ import { motion } from 'framer-motion'
 import { TrendUp, TrendDown, CalendarBlank, ChartLineUp } from '@phosphor-icons/react'
 import { formatCurrencyCompact } from '@/lib/formatters'
 import { useStore } from '@/lib/store'
+import { isSpend, isEarn } from '@/types'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -32,11 +33,16 @@ export default function HeroSideStats() {
     let thisIncome = 0
     let lastNet = 0
     for (const tx of transactions) {
+      // Only real earning/spending count — transfers and the debts category move
+      // money between your own pockets, so they're skipped everywhere.
+      const spend = isSpend(tx)
+      const earn = isEarn(tx)
+      if (!spend && !earn) continue
       if (tx.date.startsWith(thisMonth)) {
-        if (tx.type === 'expense') thisExpense += tx.amount
+        if (spend) thisExpense += tx.amount
         else thisIncome += tx.amount
       } else if (tx.date.startsWith(lastMonth)) {
-        lastNet += tx.type === 'income' ? tx.amount : -tx.amount
+        lastNet += earn ? tx.amount : -tx.amount
       }
     }
 

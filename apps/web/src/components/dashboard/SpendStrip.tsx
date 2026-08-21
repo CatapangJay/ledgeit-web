@@ -2,7 +2,7 @@
 
 import { useStore } from '@/lib/store'
 import { formatCurrency } from '@/lib/formatters'
-import { CATEGORIES } from '@/types'
+import { CATEGORIES, isSpend } from '@/types'
 
 const CATEGORY_HEX: Record<string, string> = {
   restaurants:   '#e05c2a',
@@ -20,7 +20,7 @@ export default function SpendStrip() {
   const transactions = useStore((s) => s.transactions)
   const getDailyTotal = useStore((s) => s.getDailyTotal)
   const today = new Date().toISOString().split('T')[0]
-  const todayExpenses = transactions.filter((t) => t.date === today && t.type === 'expense')
+  const todayExpenses = transactions.filter((t) => t.date === today && isSpend(t))
   const total = todayExpenses.reduce((sum, t) => sum + t.amount, 0)
   const todayIncome = getDailyTotal(today, 'income')
 

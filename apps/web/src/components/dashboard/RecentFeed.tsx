@@ -115,8 +115,9 @@ function TxRow({ tx, onDelete }: { tx: Transaction; onDelete: (id: string) => vo
 // ─── Date group header ─────────────────────────────────────────────────────────
 
 function DateHeader({ date, transactions }: { date: string; transactions: Transaction[] }) {
+  // Transfers (incl. debt principal) net to zero — exclude them from the day's total.
   const subtotal = transactions.reduce(
-    (sum, t) => sum + (t.type === 'income' ? t.amount : -t.amount),
+    (sum, t) => sum + (t.type === 'income' ? t.amount : t.type === 'expense' ? -t.amount : 0),
     0
   )
   const isNet = subtotal >= 0

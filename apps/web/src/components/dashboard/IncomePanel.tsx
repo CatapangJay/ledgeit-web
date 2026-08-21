@@ -3,6 +3,7 @@
 import { useMemo } from 'react'
 import { formatCurrencyCompact } from '@/lib/formatters'
 import { useStore } from '@/lib/store'
+import { isEarn } from '@/types'
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -12,7 +13,7 @@ export default function IncomePanel() {
 
   const { totalIncome, monthlyBudget } = useMemo(() => {
     const totalIncome = transactions
-      .filter((t) => t.type === 'income')
+      .filter((t) => isEarn(t))
       .reduce((s, t) => s + t.amount, 0)
 
     const monthlyBudget = budgetLimits

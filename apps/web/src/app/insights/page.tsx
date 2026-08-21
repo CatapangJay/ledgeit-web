@@ -13,7 +13,7 @@ import BiggestExpenseCard from '@/components/dashboard/BiggestExpenseCard'
 import BudgetAllocationSheet from '@/components/budget/BudgetAllocationSheet'
 import { useStore } from '@/lib/store'
 import { formatCurrency, formatMonthLabel } from '@/lib/formatters'
-import { CATEGORIES } from '@/types'
+import { CATEGORIES, isSpend, isEarn } from '@/types'
 
 function getMonthBounds(offset: number): { start: string; end: string; label: string } {
   const now = new Date()
@@ -57,11 +57,11 @@ export default function InsightsPage() {
   )
 
   const totalIncome = monthTxns
-    .filter((t) => t.type === 'income')
+    .filter((t) => isEarn(t))
     .reduce((s, t) => s + t.amount, 0)
 
   const totalExpense = monthTxns
-    .filter((t) => t.type === 'expense')
+    .filter((t) => isSpend(t))
     .reduce((s, t) => s + t.amount, 0)
 
   const netCashflow = totalIncome - totalExpense
@@ -88,7 +88,7 @@ export default function InsightsPage() {
   // Per-category spent
   const categorySpend = useMemo(() => {
     return monthTxns
-      .filter((t) => t.type === 'expense')
+      .filter((t) => isSpend(t))
       .reduce<Record<string, number>>((acc, t) => {
         acc[t.category.id] = (acc[t.category.id] ?? 0) + t.amount
         return acc

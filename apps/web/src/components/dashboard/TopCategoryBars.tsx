@@ -7,7 +7,7 @@ import { ArrowRight } from '@phosphor-icons/react'
 import { formatCurrencyCompact } from '@/lib/formatters'
 import { getIconComponent, getIconBg } from '@/lib/iconMap'
 import { useStore } from '@/lib/store'
-import { CATEGORIES } from '@/types'
+import { CATEGORIES, isSpend } from '@/types'
 
 const TOP_N = 4
 
@@ -22,10 +22,9 @@ export default function TopCategoryBars() {
 
     const byCategory: Record<string, number> = {}
     for (const tx of transactions) {
-      if (tx.type !== 'expense' || !tx.date.startsWith(month)) continue
-      // Transfers/payments move money between your own pockets — not real
-      // spending — so exclude them from top spending.
-      if (tx.category.id === 'transfers') continue
+      // Real spending only — excludes transfers and the debts category, which
+      // move money between your own pockets.
+      if (!isSpend(tx) || !tx.date.startsWith(month)) continue
       byCategory[tx.category.id] = (byCategory[tx.category.id] ?? 0) + tx.amount
     }
 

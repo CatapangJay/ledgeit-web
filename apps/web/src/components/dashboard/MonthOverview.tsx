@@ -5,7 +5,7 @@ import { motion, useReducedMotion, useInView } from 'framer-motion'
 import { CaretRight, SlidersHorizontal } from '@phosphor-icons/react'
 import { formatCurrency, formatCurrencyCompact } from '@/lib/formatters'
 import { useStore } from '@/lib/store'
-import { CATEGORIES } from '@/types'
+import { CATEGORIES, isSpend, isEarn } from '@/types'
 
 interface Props {
   /** Opens the budget plan manager (BudgetAllocationSheet). */
@@ -67,11 +67,11 @@ export default function MonthOverview({ onManageBudget }: Props) {
     let expense = 0
     const byCategory: Record<string, number> = {}
     for (const t of monthTxns) {
-      if (t.type === 'income') {
+      // Only real earning/spending count — transfers and the debts category move
+      // money between your own pockets, so they're excluded from every total.
+      if (isEarn(t)) {
         income += t.amount
-      } else if (t.type === 'expense' && t.category.id !== 'transfers') {
-        // Transfers/payments move money between your own pockets — not real
-        // spending — so they don't count toward the month's expenses or top categories.
+      } else if (isSpend(t)) {
         expense += t.amount
         byCategory[t.category.id] = (byCategory[t.category.id] ?? 0) + t.amount
       }
