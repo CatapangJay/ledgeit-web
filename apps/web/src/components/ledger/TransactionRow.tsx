@@ -7,6 +7,7 @@ import { PHOSPHOR_ICON_MAP, CUSTOM_COLOR_OPTIONS } from '@/lib/iconMap'
 import { formatCurrency, formatDate } from '@/lib/formatters'
 import DatePickerSheet from '@/components/ui/DatePickerSheet'
 import { resolvePaymentMethod } from '@/types'
+import { useLinkedWallet } from '@/lib/walletLinks'
 import type { Transaction } from '@/types'
 
 // Preset icon background colors (saturated shade of each category color)
@@ -61,6 +62,12 @@ export default function TransactionRow({ tx, onDelete, onDateChange, onEdit, sel
   const amountSign = isTransfer ? '' : isIncome ? '+' : '−'
   const method = resolvePaymentMethod(tx.paymentMethod)
   const MethodIcon = PHOSPHOR_ICON_MAP[method.icon]
+  // If this transaction is linked to a wallet (paid from / saved into one via
+  // Smart Entry), surface a small wallet chip so the connection is visible from
+  // the ledger, not just the Wallets page. Backed by a map memoized on the
+  // wallets reference, so all rows share one scan per wallet change.
+  const linkedWallet = useLinkedWallet(tx.id)
+  const WalletChipIcon = linkedWallet ? PHOSPHOR_ICON_MAP[linkedWallet.icon] : null
 
   return (
     <motion.div
@@ -169,6 +176,16 @@ export default function TransactionRow({ tx, onDelete, onDateChange, onEdit, sel
                   {method.short}
                 </span>
               </>
+            )}
+            {/* Wallet link chip — shows which wallet this entry drew from / added to. */}
+            {linkedWallet && (
+              <span
+                className="flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                style={{ background: 'rgba(31,105,93,0.1)', color: '#1f695d' }}
+              >
+                {WalletChipIcon && <WalletChipIcon size={10} weight="fill" aria-hidden="true" />}
+                {linkedWallet.name}
+              </span>
             )}
           </div>
         </div>

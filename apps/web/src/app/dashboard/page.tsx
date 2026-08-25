@@ -16,6 +16,7 @@ import BiggestExpenseCard from '@/components/dashboard/BiggestExpenseCard'
 import TransferInfoCard from '@/components/dashboard/TransferInfoCard'
 import RecurringPaymentsCard from '@/components/dashboard/RecurringPaymentsCard'
 import DebtSummaryCard from '@/components/dashboard/DebtSummaryCard'
+import WalletSummaryCard from '@/components/dashboard/WalletSummaryCard'
 import CoachLine from '@/components/dashboard/CoachLine'
 import HeroSideStats from '@/components/dashboard/HeroSideStats'
 import SmartEntrySheet from '@/components/entry/SmartEntrySheet'
@@ -229,6 +230,11 @@ export default function DashboardPage() {
             {/* ── Debt position + nearest due reminder (self-hides when empty) ── */}
             <motion.div variants={item}>
               <DebtSummaryCard />
+            </motion.div>
+
+            {/* ── Wallets — total set aside + top wallets (self-hides when empty) ── */}
+            <motion.div variants={item}>
+              <WalletSummaryCard />
             </motion.div>
 
             {/* ── Recurring bills — additional density for desktop right column ── */}

@@ -73,10 +73,15 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const addTransaction = useStore((s) => s.addTransaction)
   const addDebt = useStore((s) => s.addDebt)
+  const attachWalletMovement = useStore((s) => s.attachWalletMovement)
   const learnCategory = useStore((s) => s.learnCategory)
   const learnedMerchants = useStore((s) => s.learnedMerchants)
   const transactions = useStore((s) => s.transactions)
   const customCategories = useStore((s) => s.customCategories)
+  const wallets = useStore((s) => s.wallets)
+  const activeWallets = useMemo(() => wallets.filter((w) => !w.isArchived), [wallets])
+  // Quick-mode: wallet this entry is paid from / saved into (undefined = none).
+  const [quickWalletId, setQuickWalletId] = useState<string | undefined>(undefined)
 
   // ── Desktop vs mobile detection ─────────────────────────────────────────
   const isDesktop = useIsDesktop()
@@ -283,8 +288,9 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
         date: parseResult.draft.date,
       })
     } else {
+      const txId = crypto.randomUUID()
       const tx: Transaction = {
-        id: crypto.randomUUID(),
+        id: txId,
         raw: parseResult.draft.raw,
         amount: parseResult.draft.amount,
         merchant: parseResult.draft.merchant,
@@ -296,16 +302,28 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
         createdAt: new Date().toISOString(),
       }
       addTransaction(tx)
+      // If a wallet was chosen, mirror the money movement onto its balance: an
+      // expense is a withdrawal from the wallet, income a deposit into it. The
+      // transaction above IS the money movement, so we only attach (no new tx).
+      if (quickWalletId && (parseResult.draft.type === 'expense' || parseResult.draft.type === 'income')) {
+        attachWalletMovement(quickWalletId, {
+          type: parseResult.draft.type === 'income' ? 'deposit' : 'withdrawal',
+          amount: parseResult.draft.amount,
+          date: parseResult.draft.date,
+          transactionId: txId,
+        })
+      }
     }
     setSuccess(true)
     const t = setTimeout(() => {
       triggerClose()
       setInput('')
       setParseResult(null)
+      setQuickWalletId(undefined)
       setSuccess(false)
     }, 1000)
     return () => clearTimeout(t)
-  }, [parseResult, addTransaction, addDebt, triggerClose])
+  }, [parseResult, addTransaction, addDebt, attachWalletMovement, quickWalletId, triggerClose])
 
   const canLog = !success && (parseResult?.draft.amount ?? null) !== null
 
@@ -516,6 +534,9 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
                       prev ? { ...prev, draft: { ...prev.draft, paymentMethod } } : prev
                     )
                   }
+                  wallets={activeWallets}
+                  walletId={quickWalletId}
+                  onWalletChange={setQuickWalletId}
                 />
               )}
             </AnimatePresence>

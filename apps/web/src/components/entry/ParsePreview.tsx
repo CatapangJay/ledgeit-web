@@ -2,14 +2,14 @@
 
 import { createElement, useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, CalendarBlank, CheckCircle, Circle } from '@phosphor-icons/react'
+import { X, CalendarBlank, CheckCircle, Circle, Wallet as WalletIcon } from '@phosphor-icons/react'
 import CategoryBadge from './CategoryBadge'
 import DatePickerSheet from '@/components/ui/DatePickerSheet'
 import { formatCurrency, formatDate } from '@/lib/formatters'
 import { getIconComponent } from '@/lib/iconMap'
 import { useStore } from '@/lib/store'
 import { CATEGORIES, PAYMENT_METHODS, resolvePaymentMethod } from '@/types'
-import type { Category, TransactionDraft, CustomCategory, PaymentMethodId, DebtDirection } from '@/types'
+import type { Category, TransactionDraft, CustomCategory, PaymentMethodId, DebtDirection, Wallet } from '@/types'
 
 // Renders a Phosphor icon by its string name. Declared at module scope and uses
 // createElement (not <Icon/>) so it's a stable component, not one created during render.
@@ -113,6 +113,12 @@ interface Props {
   onToggleSelect?: () => void
   /** Bulk mode: entry already logged */
   logged?: boolean
+  /** Wallets the entry can be paid from / saved into. When provided (and the
+   *  entry is an expense or income, not a debt/transfer), a wallet picker shows. */
+  wallets?: Wallet[]
+  /** Currently chosen wallet id, or undefined for none. */
+  walletId?: string
+  onWalletChange?: (walletId: string | undefined) => void
 }
 
 const containerVariants = {
@@ -132,12 +138,13 @@ const itemVariants = {
   },
 }
 
-export default function ParsePreview({ draft, category, confidence, customCategories = [], onCategoryChange, onMerchantChange, onDateChange, onPaymentMethodChange, debtDirection, onDebtDirectionChange, debtDueDate, onDebtDueDateChange, selected, onToggleSelect, logged = false }: Props) {
+export default function ParsePreview({ draft, category, confidence, customCategories = [], onCategoryChange, onMerchantChange, onDateChange, onPaymentMethodChange, debtDirection, onDebtDirectionChange, debtDueDate, onDebtDueDateChange, selected, onToggleSelect, logged = false, wallets = [], walletId, onWalletChange }: Props) {
   const hiddenCategories = useStore((s) => s.hiddenCategories)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [datePickerOpen, setDatePickerOpen] = useState(false)
   const [duePickerOpen, setDuePickerOpen] = useState(false)
   const [methodPickerOpen, setMethodPickerOpen] = useState(false)
+  const [walletPickerOpen, setWalletPickerOpen] = useState(false)
   const [editingMerchant, setEditingMerchant] = useState(false)
   const [merchantInput, setMerchantInput] = useState('')
   const merchantInputRef = useRef<HTMLInputElement>(null)
@@ -146,6 +153,11 @@ export default function ParsePreview({ draft, category, confidence, customCatego
   const isDebt = category.id === 'debts'
   const isBulk = onToggleSelect !== undefined
   const method = resolvePaymentMethod(draft.paymentMethod)
+  // A wallet link is offered only for plain spending/income (not debts or
+  // transfers, which already move money between pockets). Expenses are paid FROM
+  // a wallet (a withdrawal); income is saved INTO one (a deposit).
+  const canLinkWallet = onWalletChange && wallets.length > 0 && !isDebt && !isTransfer
+  const selectedWallet = wallets.find((w) => w.id === walletId)
 
   function startEditMerchant() {
     if (!onMerchantChange) return
@@ -352,6 +364,75 @@ export default function ParsePreview({ draft, category, confidence, customCatego
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Wallet link — pay this expense FROM a wallet, or save income INTO one.
+          Records a matching wallet movement so the wallet balance stays in sync. */}
+      {canLinkWallet && !logged && (
+        <motion.div variants={itemVariants} className="mt-2">
+          <button
+            onClick={() => setWalletPickerOpen((o) => !o)}
+            aria-label={selectedWallet ? `Wallet: ${selectedWallet.name}. Tap to change` : 'Link a wallet'}
+            className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold transition-all ${walletPickerOpen ? 'ring-1 ring-[#1f695d]/40' : ''}`}
+            style={{ background: '#f0f4f2', color: selectedWallet ? '#1f695d' : '#6e9990' }}
+          >
+            {selectedWallet
+              ? createElement(getIconComponent(selectedWallet.icon), { size: 12, weight: 'fill', 'aria-hidden': true })
+              : <WalletIcon size={12} weight="regular" aria-hidden="true" />}
+            {selectedWallet
+              ? `${isIncome ? 'Into' : 'From'} ${selectedWallet.name}`
+              : isIncome ? 'Save into a wallet' : 'Pay from a wallet'}
+            <span className="opacity-50">▾</span>
+          </button>
+
+          <AnimatePresence>
+            {walletPickerOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: -4, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -4, scale: 0.97 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+                className="mt-2 grid grid-cols-2 gap-1.5 rounded-2xl p-2"
+                style={{ background: '#f0f4f2', border: '1px solid #e7edeb' }}
+              >
+                {/* None option */}
+                <button
+                  onClick={() => { onWalletChange?.(undefined); setWalletPickerOpen(false) }}
+                  className="flex items-center justify-center gap-1.5 rounded-xl py-2 text-[11px] font-semibold transition-colors"
+                  style={walletId === undefined
+                    ? { background: '#1f695d', color: '#ffffff' }
+                    : { background: '#ffffff', color: '#3f4946' }}
+                >
+                  None
+                </button>
+                {wallets.map((w) => {
+                  const Icon = getIconComponent(w.icon)
+                  const active = w.id === walletId
+                  return (
+                    <button
+                      key={w.id}
+                      onClick={() => { onWalletChange?.(w.id); setWalletPickerOpen(false) }}
+                      className="flex items-center justify-center gap-1.5 rounded-xl py-2 text-[11px] font-semibold transition-colors"
+                      style={active
+                        ? { background: '#1f695d', color: '#ffffff' }
+                        : { background: '#ffffff', color: '#3f4946' }}
+                    >
+                      <Icon size={13} weight={active ? 'fill' : 'regular'} aria-hidden="true" />
+                      <span className="truncate">{w.name}</span>
+                    </button>
+                  )
+                })}
+              </motion.div>
+            )}
+          </AnimatePresence>
+          {selectedWallet && (
+            <p className="mt-1.5 text-[11px] leading-relaxed" style={{ color: '#6e9990' }}>
+              {isIncome
+                ? `Adds to ${selectedWallet.name}'s balance.`
+                : `Comes out of ${selectedWallet.name}'s balance.`}
+            </p>
+          )}
+        </motion.div>
+      )}
 
       {/* Debt direction toggle — lets the user confirm/correct the inferred
           lent-out vs borrowed direction before logging. Person = merchant. */}

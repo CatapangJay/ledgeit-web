@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Transaction, BudgetLimit, BudgetAllocation, BudgetAllocationItem, CustomCategory, IncomeAllocation, IncomeAllocationItem, Debt, DebtDirection, Category } from '@/types'
+import type { Transaction, BudgetLimit, BudgetAllocation, BudgetAllocationItem, CustomCategory, IncomeAllocation, IncomeAllocationItem, Debt, DebtDirection, Category, Wallet, WalletKind, WalletMovementType } from '@/types'
 import {
   fetchTransactions,
   insertTransaction,
@@ -41,7 +41,15 @@ import {
   setDebtSettled,
   deleteDebt,
 } from '@/lib/db/debts'
-import { CATEGORIES, typeForCategory } from '@/types'
+import {
+  fetchWallets,
+  createWallet,
+  patchWallet,
+  deleteWallet,
+  insertWalletMovement,
+  deleteWalletMovement,
+} from '@/lib/db/wallets'
+import { CATEGORIES, typeForCategory, resolveWalletKind } from '@/types'
 
 // ─── Income source id → human-readable label ─────────────────────────────────
 // Mirrors the INCOME_SOURCES list in OnboardingBudgetSetup (kept here so the
@@ -111,6 +119,7 @@ interface StoreState {
   /** True once loadIncomeAllocations has resolved at least once for the current user */
   incomeAllocationsLoaded: boolean
   debts: Debt[]
+  wallets: Wallet[]
 }
 
 interface StoreActions {
@@ -161,6 +170,20 @@ interface StoreActions {
   recordDebtRepayment: (debtId: string, payload: { amount: number; interest?: number; date: string }) => Promise<void>
   toggleDebtSettled: (debtId: string) => Promise<void>
   removeDebt: (debtId: string) => Promise<void>
+  // ── Wallets ─────────────────────────────────────────────────────────────────
+  loadWallets: (userId: string) => Promise<void>
+  addWallet: (payload: { name: string; kind: WalletKind; target?: number; note?: string; initialAmount?: number; date: string }) => Promise<void>
+  updateWallet: (walletId: string, payload: { name: string; kind: WalletKind; target?: number; note?: string }) => Promise<void>
+  /** Move money into (deposit) or out of (withdrawal) a wallet. Logs a linked transfer. */
+  recordWalletMovement: (walletId: string, payload: { type: WalletMovementType; amount: number; note?: string; date: string }) => Promise<void>
+  /** Record a wallet movement against an ALREADY-logged ledger transaction (e.g. an
+   *  expense paid from a wallet). Does NOT create a new transfer — the given
+   *  transaction is the money movement; this only tracks the wallet sub-balance. */
+  attachWalletMovement: (walletId: string, payload: { type: WalletMovementType; amount: number; date: string; note?: string; transactionId: string }) => Promise<void>
+  /** Delete a single wallet movement and its linked ledger transfer. */
+  removeWalletMovement: (walletId: string, movementId: string) => Promise<void>
+  toggleWalletArchived: (walletId: string) => Promise<void>
+  removeWallet: (walletId: string) => Promise<void>
 }
 
 export type AppStore = StoreState & StoreActions
@@ -180,6 +203,7 @@ export const useStore = create<AppStore>()((set, get) => ({
   incomeAllocations: [],
   incomeAllocationsLoaded: false,
   debts: [],
+  wallets: [],
 
   setUserId(userId) {
     set({
@@ -190,6 +214,7 @@ export const useStore = create<AppStore>()((set, get) => ({
         incomeAllocationsLoaded: false,
         incomeAllocations: [],
         debts: [],
+        wallets: [],
       } : {}),
     })
   },
@@ -833,6 +858,205 @@ export const useStore = create<AppStore>()((set, get) => ({
     } catch (err) {
       console.error('[store] removeDebt failed:', err)
       set({ debts: prev })
+    }
+  },
+
+  // ─── Wallets ──────────────────────────────────────────────────────────────
+  //
+  // A wallet is a pocket the user sets money aside into (savings, investments,
+  // an emergency fund…). Moving money in or out is NOT spending or earning —
+  // it's cash shuffling between the user's own pockets. So every movement logs a
+  // `transfer` ledger transaction (excluded from income/expense totals), exactly
+  // like debts. The 'transfers' category keeps them off spend/income analytics.
+
+  async loadWallets(userId) {
+    try {
+      const wallets = await fetchWallets(userId)
+      set({ wallets })
+    } catch {
+      // Keep empty on error
+    }
+  },
+
+  async addWallet({ name, kind, target, note, initialAmount, date }) {
+    const userId = get().userId
+    if (!userId) return
+    const meta = resolveWalletKind(kind)
+    try {
+      const wallet = await createWallet(userId, {
+        name,
+        kind,
+        icon: meta.icon,
+        color: meta.color,
+        target,
+        note,
+      })
+      set((state) => ({ wallets: [wallet, ...state.wallets] }))
+      // An opening balance is just a first deposit into the new wallet.
+      if (initialAmount && initialAmount > 0) {
+        await get().recordWalletMovement(wallet.id, { type: 'deposit', amount: initialAmount, date })
+      }
+    } catch (err) {
+      console.error('[store] addWallet failed:', err)
+    }
+  },
+
+  async updateWallet(walletId, { name, kind, target, note }) {
+    const prevWallets = get().wallets
+    const wallet = prevWallets.find((w) => w.id === walletId)
+    if (!wallet) return
+    const meta = resolveWalletKind(kind)
+
+    // Optimistically apply the edits. Icon/color follow the (possibly changed) kind.
+    set((state) => ({
+      wallets: state.wallets.map((w) =>
+        w.id === walletId ? { ...w, name, kind, icon: meta.icon, color: meta.color, target, note } : w
+      ),
+    }))
+
+    try {
+      await patchWallet(walletId, {
+        name,
+        kind,
+        icon: meta.icon,
+        color: meta.color,
+        target: target ?? null,
+        note: note ?? null,
+      })
+    } catch (err) {
+      console.error('[store] updateWallet failed:', err)
+      set({ wallets: prevWallets })
+    }
+  },
+
+  async recordWalletMovement(walletId, { type, amount, note, date }) {
+    const wallet = get().wallets.find((w) => w.id === walletId)
+    if (!wallet || amount <= 0) return
+
+    // The movement shuffles money between the user's own pockets, so it's a
+    // `transfer` — recorded in the ledger but excluded from income/expense
+    // totals. A deposit is money leaving the day-to-day balance (into the
+    // wallet); a withdrawal is money coming back out.
+    const transfersCategory = CATEGORIES.find((c) => c.id === 'transfers')!
+    const txId = crypto.randomUUID()
+    const label = type === 'deposit' ? `Deposit to ${wallet.name}` : `Withdraw from ${wallet.name}`
+    const tx: Transaction = {
+      id: txId,
+      raw: `${label} ${amount}`,
+      amount,
+      merchant: label,
+      category: transfersCategory,
+      date,
+      type: 'transfer',
+      paymentMethod: 'bank',
+      confidence: 1,
+      note,
+      createdAt: new Date().toISOString(),
+    }
+
+    try {
+      const movement = await insertWalletMovement(walletId, {
+        type,
+        amount,
+        date,
+        note,
+        source: 'manual',
+        transactionId: txId,
+      })
+      set((state) => ({
+        wallets: state.wallets.map((w) =>
+          w.id === walletId ? { ...w, movements: [...w.movements, movement] } : w
+        ),
+      }))
+      get().addTransaction(tx) // optimistic + background DB write
+    } catch (err) {
+      console.error('[store] recordWalletMovement failed:', err)
+    }
+  },
+
+  async attachWalletMovement(walletId, { type, amount, date, note, transactionId }) {
+    const wallet = get().wallets.find((w) => w.id === walletId)
+    if (!wallet || amount <= 0) return
+    // The linked ledger transaction already exists (the expense/income being
+    // logged). We only persist the wallet movement and link it, so the wallet's
+    // running balance reflects the spend/deposit without double-logging.
+    try {
+      const movement = await insertWalletMovement(walletId, { type, amount, date, note, source: 'linked', transactionId })
+      set((state) => ({
+        wallets: state.wallets.map((w) =>
+          w.id === walletId ? { ...w, movements: [...w.movements, movement] } : w
+        ),
+      }))
+    } catch (err) {
+      console.error('[store] attachWalletMovement failed:', err)
+    }
+  },
+
+  async removeWalletMovement(walletId, movementId) {
+    const wallet = get().wallets.find((w) => w.id === walletId)
+    if (!wallet) return
+    const movement = wallet.movements.find((m) => m.id === movementId)
+    if (!movement) return
+    const prev = get().wallets
+
+    // Drop the movement optimistically. Only 'manual' movements own their linked
+    // transaction (an app-created transfer) and should delete it too. 'linked'
+    // movements point at a real expense/income the user logged elsewhere — that
+    // stays in the ledger; we only remove the wallet-balance effect.
+    set((state) => ({
+      wallets: state.wallets.map((w) =>
+        w.id === walletId ? { ...w, movements: w.movements.filter((m) => m.id !== movementId) } : w
+      ),
+    }))
+    if (movement.source === 'manual' && movement.transactionId) {
+      get().deleteTransaction(movement.transactionId)
+    }
+
+    try {
+      await deleteWalletMovement(movementId)
+    } catch (err) {
+      console.error('[store] removeWalletMovement failed:', err)
+      set({ wallets: prev })
+    }
+  },
+
+  async toggleWalletArchived(walletId) {
+    const wallet = get().wallets.find((w) => w.id === walletId)
+    if (!wallet) return
+    const next = !wallet.isArchived
+    set((state) => ({
+      wallets: state.wallets.map((w) => (w.id === walletId ? { ...w, isArchived: next } : w)),
+    }))
+    try {
+      await patchWallet(walletId, { isArchived: next })
+    } catch (err) {
+      console.error('[store] toggleWalletArchived failed:', err)
+      set((state) => ({
+        wallets: state.wallets.map((w) => (w.id === walletId ? { ...w, isArchived: !next } : w)),
+      }))
+    }
+  },
+
+  async removeWallet(walletId) {
+    const wallet = get().wallets.find((w) => w.id === walletId)
+    if (!wallet) return
+    const prev = get().wallets
+
+    // Remove optimistically, then clean up only the app-owned transfers (manual
+    // movements). Real expense/income entries linked via Smart Entry survive —
+    // deleting a wallet shouldn't erase genuine spending from the ledger.
+    set((state) => ({ wallets: state.wallets.filter((w) => w.id !== walletId) }))
+    const ownedTxIds = wallet.movements
+      .filter((m) => m.source === 'manual')
+      .map((m) => m.transactionId)
+      .filter((id): id is string => Boolean(id))
+    for (const id of ownedTxIds) get().deleteTransaction(id)
+
+    try {
+      await deleteWallet(walletId)
+    } catch (err) {
+      console.error('[store] removeWallet failed:', err)
+      set({ wallets: prev })
     }
   },
 }))

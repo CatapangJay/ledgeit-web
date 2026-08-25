@@ -419,6 +419,102 @@ export function debtDueStatus(
   return { state: 'upcoming', days }
 }
 
+// ─── Wallets ──────────────────────────────────────────────────────────────────
+
+/**
+ * A wallet is a named pocket the user sets money aside into — Savings,
+ * Investments, an emergency fund, a goal, etc. Moving money into or out of a
+ * wallet is NOT spending or earning; it's money shuffling between the user's own
+ * pockets, so every movement is logged as a `transfer` transaction (excluded
+ * from spending/income analytics) — the same way debts are handled.
+ */
+export type WalletKind = 'savings' | 'investment' | 'emergency' | 'goal' | 'cash' | 'other'
+
+export interface WalletKindMeta {
+  id: WalletKind
+  label: string
+  icon: string          // Phosphor icon name
+  /** Accent color key; UI maps it to concrete hex/Tailwind values. */
+  color: string
+}
+
+// Ordered for the picker; savings first (the most common).
+export const WALLET_KINDS: WalletKindMeta[] = [
+  { id: 'savings',    label: 'Savings',    icon: 'PiggyBank', color: 'teal' },
+  { id: 'investment', label: 'Investment', icon: 'TrendUp',   color: 'indigo' },
+  { id: 'emergency',  label: 'Emergency Fund', icon: 'Lifebuoy', color: 'rose' },
+  { id: 'goal',       label: 'Goal',       icon: 'Target',    color: 'amber' },
+  { id: 'cash',       label: 'Cash',       icon: 'Money',     color: 'green' },
+  { id: 'other',      label: 'Other',      icon: 'Wallet',    color: 'slate' },
+]
+
+export function resolveWalletKind(id: string | undefined): WalletKindMeta {
+  return WALLET_KINDS.find((k) => k.id === id) ?? WALLET_KINDS[0]
+}
+
+/**
+ * 'deposit'    — money moved INTO the wallet (contribution). Raises the balance.
+ * 'withdrawal' — money taken back OUT of the wallet. Lowers the balance.
+ */
+export type WalletMovementType = 'deposit' | 'withdrawal'
+
+/**
+ * How a movement was created — determines what happens to its linked transaction
+ * when the movement is deleted:
+ *   'manual' — deposited/withdrawn directly on the Wallets page. The linked
+ *              transaction is a `transfer` this app owns; deleting the movement
+ *              deletes it too.
+ *   'linked' — mirrors a real expense/income logged in Smart Entry (e.g. a
+ *              coffee paid from Savings). The linked transaction is that genuine
+ *              spend/earn and SURVIVES if the movement is removed — only the
+ *              wallet-balance effect is detached.
+ */
+export type WalletMovementSource = 'manual' | 'linked'
+
+export interface WalletMovement {
+  id: string
+  type: WalletMovementType
+  amount: number            // Always positive — direction is `type`
+  date: string              // ISO 8601 date (YYYY-MM-DD)
+  note?: string
+  source: WalletMovementSource
+  /** Linked ledger transaction for the movement, if any. For 'manual' it's the
+   *  app-owned transfer; for 'linked' it's the underlying expense/income. */
+  transactionId?: string
+  createdAt: string
+}
+
+export interface Wallet {
+  id: string
+  name: string
+  kind: WalletKind
+  icon: string              // Phosphor icon name (defaults from the kind)
+  color: string             // Accent color key (defaults from the kind)
+  /** Optional goal/target amount. Drives the progress bar when set. */
+  target?: number
+  note?: string
+  isArchived: boolean
+  movements: WalletMovement[]
+  createdAt: string
+}
+
+/** Current balance = everything deposited minus everything withdrawn. */
+export function walletBalance(wallet: Wallet): number {
+  return wallet.movements.reduce(
+    (sum, m) => (m.type === 'deposit' ? sum + m.amount : sum - m.amount),
+    0,
+  )
+}
+
+/**
+ * Progress toward a wallet's goal as a fraction (0–1). Returns null when the
+ * wallet has no target set. Clamped to [0, 1] so an over-funded goal reads 100%.
+ */
+export function walletGoalProgress(wallet: Wallet): number | null {
+  if (!wallet.target || wallet.target <= 0) return null
+  return Math.min(Math.max(walletBalance(wallet) / wallet.target, 0), 1)
+}
+
 // ─── Budget ───────────────────────────────────────────────────────────────────
 
 export interface BudgetLimit {

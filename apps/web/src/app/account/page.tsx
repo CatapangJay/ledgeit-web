@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { SignOut, PencilSimple, Check, X, Lock, User, SlidersHorizontal, CaretRight, HandCoins, Tag } from '@phosphor-icons/react'
+import { SignOut, PencilSimple, Check, X, Lock, User, SlidersHorizontal, CaretRight, HandCoins, Tag, Wallet } from '@phosphor-icons/react'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import { useStore } from '@/lib/store'
-import { debtOutstanding } from '@/types'
+import { debtOutstanding, walletBalance } from '@/types'
+import { formatCurrency } from '@/lib/formatters'
 import BudgetAllocationSheet from '@/components/budget/BudgetAllocationSheet'
 import CategoryManagerSheet from '@/components/budget/CategoryManagerSheet'
 
@@ -40,6 +41,9 @@ export default function AccountPage() {
   const activePlan = budgetAllocations.find((a) => a.isActive) ?? null
   const debts = useStore((s) => s.debts)
   const openDebtCount = debts.filter((d) => !d.isSettled && debtOutstanding(d) > 0).length
+  const wallets = useStore((s) => s.wallets)
+  const activeWallets = wallets.filter((w) => !w.isArchived)
+  const totalStashed = activeWallets.reduce((s, w) => s + walletBalance(w), 0)
   const customCategories = useStore((s) => s.customCategories)
   const hiddenCategories = useStore((s) => s.hiddenCategories)
 
@@ -275,6 +279,30 @@ export default function AccountPage() {
                     : customCategories.length > 0
                       ? `${customCategories.length} custom`
                       : 'Hide or restore categories'}
+                </p>
+              </div>
+              <CaretRight size={15} weight="bold" color="#6e9990" aria-hidden="true" />
+            </button>
+
+            {/* Wallets */}
+            <button
+              onClick={() => router.push('/wallets')}
+              aria-label="Manage wallets"
+              className="flex items-center gap-3 rounded-xl border border-ledge-border bg-ledge-surface p-4 text-left transition-colors hover:bg-ledge-surface2 active:scale-[0.99]"
+              style={{ boxShadow: '0 2px 12px rgba(0,53,46,0.04)' }}
+            >
+              <div
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+                style={{ background: '#e0f2ec' }}
+              >
+                <Wallet size={16} weight="bold" color="#0f766e" aria-hidden="true" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-ledge-data">Wallets</p>
+                <p className="truncate text-[11px] text-ledge-muted">
+                  {activeWallets.length > 0
+                    ? `${formatCurrency(totalStashed)} across ${activeWallets.length} wallet${activeWallets.length === 1 ? '' : 's'}`
+                    : 'Track savings, investments & goals'}
                 </p>
               </div>
               <CaretRight size={15} weight="bold" color="#6e9990" aria-hidden="true" />

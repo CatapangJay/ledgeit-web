@@ -9,6 +9,7 @@ import {
   ListIcon,
   PlusCircleIcon,
   UserCircleIcon,
+  WalletIcon,
 } from '@phosphor-icons/react'
 import { motion } from 'framer-motion'
 import { useState } from 'react'
@@ -18,6 +19,7 @@ const NAV_ITEMS = [
   { label: 'Dashboard', icon: HouseIcon, href: '/dashboard' },
   { label: 'Ledger', icon: GridFourIcon, href: '/ledger' },
   { label: 'Insights', icon: ChartPieSliceIcon, href: '/insights' },
+  { label: 'Wallets', icon: WalletIcon, href: '/wallets' },
   { label: 'Debts', icon: HandPalmIcon, href: '/debts' },
   { label: 'History', icon: ListIcon, href: '/history' },
   // { label: 'Account', icon: UserCircleIcon, href: '/account' },

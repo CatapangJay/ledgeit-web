@@ -64,6 +64,10 @@ import {
   PencilLine,
   Phone,
   Lightbulb,
+  // ─── Wallet kind icons ─────────────────────────────────────────────────────────
+  Lifebuoy,
+  Target,
+  Money,
 } from '@phosphor-icons/react'
 import type { Icon } from '@phosphor-icons/react'
 
@@ -136,6 +140,10 @@ export const PHOSPHOR_ICON_MAP: Record<string, Icon> = {
   PencilLine,
   Phone,
   Lightbulb,
+  // Wallet kind icons
+  Lifebuoy,
+  Target,
+  Money,
 }
 
 /** Resolve a Phosphor icon component by its string name. Falls back to DotsThree. */
