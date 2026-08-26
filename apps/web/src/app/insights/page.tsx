@@ -7,6 +7,7 @@ import MetricStrip from '@/components/insights/MetricStrip'
 import BudgetBar from '@/components/insights/BudgetBar'
 import CategoryBreakdownList from '@/components/insights/CategoryBreakdownList'
 import SpendDonut from '@/components/insights/SpendDonut'
+import WalletInsightsCard from '@/components/insights/WalletInsightsCard'
 import MonthTrendChart from '@/components/dashboard/MonthTrendChart'
 import RecurringPaymentsCard from '@/components/dashboard/RecurringPaymentsCard'
 import BiggestExpenseCard from '@/components/dashboard/BiggestExpenseCard'
@@ -265,6 +266,11 @@ export default function InsightsPage() {
           {/* Daily spending trend for the selected month */}
           <div className="mt-4">
             <MonthTrendChart start={start} end={end} />
+          </div>
+
+          {/* How your wallets grew this month (self-hides when none) */}
+          <div className="mt-4">
+            <WalletInsightsCard start={start} end={end} />
           </div>
         </div>
 

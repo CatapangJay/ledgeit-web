@@ -482,13 +482,26 @@ export function parseMerchant(text: string): string {
     if (pattern.test(clean)) return normalized
   }
 
-  // Title-case whatever remains
-  return clean
-    .split(' ')
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .slice(0, 3) // cap at 3 words for a clean merchant name
-    .join(' ')
+  const titleCase = (s: string) =>
+    s
+      .split(' ')
+      .filter(Boolean)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+
+  // A parenthetical/bracketed group is an itemized detail the user typed on
+  // purpose — e.g. "veggies (lettuce, celery, gabi, etc)" — not extra merchant
+  // words to trim. Keep it verbatim and apply the 3-word cap only to the head
+  // that precedes it, so nothing inside the brackets is dropped.
+  const bracketIdx = clean.search(/[([{]/)
+  if (bracketIdx !== -1) {
+    const head = clean.slice(0, bracketIdx).trim()
+    const detail = clean.slice(bracketIdx).trim()
+    const headTitled = titleCase(head).slice(0, 3).join(' ')
+    return headTitled ? `${headTitled} ${detail}` : detail
+  }
+
+  // Title-case whatever remains, capped at 3 words for a clean merchant name.
+  return titleCase(clean).slice(0, 3).join(' ')
 }
 
 // ─── Compose ──────────────────────────────────────────────────────────────────

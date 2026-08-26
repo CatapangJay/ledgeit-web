@@ -1,18 +1,18 @@
-import { type NextRequest, NextResponse } from 'next/server'
+import { type NextRequest } from 'next/server'
+import { updateSession } from '@/lib/supabase/middleware'
 
-// AppShell reads this header to decide whether the current route is an
-// auth/marketing route (no SideNav/BottomNav) or an app route. Next.js
-// Server Components have no direct access to the request pathname, so we
-// forward it here.
-export function proxy(request: NextRequest) {
+// Runs on every matched request. Two jobs:
+//  1. Forward the pathname as `x-pathname` — AppShell (a Server Component, which
+//     can't read the request URL directly) reads it to decide whether to show
+//     the app chrome (SideNav/BottomNav) or the auth/marketing layout.
+//  2. Refresh the Supabase session, protect app routes, and enforce the 24h
+//     rolling-inactivity cap (see updateSession). Without this, an expired
+//     access token was never refreshed and protected pages rendered empty.
+export async function proxy(request: NextRequest) {
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-pathname', request.nextUrl.pathname)
 
-  return NextResponse.next({
-    request: {
-      headers: requestHeaders,
-    },
-  })
+  return updateSession(request, requestHeaders)
 }
 
 export const config = {

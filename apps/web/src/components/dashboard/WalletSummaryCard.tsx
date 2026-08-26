@@ -2,23 +2,15 @@
 
 import { useMemo } from 'react'
 import Link from 'next/link'
-import { Wallet as WalletIcon, CaretRight } from '@phosphor-icons/react'
+import { Wallet as WalletIcon, CaretRight, Plus } from '@phosphor-icons/react'
 import { formatCurrencyCompact } from '@/lib/formatters'
 import { getIconComponent } from '@/lib/iconMap'
+import { walletAccent } from '@/lib/walletColors'
 import { walletBalance, walletGoalProgress } from '@/types'
 import type { Wallet } from '@/types'
 import { useStore } from '@/lib/store'
 
-// Wallet-kind accent color key → concrete hex. Mirrors WalletLedger's palette.
-const COLOR_HEX: Record<string, string> = {
-  teal:   '#0f766e',
-  indigo: '#4338ca',
-  rose:   '#be123c',
-  amber:  '#b45309',
-  green:  '#15803d',
-  slate:  '#334155',
-}
-const accentFor = (key: string) => COLOR_HEX[key] ?? COLOR_HEX.teal
+const accentFor = walletAccent
 
 /**
  * Dashboard widget: total money set aside across all active wallets, with the
@@ -38,7 +30,38 @@ export default function WalletSummaryCard() {
     return { active, totalStashed, top }
   }, [wallets])
 
-  if (active.length === 0) return null
+  // No wallets yet — show a compact prompt that still links to /wallets. This is
+  // the primary way mobile users reach the Wallets page (there's no bottom-nav
+  // slot for it), so it must be present even before the first wallet exists.
+  if (active.length === 0) {
+    return (
+      <Link href="/wallets" className="block">
+        <div
+          className="flex items-center gap-3 rounded-2xl px-5 py-4 transition-transform active:scale-[0.99]"
+          style={{ background: '#ffffff', boxShadow: '0 4px 24px rgba(0,53,46,0.07)' }}
+        >
+          <div
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+            style={{ background: 'rgba(15,118,110,0.1)' }}
+          >
+            <WalletIcon size={18} weight="fill" color="#0f766e" aria-hidden="true" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold" style={{ color: '#00352e' }}>Set money aside</p>
+            <p className="truncate text-[11px]" style={{ color: '#6e9990' }}>
+              Create a savings, investment, or goal wallet
+            </p>
+          </div>
+          <div
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+            style={{ background: '#e7edeb' }}
+          >
+            <Plus size={15} weight="bold" color="#1f695d" aria-hidden="true" />
+          </div>
+        </div>
+      </Link>
+    )
+  }
 
   return (
     <Link href="/wallets" className="block">

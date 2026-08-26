@@ -1,5 +1,5 @@
-import { CATEGORIES } from './types'
-import type { Category, CategoryId, TransactionDraft } from './types'
+import { CATEGORIES, resolveCategory } from './types'
+import type { Category, CustomCategory, TransactionDraft } from './types'
 
 // ─── Keyword Index ────────────────────────────────────────────────────────────
 
@@ -40,6 +40,73 @@ export function getMerchantKey(draft: TransactionDraft): string {
   return tokens[0] ?? draft.raw.slice(0, 20).toLowerCase().trim()
 }
 
+// ─── History-based learning ─────────────────────────────────────────────────
+
+/** Minimal transaction shape needed to learn category associations from history. */
+interface HistoryTxn {
+  merchant: string
+  category: { id: string }
+  type: string
+  createdAt: string
+}
+
+// Category ids that carry no merchant→category signal: 'other' is the
+// uninformative fallback, and income/transfer/debt entries are typed by their
+// direction, not their merchant, so they'd pollute the learned map.
+const NON_LEARNABLE_IDS = new Set(['other', 'income', 'transfers', 'debts'])
+
+/**
+ * Derive merchant → category overrides from the user's already-logged
+ * transactions, so categorization gets smarter with every entry — without any
+ * explicit correction. For each merchant key we pick the category the user has
+ * assigned it most often (ties broken by most-recent use). Only expense entries
+ * with an informative category count.
+ *
+ * The returned map is keyed the same way `getMerchantKey` produces keys, so it
+ * plugs straight into `categorize`'s `learnedOverrides` argument. Explicit
+ * user corrections should be layered ON TOP (they win) via object spread.
+ */
+export function buildHistoryOverrides(
+  transactions: HistoryTxn[],
+): Record<string, string> {
+  // key → categoryId → { count, lastUsed }
+  const tally = new Map<string, Map<string, { count: number; lastUsed: string }>>()
+
+  for (const tx of transactions) {
+    if (tx.type !== 'expense') continue
+    if (NON_LEARNABLE_IDS.has(tx.category.id)) continue
+    const key = tx.merchant?.toLowerCase().trim()
+    if (!key || key === 'unknown') continue
+
+    let byCat = tally.get(key)
+    if (!byCat) {
+      byCat = new Map()
+      tally.set(key, byCat)
+    }
+    const cur = byCat.get(tx.category.id)
+    if (cur) {
+      cur.count++
+      if (tx.createdAt > cur.lastUsed) cur.lastUsed = tx.createdAt
+    } else {
+      byCat.set(tx.category.id, { count: 1, lastUsed: tx.createdAt })
+    }
+  }
+
+  const overrides: Record<string, string> = {}
+  for (const [key, byCat] of tally) {
+    let bestId: string | null = null
+    let best = { count: 0, lastUsed: '' }
+    for (const [catId, stat] of byCat) {
+      if (stat.count > best.count || (stat.count === best.count && stat.lastUsed > best.lastUsed)) {
+        best = stat
+        bestId = catId
+      }
+    }
+    if (bestId) overrides[key] = bestId
+  }
+  return overrides
+}
+
 // ─── Categorize ───────────────────────────────────────────────────────────────
 
 export interface CategorizationResult {
@@ -50,6 +117,7 @@ export interface CategorizationResult {
 export function categorize(
   draft: TransactionDraft,
   learnedOverrides?: Record<string, string>,
+  customCategories: CustomCategory[] = [],
 ): CategorizationResult {
   const fallback: CategorizationResult = {
     category: CATEGORIES.find((c) => c.id === 'other')!,
@@ -73,12 +141,16 @@ export function categorize(
   }
 
   // ── User-learned override (highest priority) ──────────────────────────────
+  // Resolves both preset ids and custom-category UUIDs so a merchant the user
+  // filed under a custom category is recognised on sight. resolveCategory falls
+  // back to 'other' for stale ids (e.g. a deleted custom category), which we
+  // treat as "no match" so it doesn't hijack keyword scoring below.
   if (learnedOverrides && Object.keys(learnedOverrides).length > 0) {
     const key = getMerchantKey(draft)
     const learnedId = learnedOverrides[key]
     if (learnedId) {
-      const learnedCategory = CATEGORIES.find((c) => c.id === learnedId)
-      if (learnedCategory) {
+      const learnedCategory = resolveCategory(learnedId, customCategories)
+      if (learnedCategory.id === learnedId) {
         return { category: learnedCategory, confidence: 0.99 }
       }
     }
@@ -87,8 +159,8 @@ export function categorize(
     for (const word of words) {
       const wordId = learnedOverrides[word]
       if (wordId) {
-        const wordCategory = CATEGORIES.find((c) => c.id === wordId)
-        if (wordCategory) return { category: wordCategory, confidence: 0.97 }
+        const wordCategory = resolveCategory(wordId, customCategories)
+        if (wordCategory.id === wordId) return { category: wordCategory, confidence: 0.97 }
       }
     }
   }

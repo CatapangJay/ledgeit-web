@@ -6,6 +6,7 @@ import { Plus, ArrowLeft, Trash, Wallet as WalletIcon, ArrowDown, ArrowUp, Penci
 import { useStore } from '@/lib/store'
 import { formatCurrency, formatDate } from '@/lib/formatters'
 import { getIconComponent } from '@/lib/iconMap'
+import { walletAccent } from '@/lib/walletColors'
 import { WALLET_KINDS, walletBalance, walletGoalProgress } from '@/types'
 import type { Wallet, WalletKind, WalletMovement, WalletMovementType } from '@/types'
 
@@ -14,20 +15,7 @@ function todayISO(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-// Wallet-kind accent color key → concrete hex. Mirrors the palette used across
-// the app (see iconMap CUSTOM_COLOR_OPTIONS swatches).
-const COLOR_HEX: Record<string, string> = {
-  teal:   '#0f766e',
-  indigo: '#4338ca',
-  rose:   '#be123c',
-  amber:  '#b45309',
-  green:  '#15803d',
-  slate:  '#334155',
-}
-
-function accentFor(colorKey: string): string {
-  return COLOR_HEX[colorKey] ?? COLOR_HEX.teal
-}
+const accentFor = walletAccent
 
 /**
  * The full wallets UI (summary, list, add/edit form, per-wallet deposit/withdraw)

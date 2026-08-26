@@ -5,7 +5,7 @@ import { motion, AnimatePresence, useMotionValue, animate } from 'framer-motion'
 import type { PanInfo } from 'framer-motion'
 import { X, CheckCircle, ArrowsOutSimple, ArrowsInSimple, Sparkle } from '@phosphor-icons/react'
 import { parseTransaction, parseDebtDirection, parseDebtPerson } from '@/lib/parser'
-import { categorize, getMerchantKey } from '@/lib/categorizer'
+import { categorize, getMerchantKey, buildHistoryOverrides } from '@/lib/categorizer'
 import { getMerchantSuggestions, resolveMerchant } from '@/lib/fuzzy'
 import { useStore } from '@/lib/store'
 import { useIsDesktop } from '@/lib/useIsDesktop'
@@ -191,6 +191,15 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
     return [...freq.entries()].map(([name, freq]) => ({ name, freq }))
   }, [transactions])
 
+  // Category overrides = what the user has categorized in the past (learned from
+  // their logged transactions), with any explicit in-session corrections layered
+  // on top so a manual fix always wins. This is what makes categorization get
+  // smarter with every entry, persisting across sessions via the saved ledger.
+  const categoryOverrides = useMemo(
+    () => ({ ...buildHistoryOverrides(transactions), ...learnedMerchants }),
+    [transactions, learnedMerchants],
+  )
+
   // Cycle placeholder examples
   useEffect(() => {
     const interval = setInterval(() => {
@@ -235,7 +244,6 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
       setRawMerchant(null)
       timerRef.current = setTimeout(() => {
         const draft = parseTransaction(val)
-        const { category, confidence } = categorize(draft, learnedMerchants)
 
         // ── Fuzzy merchant resolution ──────────────────────────────────────────
         const suggestions = getMerchantSuggestions(draft.merchant, historyMerchants)
@@ -244,6 +252,11 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
         const resolvedDraft = resolved
           ? { ...draft, merchant: resolved }
           : draft
+
+        // Categorize AFTER resolving the merchant so the learned overrides key on
+        // the canonical merchant name (matching what was stored in history).
+        const { category, confidence } = categorize(resolvedDraft, categoryOverrides, customCategories)
+
         // Alternatives: exclude the auto-applied name
         const altSuggestions = resolved
           ? suggestions.filter((s) => s.name !== resolved)
@@ -255,7 +268,7 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
         setIsAnalyzing(false)
       }, 400)
     },
-    [learnedMerchants, historyMerchants],
+    [categoryOverrides, customCategories, historyMerchants],
   )
 
   // Used by the disabled mode toggle — restore alongside it to re-enable quick entry.

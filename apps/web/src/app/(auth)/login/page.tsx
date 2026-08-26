@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
@@ -16,10 +16,23 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [signedUp, setSignedUp] = useState(false)
+  // Shown when the user landed here because their session expired / was signed
+  // out (middleware or client redirect appends ?reason=expired). Read on the
+  // client (lazy initializer) to avoid wrapping the page in a Suspense boundary
+  // for useSearchParams.
+  const [sessionExpired, setSessionExpired] = useState(
+    () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('reason') === 'expired'
+  )
+
+  useEffect(() => {
+    // Strip the query param so a refresh doesn't keep showing the notice.
+    if (sessionExpired) window.history.replaceState(null, '', '/login')
+  }, [sessionExpired])
 
   const switchMode = (next: Mode) => {
     setMode(next)
     setError(null)
+    setSessionExpired(false)
     setPassword('')
     setConfirm('')
   }
@@ -35,6 +48,7 @@ export default function LoginPage() {
 
     setLoading(true)
     setError(null)
+    setSessionExpired(false)
 
     const supabase = createClient()
 
@@ -135,6 +149,19 @@ export default function LoginPage() {
               <h1 className="mb-8 font-mono text-2xl font-semibold tracking-tighter text-ledge-data">
                 {mode === 'signin' ? 'Sign in' : 'Create account'}
               </h1>
+
+              {sessionExpired && mode === 'signin' && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mb-6 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3"
+                  role="status"
+                >
+                  <p className="text-sm text-amber-500">
+                    Your session expired. Please sign in again to continue.
+                  </p>
+                </motion.div>
+              )}
 
               <form onSubmit={handleSubmit} className="flex flex-col gap-4">
                 <div className="flex flex-col gap-1.5">

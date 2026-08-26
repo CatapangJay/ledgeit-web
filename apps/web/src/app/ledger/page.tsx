@@ -11,6 +11,7 @@ import TransactionRow from '@/components/ledger/TransactionRow'
 import TransactionEditSheet from '@/components/ledger/TransactionEditSheet'
 import CategoryBreakdownBar from '@/components/ledger/CategoryBreakdownBar'
 import CategoryPickerSheet from '@/components/ledger/CategoryPickerSheet'
+import WalletStrip from '@/components/ledger/WalletStrip'
 import DatePickerSheet from '@/components/ui/DatePickerSheet'
 import { useStore } from '@/lib/store'
 import { formatCurrency } from '@/lib/formatters'
@@ -397,6 +398,10 @@ function LedgerContent() {
           </button>
         )}
       </div>
+
+      {/* Wallet balances — quick context + link to the Wallets page (hidden in
+          select mode to keep the bulk toolbar uncluttered). */}
+      {!selectMode && <WalletStrip />}
 
       {/* Filters toggle — expands the date / category / method controls */}
       <div className="mb-2.5 flex items-center justify-between gap-2">
