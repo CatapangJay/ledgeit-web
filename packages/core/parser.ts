@@ -69,9 +69,26 @@ export function parseAmount(text: string): number | null {
 
 const INCOME_KEYWORDS = [
   'received', 'receive', 'salary', 'payroll', 'freelance', 'payment received',
-  'invoice', 'deposit', 'transfer in', 'refund', 'income', 'earnings', 'bonus',
-  'allowance', 'commission', 'profit', 'revenue', 'paid', 'payout', 'reimbursement',
+  'invoice', 'deposit', 'transfer in', 'income', 'earnings', 'bonus',
+  'allowance', 'commission', 'profit', 'revenue', 'paid', 'payout',
 ]
+
+// A reimbursement/refund gives money back against a category you spent in
+// (e.g. "grocery refund 500", "reimbursed 1200 gcash"). It is NOT generic
+// income — it offsets that category's spending. Detected here so the entry can
+// be flagged; it stays typed 'expense' and keeps its category, with the flag
+// telling analytics to subtract rather than add. Checked before income so
+// "refund"/"reimbursement" resolve here rather than as plain income.
+const REIMBURSEMENT_KEYWORDS = [
+  'refund', 'refunded', 'reimburse', 'reimbursed', 'reimbursement',
+  'rebate', 'cashback', 'cash back', 'money back', 'chargeback',
+]
+
+/** Whether the text describes a refund/reimbursement against a spend category. */
+export function parseReimbursement(text: string): boolean {
+  const lower = text.toLowerCase()
+  return REIMBURSEMENT_KEYWORDS.some((kw) => lower.includes(kw))
+}
 
 // A transfer moves money between the user's own pockets (paying a credit card,
 // moving to savings). Checked BEFORE income so phrasing like "cc payment" isn't
@@ -85,6 +102,9 @@ const TRANSFER_KEYWORDS = [
 export function parseDirection(text: string): 'expense' | 'income' | 'transfer' {
   const lower = text.toLowerCase()
   if (TRANSFER_KEYWORDS.some((kw) => lower.includes(kw))) return 'transfer'
+  // A reimbursement stays an expense-typed entry (offsetting its category), so
+  // it must not be swept up as income by shared keywords like 'received'.
+  if (parseReimbursement(lower)) return 'expense'
   if (INCOME_KEYWORDS.some((kw) => lower.includes(kw))) return 'income'
   return 'expense'
 }
@@ -522,5 +542,6 @@ export function parseTransaction(raw: string, contextDate?: string): Transaction
     type: parseDirection(trimmed),
     paymentMethod: parsePaymentMethod(trimmed),
     date,
+    isReimbursement: parseReimbursement(trimmed),
   }
 }

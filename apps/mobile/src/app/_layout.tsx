@@ -48,7 +48,8 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="debts" options={{ headerShown: true, title: 'Debts' }} />
+          <Stack.Screen name="wallets" />
+          <Stack.Screen name="debts" />
           <Stack.Screen name="history" options={{ headerShown: true, title: 'History' }} />
         </Stack>
       </SafeAreaProvider>

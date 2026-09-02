@@ -7,7 +7,7 @@ import { ArrowRight } from '@phosphor-icons/react'
 import { formatCurrencyCompact } from '@/lib/formatters'
 import { getIconComponent, getIconBg } from '@/lib/iconMap'
 import { useStore } from '@/lib/store'
-import { CATEGORIES, isSpend } from '@/types'
+import { CATEGORIES, isSpend, spendAmount } from '@/types'
 
 const TOP_N = 4
 
@@ -25,7 +25,8 @@ export default function TopCategoryBars() {
       // Real spending only — excludes transfers and the debts category, which
       // move money between your own pockets.
       if (!isSpend(tx) || !tx.date.startsWith(month)) continue
-      byCategory[tx.category.id] = (byCategory[tx.category.id] ?? 0) + tx.amount
+      // Reimbursements subtract from a category's net spend (spendAmount).
+      byCategory[tx.category.id] = (byCategory[tx.category.id] ?? 0) + spendAmount(tx)
     }
 
     // Max spend across the tracked categories — used to size bars for entries
@@ -37,10 +38,12 @@ export default function TopCategoryBars() {
         const limit = budgetLimits.find((b) => b.categoryId === id)?.limit ?? 0
         const cat = CATEGORIES.find((c) => c.id === id)
         // Budget usage % when a limit is set; otherwise spend relative to the
-        // biggest category so no-budget rows still render a visible bar.
+        // biggest category so no-budget rows still render a visible bar. Clamp
+        // at 0 so a net-negative category (reimbursed more than spent) shows an
+        // empty bar rather than a reversed one.
         const pct = limit > 0
-          ? Math.min((spent / limit) * 100, 100)
-          : (spent / maxSpent) * 100
+          ? Math.max(Math.min((spent / limit) * 100, 100), 0)
+          : Math.max((spent / maxSpent) * 100, 0)
         return {
           id,
           spent,

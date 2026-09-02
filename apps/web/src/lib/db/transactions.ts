@@ -15,6 +15,7 @@ interface TransactionRow {
   raw: string
   confidence: number
   is_recurring: boolean
+  is_reimbursement: boolean
   date: string
   created_at: string
 }
@@ -36,6 +37,8 @@ function rowToTransaction(row: TransactionRow, customCats: CustomCategory[] = []
     paymentMethod: (row.payment_method ?? 'cash') as PaymentMethodId,
     confidence: Number(row.confidence),
     isRecurring: row.is_recurring,
+    // Legacy rows (before reimbursements existed) may lack the column → false.
+    isReimbursement: row.is_reimbursement ?? false,
     note: row.notes ?? undefined,
     createdAt: row.created_at,
   }
@@ -80,6 +83,7 @@ export async function insertTransaction(tx: Transaction): Promise<void> {
     raw: tx.raw,
     confidence: tx.confidence,
     is_recurring: tx.isRecurring ?? false,
+    is_reimbursement: tx.isReimbursement ?? false,
     date: tx.date,
     created_at: tx.createdAt,
   })
@@ -103,9 +107,13 @@ export async function bulkSetCategory(
 ): Promise<void> {
   if (ids.length === 0) return
   const supabase = createClient()
+  // When the new category isn't an expense, a reimbursement flag is meaningless
+  // (only expenses can be reimbursements) — clear it in the same update.
+  const update: Record<string, unknown> = { category_id: categoryId, type }
+  if (type !== 'expense') update.is_reimbursement = false
   const { error } = await supabase
     .from('transactions')
-    .update({ category_id: categoryId, type })
+    .update(update)
     .in('id', ids)
   if (error) throw new Error(error.message)
 }
@@ -148,6 +156,7 @@ export async function patchTransaction(
   if (patch.date !== undefined) dbPatch.date = patch.date
   if (patch.raw !== undefined) dbPatch.raw = patch.raw
   if (patch.isRecurring !== undefined) dbPatch.is_recurring = patch.isRecurring
+  if (patch.isReimbursement !== undefined) dbPatch.is_reimbursement = patch.isReimbursement
 
   if (Object.keys(dbPatch).length === 0) return
 

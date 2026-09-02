@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { formatCurrencyCompact } from '@/lib/formatters'
-import { CATEGORIES, isSpend, isEarn } from '@/types'
+import { CATEGORIES, isSpend, isEarn, spendAmount } from '@/types'
 import type { Transaction } from '@/types'
 
 // Muted hex palette — matches the new muted category Tailwind classes
@@ -27,18 +27,21 @@ export default function CategoryBreakdownBar({ transactions }: Props) {
 
   const { breakdown, total, incomeTotal } = useMemo(() => {
     const expenses = transactions.filter((t) => isSpend(t))
-    const total = expenses.reduce((s, t) => s + t.amount, 0)
+    // Net category spend — reimbursements subtract (spendAmount).
+    const total = expenses.reduce((s, t) => s + spendAmount(t), 0)
     const incomeTotal = transactions
       .filter((t) => isEarn(t))
       .reduce((s, t) => s + t.amount, 0)
 
     const map = new Map<string, number>()
     for (const t of expenses) {
-      map.set(t.category.id, (map.get(t.category.id) ?? 0) + t.amount)
+      map.set(t.category.id, (map.get(t.category.id) ?? 0) + spendAmount(t))
     }
 
+    // Only categories with net-positive spend get a segment (a category fully
+    // offset by refunds shouldn't render a reversed/zero-width sliver).
     const breakdown = CATEGORIES
-      .filter((c) => c.id !== 'income' && map.has(c.id))
+      .filter((c) => c.id !== 'income' && (map.get(c.id) ?? 0) > 0)
       .map((c) => ({
         id: c.id,
         label: c.label.split(/[\s&]/)[0],

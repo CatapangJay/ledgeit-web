@@ -312,6 +312,7 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
         type: parseResult.draft.type,
         paymentMethod: parseResult.draft.paymentMethod,
         confidence: parseResult.confidence,
+        isReimbursement: parseResult.draft.isReimbursement,
         createdAt: new Date().toISOString(),
       }
       addTransaction(tx)
@@ -530,13 +531,31 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
                     const newType = cat.id === 'income' ? 'income' : cat.id === 'transfers' ? 'transfer' : 'expense'
                     setParseResult((prev) =>
                       prev
-                        ? { ...prev, category: cat, draft: { ...prev.draft, type: newType } }
+                        ? {
+                            ...prev,
+                            category: cat,
+                            // A reimbursement only applies to plain expense
+                            // categories — clear it when moving to income /
+                            // transfer / debts so it can't linger.
+                            draft: {
+                              ...prev.draft,
+                              type: newType,
+                              isReimbursement: newType === 'expense' && cat.id !== 'debts'
+                                ? prev.draft.isReimbursement
+                                : false,
+                            },
+                          }
                         : prev,
                     )
                     if (parseResult?.draft) {
                       learnCategory(getMerchantKey(parseResult.draft), cat.id)
                     }
                   }}
+                  onReimbursementChange={(value) =>
+                    setParseResult((prev) =>
+                      prev ? { ...prev, draft: { ...prev.draft, isReimbursement: value } } : prev
+                    )
+                  }
                   onDateChange={(date) =>
                     setParseResult((prev) =>
                       prev ? { ...prev, draft: { ...prev.draft, date } } : prev

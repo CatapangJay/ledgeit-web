@@ -16,6 +16,18 @@ colors:
   ink-variant: "#3f4946"
   muted: "#6e9990"
   border: "#cde0db"
+  # Neutral-dark family — a green-undertoned charcoal that harmonizes with the
+  # deep-green accent. Used for dark canvases and dark tiles (e.g. the monthly
+  # recap bento) where near-black creates contrast and a premium, calm weight.
+  # NOT navy, NOT a warm neutral — the faint green undertone keeps it on-brand.
+  neutral-canvas: "#141917"      # darkest — full-bleed dark surface / panel bg
+  neutral-surface: "#1e2422"     # dark tile surface on the canvas
+  neutral-surface-high: "#28302d" # raised dark surface / chips
+  neutral-ink: "#f4f7f6"         # primary text on neutral-dark
+  neutral-ink-dim: "rgba(255,255,255,0.6)" # muted text/labels on neutral-dark
+  # Bright accent variants for legible data on neutral-dark surfaces
+  danger-on-dark: "#ff8a80"
+  gain-on-dark: "#5fd6bd"
 typography:
   display:
     fontFamily: "Plus Jakarta Sans, system-ui, sans-serif"

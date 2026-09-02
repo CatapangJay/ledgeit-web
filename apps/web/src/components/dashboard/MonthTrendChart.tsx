@@ -11,7 +11,7 @@ import {
 } from 'recharts'
 import { formatCurrency, formatCurrencyCompact } from '@/lib/formatters'
 import { useStore } from '@/lib/store'
-import { isSpend, isEarn } from '@/types'
+import { isSpend, isEarn, spendAmount } from '@/types'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -97,7 +97,8 @@ export default function MonthTrendChart({ start, end }: Props) {
       // Debts + transfers move money between your own pockets — never charted.
       if (!isSpend(t) && !isEarn(t)) continue
       const bucket = byDate.get(t.date) ?? { expense: 0, income: 0 }
-      if (isSpend(t)) bucket.expense += t.amount
+      // Reimbursements subtract from category spend (spendAmount).
+      if (isSpend(t)) bucket.expense += spendAmount(t)
       else bucket.income += t.amount
       byDate.set(t.date, bucket)
     }

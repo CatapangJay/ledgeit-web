@@ -3,7 +3,7 @@
 import { createElement, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, CalendarBlank, Trash, ArrowsClockwise } from '@phosphor-icons/react'
+import { X, CalendarBlank, Trash, ArrowsClockwise, ArrowUUpLeft } from '@phosphor-icons/react'
 import DatePickerSheet from '@/components/ui/DatePickerSheet'
 import { getIconComponent } from '@/lib/iconMap'
 import { formatDate } from '@/lib/formatters'
@@ -42,6 +42,7 @@ export default function TransactionEditSheet({ tx, customCategories = [], hidden
   const [date, setDate] = useState('')
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodId>('cash')
   const [isRecurring, setIsRecurring] = useState(false)
+  const [isReimbursement, setIsReimbursement] = useState(false)
   const [datePickerOpen, setDatePickerOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
@@ -57,6 +58,7 @@ export default function TransactionEditSheet({ tx, customCategories = [], hidden
     setDate(tx.date)
     setPaymentMethod(tx.paymentMethod)
     setIsRecurring(tx.isRecurring ?? false)
+    setIsReimbursement(tx.isReimbursement ?? false)
     setConfirmDelete(false)
   }
   if (!tx && seededId !== null) setSeededId(null)
@@ -87,6 +89,10 @@ export default function TransactionEditSheet({ tx, customCategories = [], hidden
   const amountNum = parseFloat(amount.replace(/[^0-9.]/g, '')) || 0
   const canSave = !isDebt && amountNum > 0
 
+  const resolvedType = typeForCategory(category.id)
+  // A reimbursement only makes sense on a plain expense category (not debts).
+  const canReimburse = resolvedType === 'expense' && category.id !== 'debts'
+
   function handleSave() {
     if (!tx || !canSave) return
     onSave(tx.id, {
@@ -96,7 +102,9 @@ export default function TransactionEditSheet({ tx, customCategories = [], hidden
       date,
       paymentMethod,
       isRecurring,
-      type: typeForCategory(category.id),
+      // Force off when the resulting type isn't a plain expense.
+      isReimbursement: canReimburse ? isReimbursement : false,
+      type: resolvedType,
     })
     onClose()
   }
@@ -264,6 +272,42 @@ export default function TransactionEditSheet({ tx, customCategories = [], hidden
                         <span
                           className="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all"
                           style={{ left: isRecurring ? '18px' : '2px' }}
+                        />
+                      </div>
+                    </button>
+                  )}
+
+                  {/* Reimbursement toggle — expenses only. Flips the entry into a
+                      credit that reduces this category's spending. */}
+                  {canReimburse && (
+                    <button
+                      type="button"
+                      onClick={() => setIsReimbursement((v) => !v)}
+                      aria-pressed={isReimbursement}
+                      className="mt-3 flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition-colors"
+                      style={{
+                        background: isReimbursement ? 'rgba(31,105,80,0.08)' : '#ffffff',
+                        border: `1px solid ${isReimbursement ? '#1f695d' : '#e7edeb'}`,
+                      }}
+                    >
+                      <div
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+                        style={{ background: isReimbursement ? '#1f695d' : '#f0f4f2' }}
+                      >
+                        <ArrowUUpLeft size={15} weight="bold" color={isReimbursement ? '#ffffff' : '#6e9990'} aria-hidden="true" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[13px] font-semibold" style={{ color: '#191c1c' }}>Reimbursement</p>
+                        <p className="text-[11px]" style={{ color: '#6e9990' }}>Credited back — reduces this category&apos;s spending instead of adding to it.</p>
+                      </div>
+                      {/* Switch */}
+                      <div
+                        className="relative h-5 w-9 shrink-0 rounded-full transition-colors"
+                        style={{ background: isReimbursement ? '#1f695d' : '#cde0db' }}
+                      >
+                        <span
+                          className="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all"
+                          style={{ left: isReimbursement ? '18px' : '2px' }}
                         />
                       </div>
                     </button>

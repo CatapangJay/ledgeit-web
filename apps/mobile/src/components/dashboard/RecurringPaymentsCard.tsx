@@ -39,17 +39,17 @@ export default function RecurringPaymentsCard() {
   }, [transactions]);
 
   return (
-    <View className="flex-1 rounded-2xl px-5 py-4" style={{ backgroundColor: '#ffffff', shadowColor: '#00352e', shadowOpacity: 0.07, shadowRadius: 24, elevation: 1 }}>
+    <View className="flex-1 rounded-2xl px-5 py-4" style={{ backgroundColor: '#ffffff', shadowColor: '#00352e', shadowOpacity: 0.06, shadowRadius: 20, elevation: 1 }}>
       {/* Header */}
       <View className="mb-3 flex-row items-center justify-between">
-        <Text className="text-[12px] font-bold uppercase tracking-[1.7px]" style={{ color: '#00352e' }}>
+        <Text className="text-[12px] font-bold uppercase tracking-[1.4px]" style={{ color: '#00352e' }}>
           Recurring Bills
         </Text>
         <ArrowsClockwise size={15} weight="bold" color="#a9c2bd" />
       </View>
 
       {rows.length === 0 ? (
-        <Text className="text-[12px]" style={{ color: '#a9c2bd' }}>
+        <Text className="text-[12px]" style={{ color: '#3f4946' }}>
           Mark a transaction as recurring to track subscriptions and bills here.
         </Text>
       ) : (
@@ -63,7 +63,7 @@ export default function RecurringPaymentsCard() {
                   <View className="h-8 w-8 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: `${hex}18` }}>
                     <Icon size={14} weight="fill" color={hex} />
                   </View>
-                  <Text className="min-w-0 flex-1 truncate text-[12px] font-semibold" style={{ color: '#191c1c' }} numberOfLines={1}>
+                  <Text className="min-w-0 flex-1 text-[12px] font-semibold" style={{ color: '#191c1c' }} numberOfLines={1}>
                     {tx.merchant}
                   </Text>
                   <Text className="shrink-0 font-mono text-[12px] font-semibold" style={{ color: '#3f4946' }}>

@@ -67,16 +67,18 @@ export async function updateSession(request: NextRequest, requestHeaders: Header
     }
   )
 
-  // Refreshes the access token if it's expired (getUser revalidates against the
-  // auth server, not just the local cookie).
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // Verify the JWT. getClaims() verifies locally via WebCrypto against a cached
+  // JWKS when the project uses asymmetric signing keys (no per-request network
+  // round-trip) — and transparently falls back to a server request (like
+  // getUser) if the project still uses a symmetric secret, so it's never less
+  // secure. It also refreshes the session first if the token is near expiry.
+  const { data: claimsData } = await supabase.auth.getClaims()
+  const claims = claimsData?.claims ?? null
 
   const pathname = request.nextUrl.pathname
   const isPublic = isPublicRoute(pathname)
 
-  if (!user) {
+  if (!claims) {
     // No valid session. Bounce app routes to login; leave public routes alone.
     if (!isPublic) return redirectToLogin(request, 'unauthenticated')
     return supabaseResponse

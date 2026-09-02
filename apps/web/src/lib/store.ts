@@ -32,6 +32,8 @@ import {
 import {
   fetchHiddenCategories,
   saveHiddenCategories,
+  fetchLastRecapMonth,
+  saveLastRecapMonth,
 } from '@/lib/db/userSettings'
 import {
   fetchDebts,
@@ -49,7 +51,7 @@ import {
   insertWalletMovement,
   deleteWalletMovement,
 } from '@/lib/db/wallets'
-import { CATEGORIES, typeForCategory, resolveWalletKind } from '@/types'
+import { CATEGORIES, typeForCategory, resolveWalletKind, spendAmount, netAmount } from '@/types'
 
 // ─── Income source id → human-readable label ─────────────────────────────────
 // Mirrors the INCOME_SOURCES list in OnboardingBudgetSetup (kept here so the
@@ -120,6 +122,10 @@ interface StoreState {
   incomeAllocationsLoaded: boolean
   debts: Debt[]
   wallets: Wallet[]
+  /** 'YYYY-MM' of the last end-of-month recap the user acknowledged (null = none/unloaded). */
+  lastRecapMonth: string | null
+  /** True once loadLastRecapMonth has resolved at least once for the current user. */
+  lastRecapMonthLoaded: boolean
 }
 
 interface StoreActions {
@@ -184,6 +190,10 @@ interface StoreActions {
   removeWalletMovement: (walletId: string, movementId: string) => Promise<void>
   toggleWalletArchived: (walletId: string) => Promise<void>
   removeWallet: (walletId: string) => Promise<void>
+  // ── End-of-month recap ────────────────────────────────────────────────────
+  loadLastRecapMonth: (userId: string) => Promise<void>
+  /** Record that the user has seen the recap for the given 'YYYY-MM' month. */
+  markRecapSeen: (month: string) => Promise<void>
 }
 
 export type AppStore = StoreState & StoreActions
@@ -204,6 +214,8 @@ export const useStore = create<AppStore>()((set, get) => ({
   incomeAllocationsLoaded: false,
   debts: [],
   wallets: [],
+  lastRecapMonth: null,
+  lastRecapMonthLoaded: false,
 
   setUserId(userId) {
     set({
@@ -215,6 +227,8 @@ export const useStore = create<AppStore>()((set, get) => ({
         incomeAllocations: [],
         debts: [],
         wallets: [],
+        lastRecapMonth: null,
+        lastRecapMonthLoaded: false,
       } : {}),
     })
   },
@@ -557,10 +571,14 @@ export const useStore = create<AppStore>()((set, get) => ({
     const targetSet = new Set(targetIds)
     const type = typeForCategory(category.id)
 
-    // Optimistic: apply category + implied type to the selected rows.
+    // Optimistic: apply category + implied type to the selected rows. A
+    // reimbursement only makes sense on an expense, so clear it when the new
+    // type isn't 'expense' (mirrors the DB write in bulkSetCategory).
     set((state) => ({
       transactions: state.transactions.map((t) =>
-        targetSet.has(t.id) ? { ...t, category, type } : t
+        targetSet.has(t.id)
+          ? { ...t, category, type, isReimbursement: type === 'expense' ? t.isReimbursement : false }
+          : t
       ),
     }))
     try {
@@ -641,11 +659,15 @@ export const useStore = create<AppStore>()((set, get) => ({
   getMonthlyTotal(type) {
     const now = new Date()
     const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-    return get()
-      .transactions.filter(
-        (t) => t.type === type && t.date.startsWith(yearMonth)
-      )
-      .reduce((sum, t) => sum + t.amount, 0)
+    const monthTxns = get().transactions.filter((t) => t.date.startsWith(yearMonth))
+    if (type === 'income') {
+      return monthTxns
+        .filter((t) => t.type === 'income')
+        .reduce((sum, t) => sum + t.amount, 0)
+    }
+    // Expense total = net category spend, so a reimbursement subtracts (via
+    // spendAmount) instead of adding to the month's spending.
+    return monthTxns.reduce((sum, t) => sum + spendAmount(t), 0)
   },
 
   getDailyTotal(date, type) {
@@ -653,13 +675,9 @@ export const useStore = create<AppStore>()((set, get) => ({
       .transactions.filter(
         (t) => t.date === date && (type ? t.type === type : true)
       )
-      // Transfers move money between the user's own pockets — they net to zero
-      // and must not shift the daily total. Only expense/income affect it.
-      .reduce((sum, t) => {
-        if (t.type === 'expense') return sum - t.amount
-        if (t.type === 'income') return sum + t.amount
-        return sum
-      }, 0)
+      // netAmount signs each entry: income +, expense −, reimbursement +,
+      // transfer/debt 0 — so the daily total reflects real cashflow.
+      .reduce((sum, t) => sum + netAmount(t), 0)
   },
 
   // ─── Debts ────────────────────────────────────────────────────────────────
@@ -1057,6 +1075,35 @@ export const useStore = create<AppStore>()((set, get) => ({
     } catch (err) {
       console.error('[store] removeWallet failed:', err)
       set({ wallets: prev })
+    }
+  },
+
+  // ─── End-of-month recap ─────────────────────────────────────────────────────
+
+  async loadLastRecapMonth(userId) {
+    try {
+      const lastRecapMonth = await fetchLastRecapMonth(userId)
+      set({ lastRecapMonth, lastRecapMonthLoaded: true })
+    } catch {
+      // On error, mark loaded so the dashboard doesn't wait forever; leaving
+      // lastRecapMonth null means the recap could show — acceptable, and the
+      // markRecapSeen write will still gate re-showings once it succeeds.
+      set({ lastRecapMonthLoaded: true })
+    }
+  },
+
+  async markRecapSeen(month) {
+    const userId = get().userId
+    if (!userId) return
+    const prev = get().lastRecapMonth
+    if (prev === month) return
+    // Optimistic: the modal closes immediately and won't reappear this month.
+    set({ lastRecapMonth: month })
+    try {
+      await saveLastRecapMonth(userId, month)
+    } catch (err) {
+      console.error('[store] markRecapSeen failed:', err)
+      set({ lastRecapMonth: prev })
     }
   },
 }))

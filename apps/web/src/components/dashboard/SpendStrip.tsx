@@ -2,7 +2,7 @@
 
 import { useStore } from '@/lib/store'
 import { formatCurrency } from '@/lib/formatters'
-import { CATEGORIES, isSpend } from '@/types'
+import { CATEGORIES, isSpend, spendAmount } from '@/types'
 
 const CATEGORY_HEX: Record<string, string> = {
   restaurants:   '#e05c2a',
@@ -21,13 +21,23 @@ export default function SpendStrip() {
   const getDailyTotal = useStore((s) => s.getDailyTotal)
   const today = new Date().toISOString().split('T')[0]
   const todayExpenses = transactions.filter((t) => t.date === today && isSpend(t))
-  const total = todayExpenses.reduce((sum, t) => sum + t.amount, 0)
+  // Net category spend for today — reimbursements subtract (spendAmount).
+  const total = todayExpenses.reduce((sum, t) => sum + spendAmount(t), 0)
   const todayIncome = getDailyTotal(today, 'income')
 
-  const breakdown = todayExpenses.reduce<Record<string, number>>((acc, t) => {
-    acc[t.category.id] = (acc[t.category.id] ?? 0) + t.amount
-    return acc
-  }, {})
+  // Per-category net spend, then keep only categories that are still net
+  // positive so the proportional bar/dots stay meaningful.
+  const breakdown = Object.fromEntries(
+    Object.entries(
+      todayExpenses.reduce<Record<string, number>>((acc, t) => {
+        acc[t.category.id] = (acc[t.category.id] ?? 0) + spendAmount(t)
+        return acc
+      }, {})
+    ).filter(([, amount]) => amount > 0)
+  )
+  // Sum of the (positive) category segments — the denominator for bar widths so
+  // a net-negative overall total from refunds can't invert them.
+  const breakdownTotal = Object.values(breakdown).reduce((s, a) => s + a, 0)
 
   const now = new Date()
   const dateLabel = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
@@ -75,7 +85,9 @@ export default function SpendStrip() {
             )}
           </div>
 
-          {/* Category breakdown bar */}
+          {/* Category breakdown bar — sized against the sum of the (positive)
+              category segments, so a net-negative overall total from refunds
+              can't invert the widths. */}
           <div className="flex h-2 w-full overflow-hidden rounded-full gap-0.5">
             {Object.entries(breakdown).map(([catId, amount]) => {
               const cat = CATEGORIES.find((c) => c.id === catId)
@@ -84,7 +96,7 @@ export default function SpendStrip() {
                   key={catId}
                   title={`${cat?.label ?? catId}: ${formatCurrency(amount)}`}
                   style={{
-                    width: `${(amount / total) * 100}%`,
+                    width: `${breakdownTotal > 0 ? (amount / breakdownTotal) * 100 : 0}%`,
                     backgroundColor: CATEGORY_HEX[catId] ?? '#6e9990',
                   }}
                 />

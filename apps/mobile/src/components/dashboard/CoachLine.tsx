@@ -50,11 +50,11 @@ export default function CoachLine() {
     <Animated.View
       key={message.id}
       entering={FadeIn.duration(220)}
-      className="mt-2 flex-row items-center self-start gap-2 rounded-full py-1.5 pl-2.5 pr-3.5"
+      className="mt-2 flex-row items-center self-start gap-2 rounded-2xl py-1.5 pl-2.5 pr-3.5"
       style={{ backgroundColor: tone.bg }}
     >
       <MessageIcon size={14} weight="fill" color={tone.fg} />
-      <Text className="flex-shrink text-[12px] font-medium leading-snug" style={{ color: tone.fg }}>
+      <Text className="flex-shrink text-[12px] font-medium leading-snug" style={{ color: tone.fg }} numberOfLines={2}>
         {message.text}
       </Text>
     </Animated.View>

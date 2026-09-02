@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { ArrowRight, CaretLeft, CaretRight, Plus } from 'phosphor-react-native';
-import { formatCurrency, formatCurrencyCompact } from '@ledgeit/core';
+import { formatCurrency, formatCurrencyCompact, isSpend, spendAmount } from '@ledgeit/core';
 import { useStore } from '@/lib/store';
 
 function toISO(d: Date): string {
@@ -53,14 +53,15 @@ export default function SpendingHeatmap({ onAddForDate, onViewDate }: Props) {
     const prefix = `${viewMonth.getFullYear()}-${String(viewMonth.getMonth() + 1).padStart(2, '0')}-`;
     const totals: Record<string, number> = {};
     for (const t of transactions) {
-      if (t.type !== 'expense') continue;
+      if (!isSpend(t)) continue;
       if (!t.date.startsWith(prefix)) continue;
-      totals[t.date] = (totals[t.date] ?? 0) + t.amount;
+      // spendAmount nets out reimbursements from a day's spend total.
+      totals[t.date] = (totals[t.date] ?? 0) + spendAmount(t);
     }
     return totals;
   }, [transactions, viewMonth]);
 
-  const { cells, monthTotal, maxDay, activeDays, elapsedDays } = useMemo(() => {
+  const { weeks, monthTotal, maxDay, activeDays, elapsedDays } = useMemo(() => {
     const year = viewMonth.getFullYear();
     const month = viewMonth.getMonth();
     const firstWeekday = new Date(year, month, 1).getDay();
@@ -69,6 +70,16 @@ export default function SpendingHeatmap({ onAddForDate, onViewDate }: Props) {
     const cells: (string | null)[] = [];
     for (let i = 0; i < firstWeekday; i++) cells.push(null);
     for (let d = 1; d <= daysInMonth; d++) cells.push(toISO(new Date(year, month, d)));
+    // Pad the trailing week so every row has exactly 7 cells — keeps columns
+    // aligned and the final row the same height as the rest.
+    while (cells.length % 7 !== 0) cells.push(null);
+
+    // Chunk into fixed 7-cell weeks. Rendering each week as its own flex row
+    // (cells at flex:1) guarantees 7 even squares per row that line up with the
+    // weekday header — a single flex-wrap grid with percentage widths + gap
+    // overflows and wraps a cell onto the next line.
+    const weeks: (string | null)[][] = [];
+    for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
 
     const amounts = Object.values(dailyTotals);
     const monthTotal = amounts.reduce((s, a) => s + a, 0);
@@ -76,7 +87,7 @@ export default function SpendingHeatmap({ onAddForDate, onViewDate }: Props) {
     const activeDays = amounts.filter((a) => a > 0).length;
     const elapsedDays = atCurrentMonth ? now.getDate() : daysInMonth;
 
-    return { cells, monthTotal, maxDay, activeDays, elapsedDays };
+    return { weeks, monthTotal, maxDay, activeDays, elapsedDays };
   }, [viewMonth, dailyTotals, atCurrentMonth, now]);
 
   const daysWithoutEntry = Math.max(elapsedDays - activeDays, 0);
@@ -90,10 +101,10 @@ export default function SpendingHeatmap({ onAddForDate, onViewDate }: Props) {
   const selectedAmount = selectedIso ? (dailyTotals[selectedIso] ?? 0) : 0;
 
   return (
-    <View className="rounded-2xl px-4 py-3" style={{ backgroundColor: '#ffffff', shadowColor: '#00352e', shadowOpacity: 0.07, shadowRadius: 24, elevation: 1 }}>
+    <View className="rounded-2xl px-5 py-4" style={{ backgroundColor: '#ffffff', shadowColor: '#00352e', shadowOpacity: 0.06, shadowRadius: 20, elevation: 1 }}>
       {/* Header */}
       <View className="mb-2 flex-row items-center justify-between">
-        <Text className="text-[11px] font-bold uppercase tracking-[1.5px]" style={{ color: '#00352e' }}>
+        <Text className="text-[12px] font-bold uppercase tracking-[1.4px]" style={{ color: '#00352e' }}>
           Spending Map
         </Text>
         <View className="flex-row items-center gap-1">
@@ -118,57 +129,66 @@ export default function SpendingHeatmap({ onAddForDate, onViewDate }: Props) {
       <View className="mb-1 flex-row" style={{ gap: 4 }}>
         {WEEKDAYS.map((w, i) => (
           <View key={i} className="flex-1 items-center justify-center" style={{ height: 14 }}>
-            <Text className="text-[9px] font-bold uppercase" style={{ color: '#cde0db' }}>
+            <Text className="text-[9px] font-bold uppercase" style={{ color: '#6e9990' }}>
               {w}
             </Text>
           </View>
         ))}
       </View>
 
-      {/* Day grid */}
-      <View className="flex-row flex-wrap" style={{ gap: 4 }}>
-        {cells.map((iso, i) => {
-          const cellWidth = `${100 / 7}%` as const;
-          if (!iso) return <View key={`empty-${i}`} style={{ width: cellWidth, aspectRatio: 1 }} />;
-          const amount = dailyTotals[iso] ?? 0;
-          const isFuture = iso > todayIso;
-          const isToday = iso === todayIso;
-          const day = Number(iso.slice(-2));
-          const hasSpend = amount > 0;
-          const isSelected = iso === selectedIso;
-          const bg = isFuture || !hasSpend ? 'transparent' : rampColor(amount, maxDay);
-          const darkBg = hasSpend && amount / (maxDay || 1) > 0.4;
-          return (
-            <Pressable
-              key={iso}
-              disabled={isFuture}
-              onPress={() => setSelectedIso((cur) => (cur === iso ? null : iso))}
-              style={{
-                width: cellWidth,
-                aspectRatio: 1,
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: 6,
-                backgroundColor: bg,
-                borderWidth: isFuture ? 1 : !hasSpend ? 1 : 0,
-                borderColor: isFuture ? '#e2ecea' : !hasSpend ? '#d4e4e0' : 'transparent',
-                borderStyle: isFuture || !hasSpend ? 'dashed' : 'solid',
-                ...(isSelected
-                  ? { borderWidth: 2, borderColor: '#1f695d', borderStyle: 'solid' as const }
-                  : isToday
-                    ? { borderWidth: 1.5, borderColor: '#00352e', borderStyle: 'solid' as const }
-                    : null),
-              }}
-            >
-              <Text
-                className="font-mono text-[9px] font-semibold"
-                style={{ color: darkBg ? '#ffffff' : isFuture ? '#cbdbd6' : hasSpend ? '#00352e' : '#8aa8a1' }}
-              >
-                {day}
-              </Text>
-            </Pressable>
-          );
-        })}
+      {/* Day grid — one flex row per week; cells at flex:1 stay even squares
+          and align with the weekday header above. */}
+      <View style={{ gap: 4 }}>
+        {weeks.map((week, wi) => (
+          <View key={wi} className="flex-row" style={{ gap: 4 }}>
+            {week.map((iso, i) => {
+              if (!iso) return <View key={`empty-${wi}-${i}`} style={{ flex: 1, aspectRatio: 1 }} />;
+              const amount = dailyTotals[iso] ?? 0;
+              const isFuture = iso > todayIso;
+              const isToday = iso === todayIso;
+              const day = Number(iso.slice(-2));
+              const hasSpend = amount > 0;
+              const isSelected = iso === selectedIso;
+              const bg = isFuture || !hasSpend ? 'transparent' : rampColor(amount, maxDay);
+              const darkBg = hasSpend && amount / (maxDay || 1) > 0.4;
+              return (
+                <Pressable
+                  key={iso}
+                  disabled={isFuture}
+                  onPress={() => setSelectedIso((cur) => (cur === iso ? null : iso))}
+                  style={{
+                    flex: 1,
+                    aspectRatio: 1,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: 8,
+                    backgroundColor: bg,
+                    borderWidth: isFuture ? 1 : !hasSpend ? 1 : 0,
+                    borderColor: isFuture ? '#e2ecea' : !hasSpend ? '#d4e4e0' : 'transparent',
+                    borderStyle: isFuture || !hasSpend ? 'dashed' : 'solid',
+                    ...(isSelected
+                      ? { borderWidth: 2, borderColor: '#1f695d', borderStyle: 'solid' as const }
+                      : isToday
+                        ? { borderWidth: 1.5, borderColor: '#00352e', borderStyle: 'solid' as const }
+                        : null),
+                  }}
+                >
+                  <Text
+                    className="font-mono text-[10px] font-semibold"
+                    style={{
+                      color: darkBg ? '#ffffff' : isFuture ? '#cbdbd6' : hasSpend ? '#00352e' : '#8aa8a1',
+                      textAlign: 'center',
+                      textAlignVertical: 'center',
+                      includeFontPadding: false,
+                    }}
+                  >
+                    {day}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ))}
       </View>
 
       {/* Selected-day detail panel */}
@@ -218,13 +238,13 @@ export default function SpendingHeatmap({ onAddForDate, onViewDate }: Props) {
             : 'Nothing logged this month.'}
         </Text>
         <View className="flex-row items-center gap-0.5">
-          <Text className="text-[8px] font-semibold" style={{ color: '#a9c2bd' }}>
+          <Text className="text-[8px] font-semibold" style={{ color: '#6e9990' }}>
             Less
           </Text>
           {RAMP.slice(1).map((c) => (
             <View key={c} className="h-2 w-2 rounded-sm" style={{ backgroundColor: c }} />
           ))}
-          <Text className="text-[8px] font-semibold" style={{ color: '#a9c2bd' }}>
+          <Text className="text-[8px] font-semibold" style={{ color: '#6e9990' }}>
             More
           </Text>
         </View>

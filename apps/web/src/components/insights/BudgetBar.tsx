@@ -32,7 +32,9 @@ function getLabelColor(ratio: number): string {
 export default function BudgetBar({ category, spent, limit, expanded = false, onToggle, children }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const isInView = useInView(ref, { once: true, amount: 0.4 })
-  const ratio = limit > 0 ? Math.min(spent / limit, 1) : 0
+  // Clamp at 0 so a net-negative category (refunds exceed spend) shows an empty
+  // bar rather than a reversed one; the real spent number is still displayed.
+  const ratio = limit > 0 ? Math.max(Math.min(spent / limit, 1), 0) : 0
   const pct = Math.round(ratio * 100)
   const clickable = !!onToggle
 

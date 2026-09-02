@@ -4,6 +4,9 @@ import { Link, useRouter } from 'expo-router';
 import { Bell, Sparkle, UserCircle } from 'phosphor-react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
+import { useDeferredMount } from '@/lib/useDeferredMount';
+import { SkeletonCard } from '@/components/ui/Skeleton';
+
 import BalanceMetric from '@/components/dashboard/BalanceMetric';
 import HeroSideStats from '@/components/dashboard/HeroSideStats';
 import CoachLine from '@/components/dashboard/CoachLine';
@@ -16,8 +19,10 @@ import SpendStrip from '@/components/dashboard/SpendStrip';
 import SpendingHeatmap from '@/components/dashboard/SpendingHeatmap';
 import ExpenseFeed from '@/components/dashboard/ExpenseFeed';
 import DebtSummaryCard from '@/components/dashboard/DebtSummaryCard';
+import WalletSummaryCard from '@/components/dashboard/WalletSummaryCard';
 import RecurringPaymentsCard from '@/components/dashboard/RecurringPaymentsCard';
 import SmartEntrySheet from '@/components/entry/SmartEntrySheet';
+import OnboardingBudgetSetup from '@/components/budget/OnboardingBudgetSetup';
 
 function getGreeting(): string {
   const h = new Date().getHours();
@@ -32,9 +37,13 @@ function getDateLabel(): string {
 
 export default function DashboardScreen() {
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [entryDate, setEntryDate] = useState<string | undefined>(undefined);
   const greeting = useMemo(() => getGreeting(), []);
   const dateLabel = useMemo(() => getDateLabel(), []);
   const router = useRouter();
+  // Paint the header + hero immediately; mount the heavy card stack one frame
+  // later (after the nav transition) so navigation feels instant.
+  const contentReady = useDeferredMount();
 
   return (
     <View className="flex-1 bg-ledge-bg">
@@ -77,60 +86,91 @@ export default function DashboardScreen() {
               elevation: 6,
             }}
           >
-            <View className="relative z-10 flex-row items-stretch justify-between gap-4">
-              <View className="min-w-0 flex-1">
-                <BalanceMetric />
+            <View className="relative z-10">
+              {/* Balance + income/expense pills */}
+              <BalanceMetric />
 
-                <Pressable
-                  onPress={() => setSheetOpen(true)}
-                  className="mt-5 flex-row items-center self-start gap-2 rounded-full px-4 py-2 active:opacity-80"
-                  style={{ backgroundColor: 'rgba(255,255,255,0.11)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' }}
-                >
-                  <Sparkle size={13} weight="fill" color="#ffffff" />
-                  <Text className="text-[12px] font-semibold tracking-wide text-white">Smart Entry</Text>
-                </Pressable>
-              </View>
+              {/* Divider */}
+              <View className="my-4 h-px" style={{ backgroundColor: 'rgba(255,255,255,0.12)' }} />
 
+              {/* Secondary stats — even horizontal row */}
               <HeroSideStats />
+
+              {/* Smart Entry — full-width primary action */}
+              <Pressable
+                onPress={() => {
+                  setEntryDate(undefined);
+                  setSheetOpen(true);
+                }}
+                className="mt-5 flex-row items-center justify-center gap-2 rounded-full py-3 active:opacity-80"
+                style={{ backgroundColor: 'rgba(255,255,255,0.13)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' }}
+              >
+                <Sparkle size={14} weight="fill" color="#ffffff" />
+                <Text className="text-[13px] font-semibold tracking-wide text-white">Smart Entry</Text>
+              </Pressable>
             </View>
           </View>
 
-          {/* This month overview */}
-          <MonthOverview />
+          {!contentReady ? (
+            /* Lightweight placeholders while the heavy cards mount a frame later */
+            <>
+              <SkeletonCard height={150} />
+              <SkeletonCard height={120} />
+              <SkeletonCard height={110} />
+            </>
+          ) : (
+            <>
+              {/* This month overview */}
+              <MonthOverview />
 
-          {/* 7-day spending trend */}
-          <WeeklyTrendChart />
+              {/* 7-day spending trend */}
+              <WeeklyTrendChart />
 
-          {/* Top spending categories */}
-          <TopCategoryBars />
+              {/* Top spending categories */}
+              <TopCategoryBars />
 
-          {/* Biggest expense + transfers explainer */}
-          <View className="flex-row gap-3">
-            <BiggestExpenseCard />
-            <TransferInfoCard />
-          </View>
+              {/* Biggest expense — own row (highlights group) */}
+              <View className="mt-3">
+                <BiggestExpenseCard />
+              </View>
 
-          {/* Today */}
-          <SpendStrip />
+              {/* Transfers — own row */}
+              <TransferInfoCard />
 
-          {/* Spending calendar */}
-          <SpendingHeatmap
-            onAddForDate={() => setSheetOpen(true)}
-            onViewDate={(iso) => router.push({ pathname: '/ledger', params: { date: iso } })}
-          />
+              {/* Today (daily group) */}
+              <View className="mt-3">
+                <SpendStrip />
+              </View>
 
-          {/* Recent activity */}
-          <ExpenseFeed />
+              {/* Spending calendar */}
+              <SpendingHeatmap
+                onAddForDate={(iso) => {
+                  setEntryDate(iso);
+                  setSheetOpen(true);
+                }}
+                onViewDate={(iso) => router.push({ pathname: '/ledger', params: { date: iso } })}
+              />
 
-          {/* Debts snapshot */}
-          <DebtSummaryCard />
+              {/* Recent activity */}
+              <ExpenseFeed />
 
-          {/* Recurring bills */}
-          <RecurringPaymentsCard />
+              {/* Debts snapshot (accounts group) */}
+              <View className="mt-3">
+                <DebtSummaryCard />
+              </View>
+
+              {/* Wallets — total set aside + top wallets (self-hides when empty) */}
+              <WalletSummaryCard />
+
+              {/* Recurring bills */}
+              <RecurringPaymentsCard />
+            </>
+          )}
         </Animated.View>
       </ScrollView>
 
-      <SmartEntrySheet open={sheetOpen} onClose={() => setSheetOpen(false)} />
+      <SmartEntrySheet open={sheetOpen} onClose={() => setSheetOpen(false)} initialDate={entryDate} />
+      <OnboardingBudgetSetup />
     </View>
   );
 }

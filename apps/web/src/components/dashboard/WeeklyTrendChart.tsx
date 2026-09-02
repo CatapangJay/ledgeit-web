@@ -11,7 +11,7 @@ import {
 } from 'recharts'
 import { formatCurrency, formatCurrencyCompact } from '@/lib/formatters'
 import { useStore } from '@/lib/store'
-import { isSpend, isEarn } from '@/types'
+import { isSpend, isEarn, spendAmount } from '@/types'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -77,9 +77,10 @@ export default function WeeklyTrendChart() {
   const data = useMemo<DayDatum[]>(() => {
     return days.map((date) => {
       const dayTxns = transactions.filter((t) => t.date === date)
+      // Net category spend for the day — reimbursements subtract (spendAmount).
       const expense = dayTxns
         .filter((t) => isSpend(t))
-        .reduce((s, t) => s + t.amount, 0)
+        .reduce((s, t) => s + spendAmount(t), 0)
       const income = dayTxns
         .filter((t) => isEarn(t))
         .reduce((s, t) => s + t.amount, 0)

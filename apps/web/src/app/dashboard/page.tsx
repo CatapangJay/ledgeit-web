@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { motion, useReducedMotion } from 'framer-motion'
@@ -19,9 +19,14 @@ import DebtSummaryCard from '@/components/dashboard/DebtSummaryCard'
 import WalletSummaryCard from '@/components/dashboard/WalletSummaryCard'
 import CoachLine from '@/components/dashboard/CoachLine'
 import HeroSideStats from '@/components/dashboard/HeroSideStats'
+import DashboardSkeleton from '@/components/dashboard/DashboardSkeleton'
 import SmartEntrySheet from '@/components/entry/SmartEntrySheet'
 import OnboardingBudgetSetup from '@/components/budget/OnboardingBudgetSetup'
 import BudgetAllocationSheet from '@/components/budget/BudgetAllocationSheet'
+import MonthlyRecapModal from '@/components/dashboard/MonthlyRecapModal'
+import { useDeferredMount } from '@/lib/useDeferredMount'
+import { useStore } from '@/lib/store'
+import { computeMonthlyRecap, previousMonthKey } from '@/lib/monthlyRecap'
 
 // Product register: no page-load choreography. A single fast fade acknowledges
 // the load without making the user wait for a spatial reveal sequence.
@@ -60,10 +65,64 @@ export default function DashboardPage() {
   // When set, Smart Entry opens pre-dated to this ISO day (from the heatmap).
   const [entryDate, setEntryDate] = useState<string | undefined>(undefined)
   const [budgetSheetOpen, setBudgetSheetOpen] = useState(false)
+  // True once the user closes the recap this session — keeps it shut even if the
+  // seen-marker write is still in flight or rolls back on error.
+  const [recapDismissed, setRecapDismissed] = useState(false)
+  // Gates the recap behind a short beat so the dashboard paints first and the
+  // modal arrives as an event rather than blocking the page on load.
+  const [recapSettled, setRecapSettled] = useState(false)
   const greeting = useMemo(() => getGreeting(), [])
   const dateLabel = useMemo(() => getDateLabel(), [])
+
+  // ── End-of-month recap ──────────────────────────────────────────────────────
+  // Celebrate the month that just ended, once, on the user's first dashboard
+  // visit of the new month. Derived (not an effect) so it can't flash before we
+  // know whether it was already dismissed.
+  const transactions = useStore((s) => s.transactions)
+  const budgetLimits = useStore((s) => s.budgetLimits)
+  const customCategories = useStore((s) => s.customCategories)
+  const lastRecapMonth = useStore((s) => s.lastRecapMonth)
+  const lastRecapMonthLoaded = useStore((s) => s.lastRecapMonthLoaded)
+  const budgetAllocationsLoaded = useStore((s) => s.budgetAllocationsLoaded)
+  const markRecapSeen = useStore((s) => s.markRecapSeen)
+
+  const recap = useMemo(() => {
+    const key = previousMonthKey(new Date())
+    return computeMonthlyRecap(key, transactions, budgetLimits, customCategories)
+  }, [transactions, budgetLimits, customCategories])
+
+  // Eligible once we know both whether the recap was already seen AND that the
+  // budget/onboarding state has resolved (a first-time user gets onboarding, not
+  // a recap — and would have no prior-month data anyway). markRecapSeen flips
+  // lastRecapMonth, which closes this naturally; recapDismissed is the belt-and-
+  // suspenders guard against a rolled-back write reopening it.
+  const recapEligible =
+    lastRecapMonthLoaded &&
+    budgetAllocationsLoaded &&
+    !recapDismissed &&
+    lastRecapMonth !== recap.monthKey &&
+    !recap.isEmpty
+
+  // Let the page settle for a beat, then present the recap — so it reads as a
+  // deliberate arrival, not a blocking interstitial. The timer's setState runs
+  // async (allowed), unlike a synchronous set inside the effect body.
+  useEffect(() => {
+    if (!recapEligible) return
+    const t = setTimeout(() => setRecapSettled(true), 900)
+    return () => clearTimeout(t)
+  }, [recapEligible])
+
+  const recapOpen = recapEligible && recapSettled
+
+  const closeRecap = () => {
+    setRecapDismissed(true)
+    markRecapSeen(recap.monthKey)
+  }
   const reduceMotion = useReducedMotion()
   const item = reduceMotion ? noMotion : fadeIn
+  // Defer the heavy card grid one paint so client navigation to /dashboard shows
+  // the header + skeleton instantly instead of blocking on the whole render.
+  const contentReady = useDeferredMount()
 
   return (
     <>
@@ -124,6 +183,9 @@ export default function DashboardPage() {
           the right, so the mobile single-column order is exactly:
           hero → overview → trend → today → activity.
         */}
+        {!contentReady ? (
+          <DashboardSkeleton />
+        ) : (
         <motion.div
           variants={container}
           initial="hidden"
@@ -243,10 +305,12 @@ export default function DashboardPage() {
             </motion.div>
           </motion.div>
         </motion.div>
+        )}
       </div>
 
       <SmartEntrySheet open={sheetOpen} onClose={() => setSheetOpen(false)} initialDate={entryDate} />
       <BudgetAllocationSheet open={budgetSheetOpen} onClose={() => setBudgetSheetOpen(false)} />
+      <MonthlyRecapModal recap={recap} open={recapOpen} onClose={closeRecap} />
       <OnboardingBudgetSetup />
     </>
   )

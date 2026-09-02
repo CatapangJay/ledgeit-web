@@ -1,5 +1,5 @@
 import { View, Text } from 'react-native';
-import { CATEGORIES, formatCurrency } from '@ledgeit/core';
+import { CATEGORIES, formatCurrency, isSpend, spendAmount } from '@ledgeit/core';
 import { useStore } from '@/lib/store';
 
 const CATEGORY_HEX: Record<string, string> = {
@@ -23,12 +23,13 @@ export default function SpendStrip() {
   const transactions = useStore((s) => s.transactions);
   const getDailyTotal = useStore((s) => s.getDailyTotal);
   const today = todayISO();
-  const todayExpenses = transactions.filter((t) => t.date === today && t.type === 'expense');
-  const total = todayExpenses.reduce((sum, t) => sum + t.amount, 0);
+  const todayExpenses = transactions.filter((t) => t.date === today && isSpend(t));
+  // spendAmount nets out reimbursements from today's spend total and breakdown.
+  const total = todayExpenses.reduce((sum, t) => sum + spendAmount(t), 0);
   const todayIncome = getDailyTotal(today, 'income');
 
   const breakdown = todayExpenses.reduce<Record<string, number>>((acc, t) => {
-    acc[t.category.id] = (acc[t.category.id] ?? 0) + t.amount;
+    acc[t.category.id] = (acc[t.category.id] ?? 0) + spendAmount(t);
     return acc;
   }, {});
 
@@ -37,10 +38,10 @@ export default function SpendStrip() {
   return (
     <View
       className="rounded-2xl px-5 py-4"
-      style={{ backgroundColor: '#ffffff', shadowColor: '#00352e', shadowOpacity: 0.06, shadowRadius: 16, elevation: 1 }}
+      style={{ backgroundColor: '#ffffff', shadowColor: '#00352e', shadowOpacity: 0.06, shadowRadius: 20, elevation: 1 }}
     >
       <View className="mb-3 flex-row items-center justify-between">
-        <Text className="text-[12px] font-bold uppercase tracking-[1.6px]" style={{ color: '#00352e' }}>
+        <Text className="text-[12px] font-bold uppercase tracking-[1.4px]" style={{ color: '#00352e' }}>
           Today
         </Text>
         <Text className="font-mono text-[11px]" style={{ color: '#6e9990' }}>
@@ -68,13 +69,18 @@ export default function SpendStrip() {
             )}
           </View>
 
-          <View className="h-2 w-full flex-row overflow-hidden rounded-full gap-0.5">
-            {Object.entries(breakdown).map(([catId, amount]) => (
+          <View className="h-2 w-full flex-row overflow-hidden rounded-full">
+            {Object.entries(breakdown).map(([catId, amount], i) => (
               <View
                 key={catId}
                 style={{
-                  width: `${(amount / total) * 100}%`,
+                  // Guard against a zero/negative net total (reimbursements) and
+                  // clamp per-segment widths so a refunded category can't go negative.
+                  width: `${total > 0 ? Math.max((amount / total) * 100, 0) : 0}%`,
                   backgroundColor: CATEGORY_HEX[catId] ?? '#6e9990',
+                  // Thin white separator between segments — a border stays inside
+                  // the segment width (RN is border-box), so totals never overflow.
+                  ...(i > 0 ? { borderLeftWidth: 2, borderLeftColor: '#ffffff' } : null),
                 }}
               />
             ))}

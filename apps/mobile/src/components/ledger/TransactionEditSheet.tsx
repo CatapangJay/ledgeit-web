@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
-import { CaretLeft, CaretRight, Trash, X } from 'phosphor-react-native';
+import { ArrowsClockwise, ArrowUUpLeft, CaretLeft, CaretRight, Trash, X } from 'phosphor-react-native';
 import {
   CATEGORIES,
   PAYMENT_METHODS,
   formatDate,
+  typeForCategory,
   type Category,
   type CustomCategory,
   type PaymentMethodId,
   type Transaction,
-  type TransactionType,
 } from '@ledgeit/core';
 import { getIconComponent } from '@/lib/iconMap';
 
@@ -18,16 +18,11 @@ interface Props {
   /** The transaction to edit, or null when the sheet is closed. */
   tx: Transaction | null;
   customCategories?: CustomCategory[];
+  /** Preset category ids the user has hidden — excluded from the picker. */
+  hiddenCategories?: string[];
   onClose: () => void;
   onSave: (id: string, patch: Partial<Transaction>) => void;
   onDelete: (id: string) => void;
-}
-
-/** Category id → the transaction type it implies. */
-function typeForCategory(catId: string): TransactionType {
-  if (catId === 'income') return 'income';
-  if (catId === 'transfers') return 'transfer';
-  return 'expense';
 }
 
 function shiftDate(iso: string, deltaDays: number): string {
@@ -44,7 +39,7 @@ function shiftDate(iso: string, deltaDays: number): string {
  * Debt-linked transactions (category "debts") are read-only here — editing them
  * would desync the Debt record, so the user is pointed to the Debts screen.
  */
-export default function TransactionEditSheet({ tx, customCategories = [], onClose, onSave, onDelete }: Props) {
+export default function TransactionEditSheet({ tx, customCategories = [], hiddenCategories = [], onClose, onSave, onDelete }: Props) {
   const sheetRef = useRef<BottomSheet>(null);
   const snapPoints = useMemo(() => ['78%'], []);
 
@@ -53,6 +48,8 @@ export default function TransactionEditSheet({ tx, customCategories = [], onClos
   const [category, setCategory] = useState<Category>(CATEGORIES[0]);
   const [date, setDate] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodId>('cash');
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [isReimbursement, setIsReimbursement] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [seededId, setSeededId] = useState<string | null>(null);
 
@@ -74,13 +71,20 @@ export default function TransactionEditSheet({ tx, customCategories = [], onClos
     setCategory(tx.category);
     setDate(tx.date);
     setPaymentMethod(tx.paymentMethod);
+    setIsRecurring(tx.isRecurring ?? false);
+    setIsReimbursement(tx.isReimbursement ?? false);
     setConfirmDelete(false);
   }
   if (!tx && seededId !== null) setSeededId(null);
 
   const isDebt = tx?.category.id === 'debts';
   const allCategories: Category[] = [
-    ...CATEGORIES.filter((c) => c.id !== 'debts'),
+    ...CATEGORIES.filter(
+      (c) =>
+        c.id !== 'debts' && // debts are managed on the Debts screen
+        // Hidden presets are dropped, unless this entry already uses one.
+        (!hiddenCategories.includes(c.id) || c.id === tx?.category.id),
+    ),
     ...customCategories.map((c) => ({ id: c.id, label: c.name, icon: c.icon, color: c.textColor, bgColor: c.bgColor, keywords: [] as string[] })),
   ];
 
@@ -89,13 +93,17 @@ export default function TransactionEditSheet({ tx, customCategories = [], onClos
 
   function handleSave() {
     if (!tx || !canSave) return;
+    const type = typeForCategory(category.id);
     onSave(tx.id, {
       merchant: merchant.trim() || 'Unknown',
       amount: amountNum,
       category,
       date,
       paymentMethod,
-      type: typeForCategory(category.id),
+      isRecurring,
+      // A reimbursement flag only applies to spend entries — clear it otherwise.
+      isReimbursement: type === 'expense' ? isReimbursement : false,
+      type,
     });
     onClose();
   }
@@ -116,6 +124,8 @@ export default function TransactionEditSheet({ tx, customCategories = [], onClos
       index={-1}
       snapPoints={snapPoints}
       enablePanDownToClose
+      keyboardBehavior="interactive"
+      android_keyboardInputMode="adjustResize"
       onClose={onClose}
       backdropComponent={(props) => <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} />}
       backgroundStyle={{ backgroundColor: '#f8faf9' }}
@@ -197,7 +207,7 @@ export default function TransactionEditSheet({ tx, customCategories = [], onClos
                     key={m.id}
                     onPress={() => setPaymentMethod(m.id)}
                     className="rounded-full px-3.5 py-1.5"
-                    style={{ backgroundColor: active ? '#475569' : '#f0f4f2' }}
+                    style={{ backgroundColor: active ? '#00352e' : '#f0f4f2' }}
                   >
                     <Text className="text-[12px] font-semibold" style={{ color: active ? '#ffffff' : '#3f4946' }}>
                       {m.short}
@@ -219,17 +229,76 @@ export default function TransactionEditSheet({ tx, customCategories = [], onClos
                   <Pressable
                     key={cat.id}
                     onPress={() => setCategory(cat)}
-                    className="items-center gap-1 rounded-xl py-2.5"
+                    className="items-center gap-1 rounded-xl py-2"
                     style={{ width: '31%', backgroundColor: active ? '#e7f0ed' : '#ffffff', borderWidth: active ? 0 : 1, borderColor: '#e7edeb' }}
                   >
                     <Icon size={15} weight={active ? 'fill' : 'regular'} color={active ? '#1f695d' : '#6e9990'} />
                     <Text className="text-[10px] font-medium leading-none" style={{ color: active ? '#1f695d' : '#6e9990' }} numberOfLines={1}>
-                      {cat.label.split(/[\s&]/)[0]}
+                      {cat.label}
                     </Text>
                   </Pressable>
                 );
               })}
             </View>
+
+            {/* Recurring toggle — expenses only (feeds the Recurring Bills card) */}
+            {typeForCategory(category.id) === 'expense' && (
+              <Pressable
+                onPress={() => setIsRecurring((v) => !v)}
+                className="mt-4 flex-row items-center gap-3 rounded-xl px-4 py-3"
+                style={{
+                  backgroundColor: isRecurring ? 'rgba(31,105,80,0.08)' : '#ffffff',
+                  borderWidth: 1,
+                  borderColor: isRecurring ? '#1f695d' : '#e7edeb',
+                }}
+              >
+                <View className="h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: isRecurring ? '#1f695d' : '#f0f4f2' }}>
+                  <ArrowsClockwise size={15} weight="bold" color={isRecurring ? '#ffffff' : '#6e9990'} />
+                </View>
+                <View className="min-w-0 flex-1">
+                  <Text className="text-[13px] font-semibold" style={{ color: '#191c1c' }}>
+                    Recurring bill
+                  </Text>
+                  <Text className="text-[11px]" style={{ color: '#6e9990' }}>
+                    Subscriptions, rent, and monthly dues
+                  </Text>
+                </View>
+                {/* Switch */}
+                <View className="relative h-5 w-9 shrink-0 rounded-full" style={{ backgroundColor: isRecurring ? '#1f695d' : '#cde0db' }}>
+                  <View className="absolute h-4 w-4 rounded-full bg-white" style={{ top: 2, left: isRecurring ? 18 : 2 }} />
+                </View>
+              </Pressable>
+            )}
+
+            {/* Reimbursement toggle — spend categories only. A credit back that
+                reduces this category's spending instead of adding to it. */}
+            {typeForCategory(category.id) === 'expense' && category.id !== 'debts' && (
+              <Pressable
+                onPress={() => setIsReimbursement((v) => !v)}
+                className="mt-3 flex-row items-center gap-3 rounded-xl px-4 py-3"
+                style={{
+                  backgroundColor: isReimbursement ? 'rgba(31,105,80,0.08)' : '#ffffff',
+                  borderWidth: 1,
+                  borderColor: isReimbursement ? '#1f695d' : '#e7edeb',
+                }}
+              >
+                <View className="h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: isReimbursement ? '#1f695d' : '#f0f4f2' }}>
+                  <ArrowUUpLeft size={15} weight="bold" color={isReimbursement ? '#ffffff' : '#6e9990'} />
+                </View>
+                <View className="min-w-0 flex-1">
+                  <Text className="text-[13px] font-semibold" style={{ color: '#191c1c' }}>
+                    Reimbursement
+                  </Text>
+                  <Text className="text-[11px]" style={{ color: '#6e9990' }}>
+                    Refunds, rebates, and money paid back
+                  </Text>
+                </View>
+                {/* Switch */}
+                <View className="relative h-5 w-9 shrink-0 rounded-full" style={{ backgroundColor: isReimbursement ? '#1f695d' : '#cde0db' }}>
+                  <View className="absolute h-4 w-4 rounded-full bg-white" style={{ top: 2, left: isReimbursement ? 18 : 2 }} />
+                </View>
+              </Pressable>
+            )}
           </>
         )}
       </BottomSheetScrollView>

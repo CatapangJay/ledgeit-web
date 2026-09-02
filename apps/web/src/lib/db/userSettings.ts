@@ -8,6 +8,8 @@ import { createClient } from '@/lib/supabase/client'
 interface UserSettingsRow {
   user_id: string
   hidden_categories: string[] | null
+  /** 'YYYY-MM' of the last end-of-month recap the user acknowledged (null = none). */
+  last_recap_month: string | null
   updated_at: string
 }
 
@@ -30,6 +32,30 @@ export async function saveHiddenCategories(userId: string, hidden: string[]): Pr
     .from('user_settings')
     .upsert(
       { user_id: userId, hidden_categories: hidden, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id' }
+    )
+  if (error) throw new Error(error.message)
+}
+
+/** The 'YYYY-MM' of the last end-of-month recap the user has seen (null if none). */
+export async function fetchLastRecapMonth(userId: string): Promise<string | null> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('user_settings')
+    .select('last_recap_month')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  return (data as Pick<UserSettingsRow, 'last_recap_month'> | null)?.last_recap_month ?? null
+}
+
+/** Record that the user has seen the recap for the given 'YYYY-MM' month. */
+export async function saveLastRecapMonth(userId: string, month: string): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('user_settings')
+    .upsert(
+      { user_id: userId, last_recap_month: month, updated_at: new Date().toISOString() },
       { onConflict: 'user_id' }
     )
   if (error) throw new Error(error.message)

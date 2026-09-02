@@ -1,4 +1,5 @@
 import { formatDate, formatCurrency } from '@/lib/formatters'
+import { netAmount } from '@/types'
 import type { Transaction } from '@/types'
 
 interface Props {
@@ -7,12 +8,9 @@ interface Props {
 }
 
 export default function DateGroup({ date, transactions }: Props) {
-  // Transfers (incl. debt principal) move money between the user's own pockets —
-  // they're neither income nor spending, so they don't affect the day's net.
-  const subtotal = transactions.reduce(
-    (sum, t) => sum + (t.type === 'income' ? t.amount : t.type === 'expense' ? -t.amount : 0),
-    0
-  )
+  // netAmount signs each entry: income +, expense −, reimbursement +, and
+  // transfers/debt principal 0 (money between the user's own pockets).
+  const subtotal = transactions.reduce((sum, t) => sum + netAmount(t), 0)
   const isNet = subtotal >= 0
 
   return (

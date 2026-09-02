@@ -26,10 +26,13 @@ interface Props {
   onChange: (val: FilterValue) => void;
   /** Extra chips from user-created custom categories */
   customChips?: Chip[];
+  /** Preset category ids the user has hidden — excluded from the chips. */
+  hiddenCategories?: string[];
 }
 
-export default function FilterChips({ active, onChange, customChips = [] }: Props) {
-  const allChips = [...BASE_CHIPS, ...PRESET_CATEGORY_CHIPS, ...customChips];
+export default function FilterChips({ active, onChange, customChips = [], hiddenCategories = [] }: Props) {
+  const presetChips = PRESET_CATEGORY_CHIPS.filter((c) => !hiddenCategories.includes(c.value as string));
+  const allChips = [...BASE_CHIPS, ...presetChips, ...customChips];
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>

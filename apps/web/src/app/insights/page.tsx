@@ -13,8 +13,9 @@ import RecurringPaymentsCard from '@/components/dashboard/RecurringPaymentsCard'
 import BiggestExpenseCard from '@/components/dashboard/BiggestExpenseCard'
 import BudgetAllocationSheet from '@/components/budget/BudgetAllocationSheet'
 import { useStore } from '@/lib/store'
+import { useDeferredMount } from '@/lib/useDeferredMount'
 import { formatCurrency, formatMonthLabel } from '@/lib/formatters'
-import { CATEGORIES, isSpend, isEarn } from '@/types'
+import { CATEGORIES, isSpend, isEarn, spendAmount } from '@/types'
 
 function getMonthBounds(offset: number): { start: string; end: string; label: string } {
   const now = new Date()
@@ -42,6 +43,8 @@ export default function InsightsPage() {
   const [sortMode, setSortMode] = useState<SortMode>('spent')
   // Which Budget Flow category is expanded to show its breakdown (null = none).
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null)
+  // Defer the charts/metrics one paint so the header + month switcher are instant.
+  const contentReady = useDeferredMount()
   const transactions = useStore((s) => s.transactions)
   const budgetLimits = useStore((s) => s.budgetLimits)
   const budgetAllocations = useStore((s) => s.budgetAllocations)
@@ -61,9 +64,10 @@ export default function InsightsPage() {
     .filter((t) => isEarn(t))
     .reduce((s, t) => s + t.amount, 0)
 
+  // Net category spend — reimbursements subtract (spendAmount).
   const totalExpense = monthTxns
     .filter((t) => isSpend(t))
-    .reduce((s, t) => s + t.amount, 0)
+    .reduce((s, t) => s + spendAmount(t), 0)
 
   const netCashflow = totalIncome - totalExpense
 
@@ -91,7 +95,8 @@ export default function InsightsPage() {
     return monthTxns
       .filter((t) => isSpend(t))
       .reduce<Record<string, number>>((acc, t) => {
-        acc[t.category.id] = (acc[t.category.id] ?? 0) + t.amount
+        // Reimbursements subtract from the category's net spend (spendAmount).
+        acc[t.category.id] = (acc[t.category.id] ?? 0) + spendAmount(t)
         return acc
       }, {})
   }, [monthTxns])
@@ -249,6 +254,14 @@ export default function InsightsPage() {
         </span>
       </motion.button>
 
+      {!contentReady ? (
+        <div className="mt-4 flex flex-col gap-4">
+          <div className="skeleton h-20 rounded-2xl" />
+          <div className="skeleton h-56 rounded-3xl" />
+          <div className="skeleton h-40 rounded-3xl" />
+        </div>
+      ) : (
+        <>
       {/* ── Responsive content grid: stacked mobile, 2-col desktop ───────── */}
       <div className="lg:grid lg:grid-cols-2 lg:gap-8 lg:items-start">
         {/* Left col: metrics + donut */}
@@ -328,6 +341,8 @@ export default function InsightsPage() {
         <RecurringPaymentsCard />
         <BiggestExpenseCard />
       </div>
+        </>
+      )}
 
       {/* Budget allocation sheet */}
       <BudgetAllocationSheet

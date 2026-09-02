@@ -5,7 +5,7 @@ import { motion } from 'framer-motion'
 import { TrendUp, TrendDown, CalendarBlank, ChartLineUp } from '@phosphor-icons/react'
 import { formatCurrencyCompact } from '@/lib/formatters'
 import { useStore } from '@/lib/store'
-import { isSpend, isEarn } from '@/types'
+import { isSpend, isEarn, spendAmount, netAmount } from '@/types'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -39,10 +39,11 @@ export default function HeroSideStats() {
       const earn = isEarn(tx)
       if (!spend && !earn) continue
       if (tx.date.startsWith(thisMonth)) {
-        if (spend) thisExpense += tx.amount
+        // Reimbursements offset spend (spendAmount) and lift income-side net.
+        if (spend) thisExpense += spendAmount(tx)
         else thisIncome += tx.amount
       } else if (tx.date.startsWith(lastMonth)) {
-        lastNet += earn ? tx.amount : -tx.amount
+        lastNet += netAmount(tx)
       }
     }
 

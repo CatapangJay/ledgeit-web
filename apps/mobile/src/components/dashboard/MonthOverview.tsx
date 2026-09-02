@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { CaretRight, SlidersHorizontal } from 'phosphor-react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { CATEGORIES, formatCurrency, formatCurrencyCompact } from '@ledgeit/core';
+import { CATEGORIES, formatCurrency, formatCurrencyCompact, isSpend, isEarn, spendAmount } from '@ledgeit/core';
 import { useStore } from '@/lib/store';
 
 interface Props {
@@ -63,11 +63,15 @@ export default function MonthOverview({ onManageBudget }: Props) {
     let expense = 0;
     const byCategory: Record<string, number> = {};
     for (const t of monthTxns) {
-      if (t.type === 'income') {
+      // Only real earning/spending count — transfers and the debts category move
+      // money between your own pockets, so they're excluded from every total.
+      if (isEarn(t)) {
         income += t.amount;
-      } else {
-        expense += t.amount;
-        byCategory[t.category.id] = (byCategory[t.category.id] ?? 0) + t.amount;
+      } else if (isSpend(t)) {
+        // spendAmount signs reimbursements negative so they free up budget.
+        const amt = spendAmount(t);
+        expense += amt;
+        byCategory[t.category.id] = (byCategory[t.category.id] ?? 0) + amt;
       }
     }
 
@@ -93,7 +97,7 @@ export default function MonthOverview({ onManageBudget }: Props) {
   const topMax = topCategories.length > 0 ? topCategories[0].amount : 1;
 
   return (
-    <View className="rounded-2xl px-5 py-4" style={{ backgroundColor: '#ffffff', shadowColor: '#00352e', shadowOpacity: 0.06, shadowRadius: 16, elevation: 1 }}>
+    <View className="rounded-2xl px-5 py-4" style={{ backgroundColor: '#ffffff', shadowColor: '#00352e', shadowOpacity: 0.06, shadowRadius: 20, elevation: 1 }}>
       <View className="mb-3 flex-row items-center justify-between gap-2">
         <Text className="text-[12px] font-bold uppercase tracking-[1.4px]" style={{ color: '#00352e' }}>
           This Month
@@ -138,10 +142,10 @@ export default function MonthOverview({ onManageBudget }: Props) {
       ) : (
         <>
           <View className="mb-1 flex-row items-baseline justify-between gap-2">
-            <Text className="font-mono text-[13px] font-bold" style={{ color: barColor }}>
+            <Text className="shrink font-mono text-[13px] font-bold" style={{ color: barColor }} numberOfLines={1}>
               {formatCurrency(expense)}
             </Text>
-            <Text className="font-mono text-[11px] font-medium" style={{ color: '#3f4946' }}>
+            <Text className="shrink-0 font-mono text-[11px] font-medium" style={{ color: '#3f4946' }} numberOfLines={1}>
               of {formatCurrency(budgetTotal)} budget
             </Text>
           </View>

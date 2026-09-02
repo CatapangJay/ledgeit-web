@@ -3,8 +3,10 @@
 import Link from 'next/link'
 import { CaretLeft } from '@phosphor-icons/react'
 import DebtLedger from '@/components/debt/DebtLedger'
+import { useDeferredMount } from '@/lib/useDeferredMount'
 
 export default function DebtsPage() {
+  const ready = useDeferredMount()
   return (
     <div
       className="px-5 pb-4 md:px-8 md:max-w-3xl md:mx-auto lg:max-w-4xl lg:px-10"
@@ -30,7 +32,15 @@ export default function DebtsPage() {
         </div>
       </div>
 
-      <DebtLedger />
+      {ready ? (
+        <DebtLedger />
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="skeleton h-20 rounded-2xl" />
+          <div className="skeleton h-20 rounded-2xl" />
+          <div className="skeleton h-14 rounded-2xl" />
+        </div>
+      )}
     </div>
   )
 }

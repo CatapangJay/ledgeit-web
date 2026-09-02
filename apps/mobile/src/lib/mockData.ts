@@ -1,4 +1,4 @@
-import { CATEGORIES, resolveCategory, type Transaction, type BudgetLimit, type BudgetAllocation, type CustomCategory, type Debt } from '@ledgeit/core';
+import { CATEGORIES, resolveCategory, resolveWalletKind, type Transaction, type BudgetLimit, type BudgetAllocation, type CustomCategory, type Debt, type Wallet } from '@ledgeit/core';
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
 // Placeholder dataset for UI development before the real data layer (SQLite +
@@ -39,6 +39,7 @@ function makeTx(partial: {
   raw?: string;
   paymentMethod?: Transaction['paymentMethod'];
   isRecurring?: boolean;
+  isReimbursement?: boolean;
 }): Transaction {
   const date = isoDate(partial.date);
   return {
@@ -50,6 +51,7 @@ function makeTx(partial: {
     date,
     type: partial.type ?? 'expense',
     isRecurring: partial.isRecurring,
+    isReimbursement: partial.isReimbursement,
     paymentMethod: partial.paymentMethod ?? 'cash',
     confidence: 0.95,
     createdAt: `${date}T09:00:00.000Z`,
@@ -85,6 +87,10 @@ export const mockTransactions: Transaction[] = [
   makeTx({ amount: 990, merchant: 'SM Supermarket', categoryId: 'groceries', date: daysAgo(12) }),
   makeTx({ amount: 5000, merchant: 'Credit Card Payment', categoryId: 'transfers', date: daysAgo(13), type: 'transfer' }),
   makeTx({ amount: 310, merchant: 'KFC', categoryId: 'restaurants', date: daysAgo(14) }),
+
+  // ── Reimbursements — credited back, so they reduce category spend ─────────
+  makeTx({ amount: 480, merchant: 'SM Supermarket', categoryId: 'groceries', date: daysAgo(2), raw: 'refund 480 sm supermarket', isReimbursement: true }),
+  makeTx({ amount: 1200, merchant: 'Shopee', categoryId: 'shopping', date: daysAgo(5), raw: 'shopee rebate 1200', isReimbursement: true }),
 
   // ── Last month, lighter set for month-over-month comparisons ───────────
   makeTx({ amount: 1200, merchant: 'SM Supermarket', categoryId: 'groceries', date: new Date(firstOfMonth(1).getFullYear(), firstOfMonth(1).getMonth(), 5) }),
@@ -141,10 +147,92 @@ export const mockDebts: Debt[] = [
     isSettled: false,
     dueDate: isoDate(daysAgo(-1)),
     repayments: [
-      { id: 'mock-repay-1', amount: 1500, date: isoDate(daysAgo(6)), createdAt: `${isoDate(daysAgo(6))}T09:00:00.000Z` },
+      { id: 'mock-repay-1', amount: 1500, interest: 0, date: isoDate(daysAgo(6)), createdAt: `${isoDate(daysAgo(6))}T09:00:00.000Z` },
     ],
     createdAt: `${isoDate(daysAgo(25))}T09:00:00.000Z`,
   },
+];
+
+// ─── Mock wallets ─────────────────────────────────────────────────────────────
+// Named pockets the user sets money aside into. Each deposit/withdrawal is a
+// `manual` movement carrying a linked transfer id — matching how the store
+// creates them. Balances derive from movements via walletBalance().
+
+function walletMovement(partial: {
+  id: string;
+  type: 'deposit' | 'withdrawal';
+  amount: number;
+  date: Date;
+  note?: string;
+}) {
+  const date = isoDate(partial.date);
+  return {
+    id: partial.id,
+    type: partial.type,
+    amount: partial.amount,
+    date,
+    note: partial.note,
+    source: 'manual' as const,
+    transactionId: undefined,
+    createdAt: `${date}T09:00:00.000Z`,
+  };
+}
+
+function makeWallet(partial: {
+  id: string;
+  name: string;
+  kind: Parameters<typeof resolveWalletKind>[0];
+  target?: number;
+  note?: string;
+  movements: Wallet['movements'];
+}): Wallet {
+  const meta = resolveWalletKind(partial.kind);
+  return {
+    id: partial.id,
+    name: partial.name,
+    kind: meta.id,
+    icon: meta.icon,
+    color: meta.color,
+    target: partial.target,
+    note: partial.note,
+    isArchived: false,
+    movements: partial.movements,
+    createdAt: `${isoDate(daysAgo(45))}T09:00:00.000Z`,
+  };
+}
+
+export const mockWallets: Wallet[] = [
+  makeWallet({
+    id: 'mock-wallet-1',
+    name: 'Emergency Fund',
+    kind: 'emergency',
+    target: 50000,
+    movements: [
+      walletMovement({ id: 'mock-wm-1', type: 'deposit', amount: 20000, date: daysAgo(40) }),
+      walletMovement({ id: 'mock-wm-2', type: 'deposit', amount: 8000, date: daysAgo(10) }),
+    ],
+  }),
+  makeWallet({
+    id: 'mock-wallet-2',
+    name: 'MP2 Savings',
+    kind: 'investment',
+    target: 100000,
+    movements: [
+      walletMovement({ id: 'mock-wm-3', type: 'deposit', amount: 15000, date: daysAgo(35) }),
+      walletMovement({ id: 'mock-wm-4', type: 'deposit', amount: 5000, date: daysAgo(5) }),
+    ],
+  }),
+  makeWallet({
+    id: 'mock-wallet-3',
+    name: 'Japan Trip',
+    kind: 'goal',
+    target: 80000,
+    note: 'Cherry blossom season',
+    movements: [
+      walletMovement({ id: 'mock-wm-5', type: 'deposit', amount: 12000, date: daysAgo(30) }),
+      walletMovement({ id: 'mock-wm-6', type: 'withdrawal', amount: 2000, date: daysAgo(3), note: 'Visa fee' }),
+    ],
+  }),
 ];
 
 export { CATEGORIES };

@@ -5,7 +5,7 @@ import { motion, useReducedMotion, useInView } from 'framer-motion'
 import { CaretRight, SlidersHorizontal } from '@phosphor-icons/react'
 import { formatCurrency, formatCurrencyCompact } from '@/lib/formatters'
 import { useStore } from '@/lib/store'
-import { CATEGORIES, isSpend, isEarn } from '@/types'
+import { CATEGORIES, isSpend, isEarn, spendAmount } from '@/types'
 
 interface Props {
   /** Opens the budget plan manager (BudgetAllocationSheet). */
@@ -72,8 +72,11 @@ export default function MonthOverview({ onManageBudget }: Props) {
       if (isEarn(t)) {
         income += t.amount
       } else if (isSpend(t)) {
-        expense += t.amount
-        byCategory[t.category.id] = (byCategory[t.category.id] ?? 0) + t.amount
+        // Reimbursements subtract from both the month total and the category
+        // (spendAmount), freeing up budget.
+        const spend = spendAmount(t)
+        expense += spend
+        byCategory[t.category.id] = (byCategory[t.category.id] ?? 0) + spend
       }
     }
 

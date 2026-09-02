@@ -1,6 +1,7 @@
 'use client'
 
 import { formatCurrency, formatDate } from '@/lib/formatters'
+import { isReimbursement } from '@/types'
 import type { Transaction } from '@/types'
 
 interface Props {
@@ -25,22 +26,30 @@ export default function CategoryBreakdownList({ transactions }: Props) {
 
   return (
     <div className="flex flex-col gap-2">
-      {sorted.map((tx) => (
-        <div key={tx.id} className="flex items-center justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[12px] font-semibold" style={{ color: '#191c1c' }}>
-              {tx.merchant}
-            </p>
-            <p className="text-[10px]" style={{ color: '#6e9990' }}>{formatDate(tx.date)}</p>
+      {sorted.map((tx) => {
+        // A reimbursement is a credit back to the category — show it green with
+        // a '+' so it reads as an offset rather than a charge.
+        const isRefund = isReimbursement(tx)
+        const isCredit = tx.type === 'income' || isRefund
+        return (
+          <div key={tx.id} className="flex items-center justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[12px] font-semibold" style={{ color: '#191c1c' }}>
+                {tx.merchant}
+              </p>
+              <p className="text-[10px]" style={{ color: '#6e9990' }}>
+                {formatDate(tx.date)}{isRefund ? ' · Refund' : ''}
+              </p>
+            </div>
+            <span
+              className="shrink-0 font-mono text-[12px] font-semibold"
+              style={{ color: isCredit ? '#1f6950' : '#3f4946' }}
+            >
+              {isCredit ? '+' : ''}{formatCurrency(tx.amount)}
+            </span>
           </div>
-          <span
-            className="shrink-0 font-mono text-[12px] font-semibold"
-            style={{ color: tx.type === 'income' ? '#1f6950' : '#3f4946' }}
-          >
-            {tx.type === 'income' ? '+' : ''}{formatCurrency(tx.amount)}
-          </span>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

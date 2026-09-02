@@ -2,7 +2,7 @@
 
 import { createElement, useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, CalendarBlank, CheckCircle, Circle, Wallet as WalletIcon } from '@phosphor-icons/react'
+import { X, CalendarBlank, CheckCircle, Circle, Wallet as WalletIcon, ArrowUUpLeft } from '@phosphor-icons/react'
 import CategoryBadge from './CategoryBadge'
 import DatePickerSheet from '@/components/ui/DatePickerSheet'
 import { formatCurrency, formatDate } from '@/lib/formatters'
@@ -102,6 +102,8 @@ interface Props {
   onMerchantChange?: (name: string) => void
   onDateChange?: (date: string) => void
   onPaymentMethodChange?: (method: PaymentMethodId) => void
+  /** Toggle whether this expense is a reimbursement (credited back). */
+  onReimbursementChange?: (value: boolean) => void
   /** Debt entries only: current lent-out vs borrowed direction. */
   debtDirection?: DebtDirection
   onDebtDirectionChange?: (direction: DebtDirection) => void
@@ -138,7 +140,7 @@ const itemVariants = {
   },
 }
 
-export default function ParsePreview({ draft, category, confidence, customCategories = [], onCategoryChange, onMerchantChange, onDateChange, onPaymentMethodChange, debtDirection, onDebtDirectionChange, debtDueDate, onDebtDueDateChange, selected, onToggleSelect, logged = false, wallets = [], walletId, onWalletChange }: Props) {
+export default function ParsePreview({ draft, category, confidence, customCategories = [], onCategoryChange, onMerchantChange, onDateChange, onPaymentMethodChange, onReimbursementChange, debtDirection, onDebtDirectionChange, debtDueDate, onDebtDueDateChange, selected, onToggleSelect, logged = false, wallets = [], walletId, onWalletChange }: Props) {
   const hiddenCategories = useStore((s) => s.hiddenCategories)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [datePickerOpen, setDatePickerOpen] = useState(false)
@@ -152,6 +154,11 @@ export default function ParsePreview({ draft, category, confidence, customCatego
   const isTransfer = draft.type === 'transfer'
   const isDebt = category.id === 'debts'
   const isBulk = onToggleSelect !== undefined
+  // A reimbursement only applies to plain expense categories (not income /
+  // transfer / debts). When it does, offer a toggle that flips this expense into
+  // a credit back to the category.
+  const canReimburse = onReimbursementChange && draft.type === 'expense' && !isDebt
+  const isReimbursement = draft.isReimbursement === true
   const method = resolvePaymentMethod(draft.paymentMethod)
   // A wallet link is offered only for plain spending/income (not debts or
   // transfers, which already move money between pockets). Expenses are paid FROM
@@ -506,6 +513,45 @@ export default function ParsePreview({ draft, category, confidence, customCatego
         <p className="mt-2 text-[11px] font-medium" style={{ color: '#6e9990' }}>
           Transfer — not counted as spending.
         </p>
+      )}
+
+      {/* Reimbursement toggle — expense categories only. Flips this entry into a
+          credit that reduces the category's spending instead of adding to it. */}
+      {canReimburse && !logged && (
+        <motion.button
+          variants={itemVariants}
+          type="button"
+          onClick={() => onReimbursementChange!(!isReimbursement)}
+          aria-pressed={isReimbursement}
+          className="mt-3 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors"
+          style={{
+            background: isReimbursement ? 'rgba(31,105,80,0.08)' : '#f0f4f2',
+            border: `1px solid ${isReimbursement ? '#1f695d' : '#e7edeb'}`,
+          }}
+        >
+          <div
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+            style={{ background: isReimbursement ? '#1f695d' : '#ffffff' }}
+          >
+            <ArrowUUpLeft size={15} weight="bold" color={isReimbursement ? '#ffffff' : '#6e9990'} aria-hidden="true" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-semibold" style={{ color: '#191c1c' }}>Reimbursement</p>
+            <p className="text-[11px] leading-relaxed" style={{ color: '#6e9990' }}>
+              Credited back — reduces this category&apos;s spending instead of adding to it.
+            </p>
+          </div>
+          {/* Switch */}
+          <div
+            className="relative h-5 w-9 shrink-0 rounded-full transition-colors"
+            style={{ background: isReimbursement ? '#1f695d' : '#cde0db' }}
+          >
+            <span
+              className="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all"
+              style={{ left: isReimbursement ? '18px' : '2px' }}
+            />
+          </div>
+        </motion.button>
       )}
 
       {/* Inline category picker */}

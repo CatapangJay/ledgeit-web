@@ -9,7 +9,7 @@ import { useStore } from '@/lib/store'
 import { useIsDesktop } from '@/lib/useIsDesktop'
 import { PHOSPHOR_ICON_MAP, getIconBg } from '@/lib/iconMap'
 import type { Transaction } from '@/types'
-import { isSpend, isEarn } from '@/types'
+import { isReimbursement, netAmount } from '@/types'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -18,9 +18,11 @@ import { isSpend, isEarn } from '@/types'
 const MAX_FEED_MOBILE = 5
 const MAX_FEED_DESKTOP = 8
 
-/** Amount sign + color per type. Transfers are neutral (money you still own). */
+/** Amount sign + color per type. Transfers are neutral (money you still own);
+ *  a reimbursement is a credit back, so it reads green with a '+'. */
 function amountStyle(tx: Transaction): { sign: string; color: string } {
   if (tx.type === 'income') return { sign: '+', color: '#1f6950' }
+  if (isReimbursement(tx)) return { sign: '+', color: '#1f6950' }
   if (tx.type === 'transfer') return { sign: '', color: '#6e9990' }
   return { sign: '−', color: '#ba1a1a' }
 }
@@ -57,7 +59,7 @@ export default function ExpenseFeed() {
     const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
     return transactions
       .filter((t) => t.date.startsWith(ym))
-      .reduce((s, t) => (isEarn(t) ? s + t.amount : isSpend(t) ? s - t.amount : s), 0)
+      .reduce((s, t) => s + netAmount(t), 0)
   }, [transactions])
 
   return (

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { SignOut, PencilSimple, Check, X, Lock, User, SlidersHorizontal, CaretRight, HandCoins, Tag, Wallet } from '@phosphor-icons/react'
+import { SignOut, PencilSimple, Check, X, Lock, User, SlidersHorizontal, CaretRight, HandCoins, Tag, Wallet, Confetti } from '@phosphor-icons/react'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import { useStore } from '@/lib/store'
@@ -11,6 +11,8 @@ import { debtOutstanding, walletBalance } from '@/types'
 import { formatCurrency } from '@/lib/formatters'
 import BudgetAllocationSheet from '@/components/budget/BudgetAllocationSheet'
 import CategoryManagerSheet from '@/components/budget/CategoryManagerSheet'
+import MonthlyRecapModal from '@/components/dashboard/MonthlyRecapModal'
+import { computeMonthlyRecap, previousMonthKey } from '@/lib/monthlyRecap'
 
 type Section = 'profile' | 'password'
 
@@ -36,7 +38,10 @@ export default function AccountPage() {
   const [activeSection, setActiveSection] = useState<Section>('profile')
   const [budgetSheetOpen, setBudgetSheetOpen] = useState(false)
   const [categorySheetOpen, setCategorySheetOpen] = useState(false)
+  const [recapOpen, setRecapOpen] = useState(false)
 
+  const transactions = useStore((s) => s.transactions)
+  const budgetLimits = useStore((s) => s.budgetLimits)
   const budgetAllocations = useStore((s) => s.budgetAllocations)
   const activePlan = budgetAllocations.find((a) => a.isActive) ?? null
   const debts = useStore((s) => s.debts)
@@ -46,6 +51,13 @@ export default function AccountPage() {
   const totalStashed = activeWallets.reduce((s, w) => s + walletBalance(w), 0)
   const customCategories = useStore((s) => s.customCategories)
   const hiddenCategories = useStore((s) => s.hiddenCategories)
+
+  // Last month's recap — re-openable here any time (it auto-shows once on the
+  // dashboard at the start of a new month).
+  const recap = useMemo(
+    () => computeMonthlyRecap(previousMonthKey(new Date()), transactions, budgetLimits, customCategories),
+    [transactions, budgetLimits, customCategories]
+  )
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -284,6 +296,28 @@ export default function AccountPage() {
               <CaretRight size={15} weight="bold" color="#6e9990" aria-hidden="true" />
             </button>
 
+            {/* Monthly recap — re-open last month's summary */}
+            <button
+              onClick={() => setRecapOpen(true)}
+              aria-label="View last month's recap"
+              className="flex items-center gap-3 rounded-xl border border-ledge-border bg-ledge-surface p-4 text-left transition-colors hover:bg-ledge-surface2 active:scale-[0.99]"
+              style={{ boxShadow: '0 2px 12px rgba(0,53,46,0.04)' }}
+            >
+              <div
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+                style={{ background: '#e7edeb' }}
+              >
+                <Confetti size={16} weight="bold" color="#1f695d" aria-hidden="true" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-ledge-data">Monthly Recap</p>
+                <p className="truncate text-[11px] text-ledge-muted">
+                  {recap.isEmpty ? 'No activity last month yet' : `Revisit your ${recap.label} summary`}
+                </p>
+              </div>
+              <CaretRight size={15} weight="bold" color="#6e9990" aria-hidden="true" />
+            </button>
+
             {/* Wallets */}
             <button
               onClick={() => router.push('/wallets')}
@@ -445,6 +479,7 @@ export default function AccountPage() {
 
       <BudgetAllocationSheet open={budgetSheetOpen} onClose={() => setBudgetSheetOpen(false)} />
       <CategoryManagerSheet open={categorySheetOpen} onClose={() => setCategorySheetOpen(false)} />
+      <MonthlyRecapModal recap={recap} open={recapOpen} onClose={() => setRecapOpen(false)} />
     </div>
   )
 }

@@ -3,7 +3,7 @@ import { View, Text, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ArrowRight } from 'phosphor-react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { CATEGORIES, formatCurrencyCompact } from '@ledgeit/core';
+import { CATEGORIES, formatCurrencyCompact, isSpend, spendAmount } from '@ledgeit/core';
 import { getIconComponent, getIconBg } from '@/lib/iconMap';
 import { useStore } from '@/lib/store';
 
@@ -29,8 +29,11 @@ export default function TopCategoryBars() {
 
     const byCategory: Record<string, number> = {};
     for (const tx of transactions) {
-      if (tx.type !== 'expense' || !tx.date.startsWith(month)) continue;
-      byCategory[tx.category.id] = (byCategory[tx.category.id] ?? 0) + tx.amount;
+      // Real spending only — excludes transfers and the debts category, which
+      // move money between your own pockets.
+      if (!isSpend(tx) || !tx.date.startsWith(month)) continue;
+      // spendAmount nets out reimbursements — a category's total can go negative.
+      byCategory[tx.category.id] = (byCategory[tx.category.id] ?? 0) + spendAmount(tx);
     }
 
     const maxSpent = Math.max(...Object.values(byCategory), 1);
@@ -39,7 +42,9 @@ export default function TopCategoryBars() {
       .map(([id, spent]) => {
         const limit = budgetLimits.find((b) => b.categoryId === id)?.limit ?? 0;
         const cat = CATEGORIES.find((c) => c.id === id);
-        const pct = limit > 0 ? Math.min((spent / limit) * 100, 100) : (spent / maxSpent) * 100;
+        // Clamp the bar fill at 0 so a net-negative (over-refunded) category
+        // doesn't render a negative width.
+        const pct = limit > 0 ? Math.min(Math.max((spent / limit) * 100, 0), 100) : Math.max((spent / maxSpent) * 100, 0);
         return {
           id,
           spent,
@@ -55,7 +60,7 @@ export default function TopCategoryBars() {
   }, [transactions, budgetLimits]);
 
   return (
-    <View className="rounded-2xl px-5 py-4" style={{ backgroundColor: '#ffffff', shadowColor: '#00352e', shadowOpacity: 0.07, shadowRadius: 24, elevation: 2 }}>
+    <View className="rounded-2xl px-5 py-4" style={{ backgroundColor: '#ffffff', shadowColor: '#00352e', shadowOpacity: 0.06, shadowRadius: 20, elevation: 1 }}>
       <View className="mb-4 flex-row items-center justify-between">
         <Text className="text-[12px] font-bold uppercase tracking-[1.4px]" style={{ color: '#00352e' }}>
           Top Spending
@@ -69,7 +74,7 @@ export default function TopCategoryBars() {
       </View>
 
       {categories.length === 0 ? (
-        <Text className="text-[12px]" style={{ color: '#a9c2bd' }}>
+        <Text className="text-[12px]" style={{ color: '#3f4946' }}>
           Nothing logged this month. Your top categories will appear here once you add expenses.
         </Text>
       ) : (
@@ -82,15 +87,15 @@ export default function TopCategoryBars() {
             return (
               <View key={cat.id}>
                 <View className="mb-1.5 flex-row items-center justify-between">
-                  <View className="flex-row items-center gap-2">
+                  <View className="min-w-0 flex-1 flex-row items-center gap-2">
                     <View className="h-6 w-6 items-center justify-center rounded-lg" style={{ backgroundColor: `${hex}18` }}>
                       <Icon size={13} weight="fill" color={hex} />
                     </View>
-                    <Text className="text-[13px] font-semibold" style={{ color: '#191c1c' }}>
+                    <Text className="shrink text-[13px] font-semibold" style={{ color: '#191c1c' }} numberOfLines={1}>
                       {cat.label}
                     </Text>
                   </View>
-                  <View className="flex-row items-baseline gap-1">
+                  <View className="shrink-0 flex-row items-baseline gap-1">
                     <Text className="font-mono text-[13px] font-bold" style={{ color: '#191c1c' }}>
                       {formatCurrencyCompact(cat.spent)}
                     </Text>

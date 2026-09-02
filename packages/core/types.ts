@@ -336,6 +336,14 @@ export interface Transaction {
   paymentMethod: PaymentMethodId  // How it was paid; defaults to 'cash'
   confidence: number        // 0–1 categorization confidence
   isRecurring?: boolean
+  /**
+   * A reimbursement/refund filed UNDER an expense category (type stays
+   * 'expense' so it groups with that category). Instead of adding to spending,
+   * it SUBTRACTS from the category's spend — freeing up that budget — and adds
+   * the amount back to your balance. E.g. a ₱500 grocery rebate reduces grocery
+   * spend by ₱500 and raises net by ₱500. See `spendAmount` / `netAmount`.
+   */
+  isReimbursement?: boolean
   note?: string
   createdAt: string         // ISO 8601 datetime
 }
@@ -349,6 +357,8 @@ export interface TransactionDraft {
   type: TransactionType
   paymentMethod: PaymentMethodId  // Detected from the text; defaults to 'cash'
   date: string              // ISO 8601 date string
+  /** Detected refund/reimbursement under an expense category (see Transaction). */
+  isReimbursement?: boolean
 }
 
 // ─── Debts ──────────────────────────────────────────────────────────────────────
@@ -576,6 +586,53 @@ export function isSpend(t: { type: TransactionType; category: { id: string } }):
 /** Whether a transaction counts as real income: income that isn't debt-related. */
 export function isEarn(t: { type: TransactionType; category: { id: string } }): boolean {
   return t.type === 'income' && t.category.id !== 'debts'
+}
+
+/**
+ * A reimbursement/refund logged under an expense category. It shares the
+ * 'expense' type (so it groups with its category) but offsets spending rather
+ * than adding to it. Callers use this to render it distinctly (a credit) and to
+ * sign its amount via `spendAmount` / `netAmount`.
+ */
+export function isReimbursement(t: {
+  type: TransactionType
+  category: { id: string }
+  isReimbursement?: boolean
+}): boolean {
+  return isSpend(t) && t.isReimbursement === true
+}
+
+/**
+ * The amount a transaction contributes to its category's SPENDING total.
+ * A normal expense adds its amount; a reimbursement subtracts it (freeing up
+ * budget); anything that isn't real spend (income/transfer/debt) contributes 0.
+ * Sum these across a category to get its net spend — which can go negative if
+ * reimbursements exceed spending.
+ */
+export function spendAmount(t: {
+  type: TransactionType
+  category: { id: string }
+  amount: number
+  isReimbursement?: boolean
+}): number {
+  if (!isSpend(t)) return 0
+  return t.isReimbursement === true ? -t.amount : t.amount
+}
+
+/**
+ * The signed amount a transaction contributes to NET cashflow / balance.
+ * Income and reimbursements add money back (positive); normal expenses remove
+ * it (negative); transfers and debt movements net to zero.
+ */
+export function netAmount(t: {
+  type: TransactionType
+  category: { id: string }
+  amount: number
+  isReimbursement?: boolean
+}): number {
+  if (isEarn(t)) return t.amount
+  if (isSpend(t)) return t.isReimbursement === true ? t.amount : -t.amount
+  return 0
 }
 
 /**

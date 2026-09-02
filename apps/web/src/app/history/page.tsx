@@ -9,7 +9,9 @@ import DateFilterBar from '@/components/ledger/DateFilterBar'
 import DateGroup from '@/components/ledger/DateGroup'
 import TransactionRow from '@/components/ledger/TransactionRow'
 import TransactionEditSheet from '@/components/ledger/TransactionEditSheet'
+import ListSkeleton from '@/components/ledger/ListSkeleton'
 import { useStore } from '@/lib/store'
+import { useDeferredMount } from '@/lib/useDeferredMount'
 import { PAYMENT_METHODS } from '@/types'
 import type { FilterValue } from '@/components/ledger/FilterChips'
 import type { DatePeriod } from '@/components/ledger/DateFilterBar'
@@ -48,6 +50,7 @@ function groupByDate(txns: Transaction[]): [string, Transaction[]][] {
 
 function HistoryContent() {
   const router = useRouter()
+  const listReady = useDeferredMount()
   const transactions = useStore((s) => s.transactions)
   const deleteTransaction = useStore((s) => s.deleteTransaction)
   const updateTransaction = useStore((s) => s.updateTransaction)
@@ -194,7 +197,9 @@ function HistoryContent() {
       )}
 
       {/* List */}
-      {filtered.length === 0 ? (
+      {!listReady ? (
+        <ListSkeleton />
+      ) : filtered.length === 0 ? (
         <div className="flex flex-col items-start gap-2 py-14">
           <p className="text-sm font-medium" style={{ color: '#6e9990' }}>
             {hasActiveFilters ? 'No transactions match these filters.' : 'No transactions yet.'}

@@ -5,6 +5,8 @@ interface Metric {
   value: string;
   sub?: string;
   color?: string;
+  /** Plain-language explanation shown under the value for non-financial users. */
+  hint?: string;
 }
 
 interface Props {
@@ -13,7 +15,7 @@ interface Props {
 
 export default function MetricStrip({ metrics }: Props) {
   return (
-    <View className="flex-row overflow-hidden rounded-2xl py-4" style={{ backgroundColor: '#ffffff', shadowColor: '#00352e', shadowOpacity: 0.06, shadowRadius: 12, elevation: 1 }}>
+    <View className="flex-row overflow-hidden rounded-2xl py-4" style={{ backgroundColor: '#ffffff', shadowColor: '#00352e', shadowOpacity: 0.06, shadowRadius: 20, elevation: 1 }}>
       {metrics.map((m, i) => (
         <View
           key={m.label}
@@ -23,12 +25,23 @@ export default function MetricStrip({ metrics }: Props) {
           <Text className="text-[10px] font-bold uppercase tracking-[1.4px]" style={{ color: '#6e9990' }}>
             {m.label}
           </Text>
-          <Text className="font-mono text-base font-bold leading-none" style={{ color: m.color ?? '#191c1c' }}>
+          <Text
+            className="font-mono text-base font-bold leading-none"
+            style={{ color: m.color ?? '#191c1c' }}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}
+          >
             {m.value}
           </Text>
           {m.sub && (
             <Text className="text-[10px] font-medium" style={{ color: '#6e9990' }}>
               {m.sub}
+            </Text>
+          )}
+          {m.hint && (
+            <Text className="mt-0.5 text-[10px] leading-snug" style={{ color: '#6e9990' }}>
+              {m.hint}
             </Text>
           )}
         </View>

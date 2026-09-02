@@ -5,7 +5,7 @@ import { motion } from 'framer-motion'
 import { ArrowFatLineUp, ArrowFatLineDown } from '@phosphor-icons/react'
 import { formatCurrency } from '@/lib/formatters'
 import { useStore } from '@/lib/store'
-import { isSpend, isEarn } from '@/types'
+import { isEarn, spendAmount } from '@/types'
 
 function useCountUp(target: number, duration = 1000) {
   const [display, setDisplay] = useState(0)
@@ -41,9 +41,11 @@ export default function BalanceMetric() {
   const monthlyIncome = transactions
     .filter((t) => isEarn(t) && t.date.startsWith(yearMonth))
     .reduce((sum, t) => sum + t.amount, 0)
+  // Category spend for the month — reimbursements subtract (via spendAmount),
+  // so a refund lowers the expense figure and lifts net.
   const monthlyExpense = transactions
-    .filter((t) => isSpend(t) && t.date.startsWith(yearMonth))
-    .reduce((sum, t) => sum + t.amount, 0)
+    .filter((t) => t.date.startsWith(yearMonth))
+    .reduce((sum, t) => sum + spendAmount(t), 0)
   const monthlyNet = monthlyIncome - monthlyExpense
   const isPositive = monthlyNet >= 0
 

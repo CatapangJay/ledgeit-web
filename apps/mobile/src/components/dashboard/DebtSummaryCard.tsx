@@ -57,10 +57,10 @@ export default function DebtSummaryCard() {
 
   return (
     <Link href="/debts" asChild>
-      <Pressable className="rounded-2xl px-5 py-4 active:opacity-90" style={{ backgroundColor: '#ffffff', shadowColor: '#00352e', shadowOpacity: 0.07, shadowRadius: 24, elevation: 1 }}>
+      <Pressable className="rounded-2xl px-5 py-4 active:opacity-90" style={{ backgroundColor: '#ffffff', shadowColor: '#00352e', shadowOpacity: 0.06, shadowRadius: 20, elevation: 1 }}>
         {/* Header */}
         <View className="mb-3 flex-row items-center justify-between">
-          <Text className="text-[12px] font-bold uppercase tracking-[1.7px]" style={{ color: '#00352e' }}>
+          <Text className="text-[12px] font-bold uppercase tracking-[1.4px]" style={{ color: '#00352e' }}>
             Debts &amp; Loans
           </Text>
           <View className="flex-row items-center gap-1.5">
@@ -102,7 +102,7 @@ export default function DebtSummaryCard() {
             style={{ backgroundColor: nearest.overdue ? 'rgba(186,26,26,0.08)' : 'rgba(180,83,9,0.08)' }}
           >
             <Warning size={13} weight="fill" color={nearest.overdue ? '#ba1a1a' : '#b45309'} />
-            <Text className="min-w-0 flex-1 truncate text-[11px] font-semibold" style={{ color: '#3f4946' }} numberOfLines={1}>
+            <Text className="min-w-0 flex-1 text-[11px] font-semibold" style={{ color: '#3f4946' }} numberOfLines={1}>
               {nearest.debt.direction === 'owed_to_me'
                 ? `${nearest.debt.personName} — ${duePhrase(nearest.days, nearest.overdue)}`
                 : `Pay ${nearest.debt.personName} — ${duePhrase(nearest.days, nearest.overdue)}`}

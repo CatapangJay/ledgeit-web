@@ -20,6 +20,8 @@ export default function SpendDonut({ spent, saved }: Props) {
   const total = spent + saved;
   const spentRatio = total > 0 ? spent / total : 0;
   const spentDash = CIRCUMFERENCE * spentRatio;
+  const savedDash = CIRCUMFERENCE - spentDash;
+  const spentPct = Math.round(spentRatio * 100);
 
   const progress = useSharedValue(0);
   useEffect(() => {
@@ -31,22 +33,45 @@ export default function SpendDonut({ spent, saved }: Props) {
   }));
 
   return (
-    <View className="flex-row items-center gap-6 rounded-2xl p-5" style={{ backgroundColor: '#ffffff', shadowColor: '#00352e', shadowOpacity: 0.06, shadowRadius: 12, elevation: 1 }}>
-      {/* SVG ring */}
-      <Svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ transform: [{ rotate: '-90deg' }] }}>
-        <Circle cx={SIZE / 2} cy={SIZE / 2} r={RADIUS} fill="none" stroke="#f0f4f2" strokeWidth={STROKE} />
-        <AnimatedCircle
-          cx={SIZE / 2}
-          cy={SIZE / 2}
-          r={RADIUS}
-          fill="none"
-          stroke="#ba1a1a"
-          strokeWidth={STROKE}
-          strokeLinecap="round"
-          strokeDasharray={`${CIRCUMFERENCE} ${CIRCUMFERENCE}`}
-          animatedProps={animatedProps}
-        />
-      </Svg>
+    <View className="flex-row items-center gap-6 rounded-2xl p-5" style={{ backgroundColor: '#ffffff', shadowColor: '#00352e', shadowOpacity: 0.06, shadowRadius: 20, elevation: 1 }}>
+      {/* SVG ring with centered spent % */}
+      <View className="relative items-center justify-center" style={{ width: SIZE, height: SIZE }}>
+        <Svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ transform: [{ rotate: '-90deg' }] }}>
+          <Circle cx={SIZE / 2} cy={SIZE / 2} r={RADIUS} fill="none" stroke="#f0f4f2" strokeWidth={STROKE} />
+          {/* Saved segment — drawn after the spent portion to complete the ring */}
+          <Circle
+            cx={SIZE / 2}
+            cy={SIZE / 2}
+            r={RADIUS}
+            fill="none"
+            stroke="#1f6950"
+            strokeWidth={STROKE}
+            strokeLinecap="round"
+            strokeDasharray={`${savedDash} ${CIRCUMFERENCE}`}
+            strokeDashoffset={-spentDash}
+          />
+          {/* Spent segment (animated) */}
+          <AnimatedCircle
+            cx={SIZE / 2}
+            cy={SIZE / 2}
+            r={RADIUS}
+            fill="none"
+            stroke="#ba1a1a"
+            strokeWidth={STROKE}
+            strokeLinecap="round"
+            strokeDasharray={`${CIRCUMFERENCE} ${CIRCUMFERENCE}`}
+            animatedProps={animatedProps}
+          />
+        </Svg>
+        <View className="absolute inset-0 items-center justify-center">
+          <Text className="font-mono text-lg font-bold" style={{ color: '#00352e', textAlign: 'center' }}>
+            {spentPct}%
+          </Text>
+          <Text className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#6e9990', textAlign: 'center' }}>
+            Spent
+          </Text>
+        </View>
+      </View>
 
       {/* Legend */}
       <View className="min-w-0 gap-3">

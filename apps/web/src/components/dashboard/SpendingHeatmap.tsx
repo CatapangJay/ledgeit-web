@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CaretLeft, CaretRight, Plus, ArrowRight } from '@phosphor-icons/react'
 import { useStore } from '@/lib/store'
-import { isSpend } from '@/types'
+import { isSpend, spendAmount } from '@/types'
 import { formatCurrency, formatCurrencyCompact } from '@/lib/formatters'
 
 // ─── Local-date helpers ─────────────────────────────────────────────────────────
@@ -64,7 +64,8 @@ export default function SpendingHeatmap({ onAddForDate, onViewDate }: Props) {
     for (const t of transactions) {
       if (!isSpend(t)) continue
       if (!t.date.startsWith(prefix)) continue
-      totals[t.date] = (totals[t.date] ?? 0) + t.amount
+      // Reimbursements subtract from the day's spend (spendAmount).
+      totals[t.date] = (totals[t.date] ?? 0) + spendAmount(t)
     }
     return totals
   }, [transactions, viewMonth])

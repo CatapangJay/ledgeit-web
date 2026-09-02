@@ -12,10 +12,12 @@ import TransactionEditSheet from '@/components/ledger/TransactionEditSheet'
 import CategoryBreakdownBar from '@/components/ledger/CategoryBreakdownBar'
 import CategoryPickerSheet from '@/components/ledger/CategoryPickerSheet'
 import WalletStrip from '@/components/ledger/WalletStrip'
+import ListSkeleton from '@/components/ledger/ListSkeleton'
 import DatePickerSheet from '@/components/ui/DatePickerSheet'
 import { useStore } from '@/lib/store'
+import { useDeferredMount } from '@/lib/useDeferredMount'
 import { formatCurrency } from '@/lib/formatters'
-import { PAYMENT_METHODS, CATEGORIES } from '@/types'
+import { PAYMENT_METHODS, CATEGORIES, spendAmount } from '@/types'
 import type { FilterValue } from '@/components/ledger/FilterChips'
 import type { DatePeriod } from '@/components/ledger/DateFilterBar'
 import type { Transaction, PaymentMethodId, Category } from '@/types'
@@ -72,6 +74,9 @@ function EmptyFiltered({ hasActiveFilters }: { hasActiveFilters: boolean }) {
 
 function LedgerContent() {
   const router = useRouter()
+  // Defer the breakdown + transaction list one paint so the header + filters
+  // paint instantly on client navigation instead of blocking on the list render.
+  const listReady = useDeferredMount()
   const searchParams = useSearchParams()
   // Optional day deep-link from the dashboard heatmap (?date=YYYY-MM-DD).
   const rawDate = searchParams.get('date')
@@ -182,8 +187,9 @@ function LedgerContent() {
     })
   }, [transactions, filter, range, query, methodFilter])
 
+  // Net spend across the filtered set — reimbursements subtract (spendAmount).
   const totalAmount = useMemo(
-    () => filtered.reduce((s, t) => s + (t.type === 'expense' ? t.amount : 0), 0),
+    () => filtered.reduce((s, t) => s + spendAmount(t), 0),
     [filtered]
   )
 
@@ -502,6 +508,10 @@ function LedgerContent() {
         )}
       </AnimatePresence>
 
+      {!listReady ? (
+        <ListSkeleton />
+      ) : (
+        <>
       {/* Category breakdown bar */}
       <CategoryBreakdownBar transactions={filtered} />
 
@@ -550,6 +560,8 @@ function LedgerContent() {
           </motion.div>
         )}
       </AnimatePresence>
+        </>
+      )}
 
       <TransactionEditSheet
         tx={editingTx}

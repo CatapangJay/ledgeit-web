@@ -29,6 +29,7 @@ export default function StoreBootstrap() {
   const loadHiddenCategories = useStore((s) => s.loadHiddenCategories)
   const loadDebts = useStore((s) => s.loadDebts)
   const loadWallets = useStore((s) => s.loadWallets)
+  const loadLastRecapMonth = useStore((s) => s.loadLastRecapMonth)
   const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
   const pathname = usePathname()
@@ -60,6 +61,7 @@ export default function StoreBootstrap() {
         loadIncomeAllocations(user.id)
         loadDebts(user.id)
         loadWallets(user.id)
+        loadLastRecapMonth(user.id)
       } else {
         loadedUserIdRef.current = null
         setUserId(null)
@@ -72,7 +74,7 @@ export default function StoreBootstrap() {
       }
     })
     return () => subscription.unsubscribe()
-  }, [supabase, setUserId, loadTransactions, loadBudgetAllocations, loadIncomeAllocations, loadCustomCategories, loadHiddenCategories, loadDebts, loadWallets, router])
+  }, [supabase, setUserId, loadTransactions, loadBudgetAllocations, loadIncomeAllocations, loadCustomCategories, loadHiddenCategories, loadDebts, loadWallets, loadLastRecapMonth, router])
 
   return null
 }

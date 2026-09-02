@@ -6,7 +6,7 @@ import { Trash, CalendarBlank, Check } from '@phosphor-icons/react'
 import { PHOSPHOR_ICON_MAP, CUSTOM_COLOR_OPTIONS } from '@/lib/iconMap'
 import { formatCurrency, formatDate } from '@/lib/formatters'
 import DatePickerSheet from '@/components/ui/DatePickerSheet'
-import { resolvePaymentMethod } from '@/types'
+import { resolvePaymentMethod, isReimbursement } from '@/types'
 import { useLinkedWallet } from '@/lib/walletLinks'
 import type { Transaction } from '@/types'
 
@@ -56,10 +56,12 @@ export default function TransactionRow({ tx, onDelete, onDateChange, onEdit, sel
   const selectable = selectMode && !!onToggleSelect
   const isIncome = tx.type === 'income'
   const isTransfer = tx.type === 'transfer'
+  // A reimbursement is money coming back — shown as a green credit with '+'.
+  const isRefund = isReimbursement(tx)
   // Transfers move money between the user's own pockets — shown neutrally with no
   // +/− since they're neither spending nor income.
-  const amountColor = isTransfer ? '#6e9990' : isIncome ? '#1f6950' : '#ba1a1a'
-  const amountSign = isTransfer ? '' : isIncome ? '+' : '−'
+  const amountColor = isRefund ? '#1f6950' : isTransfer ? '#6e9990' : isIncome ? '#1f6950' : '#ba1a1a'
+  const amountSign = isRefund ? '+' : isTransfer ? '' : isIncome ? '+' : '−'
   const method = resolvePaymentMethod(tx.paymentMethod)
   const MethodIcon = PHOSPHOR_ICON_MAP[method.icon]
   // If this transaction is linked to a wallet (paid from / saved into one via
@@ -150,6 +152,14 @@ export default function TransactionRow({ tx, onDelete, onDateChange, onEdit, sel
           </div>
           <div className="mt-0.5 flex items-center gap-1.5">
             <span className="text-xs" style={{ color: getCategoryIconBg(tx.category), opacity: 0.9 }}>{tx.category.label}</span>
+            {isRefund && (
+              <span
+                className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                style={{ background: 'rgba(31,105,93,0.1)', color: '#1f695d' }}
+              >
+                Refund
+              </span>
+            )}
             <span className="text-xs" style={{ color: '#cde0db' }}>·</span>
             {onDateChange && !selectMode ? (
               <button
