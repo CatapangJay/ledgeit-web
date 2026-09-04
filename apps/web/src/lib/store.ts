@@ -178,10 +178,12 @@ interface StoreActions {
   removeDebt: (debtId: string) => Promise<void>
   // ── Wallets ─────────────────────────────────────────────────────────────────
   loadWallets: (userId: string) => Promise<void>
-  addWallet: (payload: { name: string; kind: WalletKind; target?: number; note?: string; initialAmount?: number; date: string }) => Promise<void>
-  updateWallet: (walletId: string, payload: { name: string; kind: WalletKind; target?: number; note?: string }) => Promise<void>
-  /** Move money into (deposit) or out of (withdrawal) a wallet. Logs a linked transfer. */
-  recordWalletMovement: (walletId: string, payload: { type: WalletMovementType; amount: number; note?: string; date: string }) => Promise<void>
+  addWallet: (payload: { name: string; kind: WalletKind; icon?: string; color?: string; target?: number; note?: string; initialAmount?: number; date: string }) => Promise<void>
+  updateWallet: (walletId: string, payload: { name: string; kind: WalletKind; icon?: string; color?: string; target?: number; note?: string }) => Promise<void>
+  /** Move money into (deposit) or out of (withdrawal) a wallet. Logs a linked transfer.
+   *  An optional `category` tags the transfer for identification without changing
+   *  its transfer nature (still excluded from spending/income analytics). */
+  recordWalletMovement: (walletId: string, payload: { type: WalletMovementType; amount: number; note?: string; date: string; category?: Category }) => Promise<void>
   /** Record a wallet movement against an ALREADY-logged ledger transaction (e.g. an
    *  expense paid from a wallet). Does NOT create a new transfer — the given
    *  transaction is the money movement; this only tracks the wallet sub-balance. */
@@ -896,7 +898,7 @@ export const useStore = create<AppStore>()((set, get) => ({
     }
   },
 
-  async addWallet({ name, kind, target, note, initialAmount, date }) {
+  async addWallet({ name, kind, icon, color, target, note, initialAmount, date }) {
     const userId = get().userId
     if (!userId) return
     const meta = resolveWalletKind(kind)
@@ -904,8 +906,9 @@ export const useStore = create<AppStore>()((set, get) => ({
       const wallet = await createWallet(userId, {
         name,
         kind,
-        icon: meta.icon,
-        color: meta.color,
+        // Icon/color default to the kind's, but the user can override either.
+        icon: icon ?? meta.icon,
+        color: color ?? meta.color,
         target,
         note,
       })
@@ -919,16 +922,20 @@ export const useStore = create<AppStore>()((set, get) => ({
     }
   },
 
-  async updateWallet(walletId, { name, kind, target, note }) {
+  async updateWallet(walletId, { name, kind, icon, color, target, note }) {
     const prevWallets = get().wallets
     const wallet = prevWallets.find((w) => w.id === walletId)
     if (!wallet) return
     const meta = resolveWalletKind(kind)
+    // Use the explicit icon/color when the form provides one, otherwise fall
+    // back to the (possibly changed) kind's defaults.
+    const nextIcon = icon ?? meta.icon
+    const nextColor = color ?? meta.color
 
-    // Optimistically apply the edits. Icon/color follow the (possibly changed) kind.
+    // Optimistically apply the edits.
     set((state) => ({
       wallets: state.wallets.map((w) =>
-        w.id === walletId ? { ...w, name, kind, icon: meta.icon, color: meta.color, target, note } : w
+        w.id === walletId ? { ...w, name, kind, icon: nextIcon, color: nextColor, target, note } : w
       ),
     }))
 
@@ -936,8 +943,8 @@ export const useStore = create<AppStore>()((set, get) => ({
       await patchWallet(walletId, {
         name,
         kind,
-        icon: meta.icon,
-        color: meta.color,
+        icon: nextIcon,
+        color: nextColor,
         target: target ?? null,
         note: note ?? null,
       })
@@ -947,7 +954,7 @@ export const useStore = create<AppStore>()((set, get) => ({
     }
   },
 
-  async recordWalletMovement(walletId, { type, amount, note, date }) {
+  async recordWalletMovement(walletId, { type, amount, note, date, category }) {
     const wallet = get().wallets.find((w) => w.id === walletId)
     if (!wallet || amount <= 0) return
 
@@ -955,7 +962,13 @@ export const useStore = create<AppStore>()((set, get) => ({
     // `transfer` — recorded in the ledger but excluded from income/expense
     // totals. A deposit is money leaving the day-to-day balance (into the
     // wallet); a withdrawal is money coming back out.
+    //
+    // The user can tag the transfer with the category the money came from / went
+    // to (e.g. depositing part of a Salary, or withdrawing for Groceries). It
+    // stays a `transfer` regardless — the category is only for identification,
+    // so it never leaks into spending/income analytics. Defaults to Transfers.
     const transfersCategory = CATEGORIES.find((c) => c.id === 'transfers')!
+    const txCategory = category ?? transfersCategory
     const txId = crypto.randomUUID()
     const label = type === 'deposit' ? `Deposit to ${wallet.name}` : `Withdraw from ${wallet.name}`
     const tx: Transaction = {
@@ -963,7 +976,7 @@ export const useStore = create<AppStore>()((set, get) => ({
       raw: `${label} ${amount}`,
       amount,
       merchant: label,
-      category: transfersCategory,
+      category: txCategory,
       date,
       type: 'transfer',
       paymentMethod: 'bank',

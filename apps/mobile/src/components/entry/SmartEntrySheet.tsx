@@ -22,7 +22,8 @@ import ParsePreview from './ParsePreview';
 interface Props {
   open: boolean;
   onClose: () => void;
-  /** When set (ISO YYYY-MM-DD), a newly parsed entry is dated to this day. */
+  /** When set (ISO YYYY-MM-DD), a newly parsed entry defaults to this day unless
+   *  the text carries its own inline date (which always wins). */
   initialDate?: string;
 }
 
@@ -127,8 +128,9 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
       setMerchantSuggestions([]);
       setRawMerchant(null);
       timerRef.current = setTimeout(() => {
-        const draft = parseTransaction(val);
-        if (initialDate) draft.date = initialDate;
+        // Pass the selected day as the parser's context date: an inline date in
+        // the text wins, otherwise the entry falls back to `initialDate`.
+        const draft = parseTransaction(val, initialDate);
 
         // Fuzzy merchant resolution.
         const suggestions = getMerchantSuggestions(draft.merchant, historyMerchants);

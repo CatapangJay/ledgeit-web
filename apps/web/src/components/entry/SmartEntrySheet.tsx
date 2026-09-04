@@ -32,20 +32,10 @@ interface ParseResult {
 interface Props {
   open: boolean
   onClose: () => void
-  /** When set (ISO YYYY-MM-DD), the bulk entry is pre-dated to this day: the
-   *  textarea is seeded with a standalone date line so entries typed below it
-   *  inherit that date via the bulk parser's context-date mechanism. */
+  /** When set (ISO YYYY-MM-DD), every bulk entry that has no inline date of its
+   *  own defaults to this day. Passed straight to the parser as a fallback
+   *  context date, so it applies regardless of textarea content or mount timing. */
   initialDate?: string
-}
-
-/** Human date line the bulk parser recognizes as a standalone context date. */
-function isoToDateLine(iso: string): string {
-  const [y, m, d] = iso.split('-').map(Number)
-  return new Date(y, m - 1, d).toLocaleDateString('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  })
 }
 
 // ─── Snap points ─────────────────────────────────────────────────────────────
@@ -212,19 +202,13 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
   useEffect(() => {
     if (open) {
       setSuccess(false)
-      // Pre-date the bulk entry: seed a standalone date line so anything typed
-      // below inherits that day. Only seed when the box is empty so we never
-      // clobber text a user is already editing.
-      if (initialDate) {
-        setBulkText((prev) => (prev.trim() ? prev : `${isoToDateLine(initialDate)}\n`))
-      }
       const t = setTimeout(() => {
         if (mode === 'quick') textareaRef.current?.focus()
       }, 120)
       return () => clearTimeout(t)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, initialDate])
+  }, [open])
 
   // Debounced parsing
   const handleChange = useCallback(
@@ -405,6 +389,7 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
             onValidCountChange={setBulkValidCount}
             initialText={bulkText}
             onTextChange={setBulkText}
+            defaultDate={initialDate}
           />
         )}
 
