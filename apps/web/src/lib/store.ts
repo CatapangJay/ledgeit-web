@@ -77,6 +77,21 @@ function currentMonthFirstDay(): string {
   return `${y}-${m}-01`
 }
 
+// First day (local-time YYYY-MM-DD) of the *previous* month. This is the lower
+// bound for the initial transaction load: the app fetches current + previous
+// month up front — enough for the dashboard (previous-month recap, "vs last
+// month" delta, week-boundary trend) and the ledger's default "this month"
+// view — then lazily loads the rest via ensureFullHistory.
+function initialWindowStart(): string {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = d.getMonth() - 1 // previous month; JS Date normalizes -1 → last Dec
+  const first = new Date(y, m, 1)
+  const yy = first.getFullYear()
+  const mm = String(first.getMonth() + 1).padStart(2, '0')
+  return `${yy}-${mm}-01`
+}
+
 // ─── Default budget limits ────────────────────────────────────────────────────
 // Applied as fallback when no active allocation is loaded.
 
@@ -126,11 +141,24 @@ interface StoreState {
   lastRecapMonth: string | null
   /** True once loadLastRecapMonth has resolved at least once for the current user. */
   lastRecapMonthLoaded: boolean
+  /** True once the full (all-time) transaction history has been loaded. Starts
+   *  false: the initial load fetches only a recent window (current + previous
+   *  month). Flipped true by ensureFullHistory once older data is pulled in. */
+  fullHistoryLoaded: boolean
+  /** True while ensureFullHistory's all-time fetch is in flight. */
+  isLoadingFullHistory: boolean
 }
 
 interface StoreActions {
   setUserId: (userId: string | null) => void
+  /** Initial load: fetches only a recent window (current + previous month) to
+   *  keep the first-paint payload small. Call ensureFullHistory to pull the rest. */
   loadTransactions: (userId: string) => Promise<void>
+  /** Lazily load the full all-time transaction history (idempotent). Triggered
+   *  when the user navigates into a historical view (ledger filters/search,
+   *  History page, Insights/heatmap month navigation). Merges any optimistic
+   *  entries added since the initial load so nothing in flight is lost. */
+  ensureFullHistory: () => Promise<void>
   /** @deprecated Delegates to loadBudgetAllocations */
   loadBudgetLimits: (userId: string) => Promise<void>
   loadBudgetAllocations: (userId: string) => Promise<void>
@@ -218,6 +246,8 @@ export const useStore = create<AppStore>()((set, get) => ({
   wallets: [],
   lastRecapMonth: null,
   lastRecapMonthLoaded: false,
+  fullHistoryLoaded: false,
+  isLoadingFullHistory: false,
 
   setUserId(userId) {
     set({
@@ -231,6 +261,9 @@ export const useStore = create<AppStore>()((set, get) => ({
         wallets: [],
         lastRecapMonth: null,
         lastRecapMonthLoaded: false,
+        transactions: [],
+        fullHistoryLoaded: false,
+        isLoadingFullHistory: false,
       } : {}),
     })
   },
@@ -238,10 +271,40 @@ export const useStore = create<AppStore>()((set, get) => ({
   async loadTransactions(userId) {
     set({ isLoading: true })
     try {
-      const transactions = await fetchTransactions(userId, get().customCategories)
-      set({ transactions, isLoading: false })
+      // Initial load is bounded to a recent window (current + previous month)
+      // to keep the first-paint payload small; the rest is pulled in lazily by
+      // ensureFullHistory when the user navigates into a historical view.
+      const transactions = await fetchTransactions(userId, get().customCategories, initialWindowStart())
+      set({ transactions, isLoading: false, fullHistoryLoaded: false })
     } catch {
       set({ isLoading: false })
+    }
+  },
+
+  async ensureFullHistory() {
+    // Idempotent: skip if already loaded or a fetch is already in flight.
+    if (get().fullHistoryLoaded || get().isLoadingFullHistory) return
+    const userId = get().userId
+    if (!userId) return
+
+    set({ isLoadingFullHistory: true })
+    try {
+      const all = await fetchTransactions(userId, get().customCategories)
+      // Merge with the current in-memory set so optimistic entries added since
+      // the initial load (which may not yet be in the DB snapshot) aren't lost.
+      // The all-time fetch is authoritative for anything it returns; local-only
+      // ids are appended and the whole set re-sorted newest-first.
+      set((state) => {
+        const byId = new Map<string, Transaction>()
+        for (const t of all) byId.set(t.id, t)
+        for (const t of state.transactions) if (!byId.has(t.id)) byId.set(t.id, t)
+        const merged = Array.from(byId.values()).sort((a, b) =>
+          b.createdAt.localeCompare(a.createdAt)
+        )
+        return { transactions: merged, fullHistoryLoaded: true, isLoadingFullHistory: false }
+      })
+    } catch {
+      set({ isLoadingFullHistory: false })
     }
   },
 

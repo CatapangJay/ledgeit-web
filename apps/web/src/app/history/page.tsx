@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { CaretLeft, CaretRight, MagnifyingGlass, X } from '@phosphor-icons/react'
@@ -52,9 +52,16 @@ function HistoryContent() {
   const router = useRouter()
   const listReady = useDeferredMount()
   const transactions = useStore((s) => s.transactions)
+  const ensureFullHistory = useStore((s) => s.ensureFullHistory)
   const deleteTransaction = useStore((s) => s.deleteTransaction)
   const updateTransaction = useStore((s) => s.updateTransaction)
   const customCategories = useStore((s) => s.customCategories)
+
+  // The History page is the all-time browser — load the full history on mount
+  // (the initial app load only fetches a recent window).
+  useEffect(() => {
+    ensureFullHistory()
+  }, [ensureFullHistory])
 
   const [filter, setFilter] = useState<FilterValue>('all')
   const [period, setPeriod] = useState<DatePeriod>('all')

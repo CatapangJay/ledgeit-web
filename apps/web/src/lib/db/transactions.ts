@@ -53,16 +53,30 @@ async function getCurrentUserId(): Promise<string> {
   return user.id
 }
 
+/**
+ * Fetch a user's transactions, newest first.
+ *
+ * Pass `since` (an inclusive YYYY-MM-DD lower bound) to load only a recent
+ * window — the initial app load uses this to fetch just the current + previous
+ * month instead of the full history, cutting the first-paint payload. Omit it
+ * (or pass null) to load all-time, which the app does lazily the moment the
+ * user navigates into a historical view (see store.ensureFullHistory).
+ */
 export async function fetchTransactions(
   userId: string,
-  customCats: CustomCategory[] = []
+  customCats: CustomCategory[] = [],
+  since: string | null = null
 ): Promise<Transaction[]> {
   const supabase = createClient()
-  const { data, error } = await supabase
+  let query = supabase
     .from('transactions')
     .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
+
+  if (since) query = query.gte('date', since)
+
+  const { data, error } = await query
 
   if (error) throw new Error(error.message)
   return (data as TransactionRow[]).map((row) => rowToTransaction(row, customCats))

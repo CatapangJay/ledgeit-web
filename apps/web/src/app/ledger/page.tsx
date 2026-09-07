@@ -85,7 +85,10 @@ function LedgerContent() {
   const linkedCategory = searchParams.get('category')
 
   const [filter, setFilter] = useState<FilterValue>('all')
-  const [period, setPeriod] = useState<DatePeriod>('all')
+  // Default to the current month so the initial view matches the bounded initial
+  // load (current + previous month). Widening past this triggers a full-history
+  // load (see the ensureFullHistory effect below).
+  const [period, setPeriod] = useState<DatePeriod>('thisMonth')
   const [customDate, setCustomDate] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [methodFilter, setMethodFilter] = useState<PaymentMethodId | 'all'>('all')
@@ -132,6 +135,7 @@ function LedgerContent() {
   }, [linkedCategory])
 
   const transactions = useStore((s) => s.transactions)
+  const ensureFullHistory = useStore((s) => s.ensureFullHistory)
   const deleteTransaction = useStore((s) => s.deleteTransaction)
   const updateTransaction = useStore((s) => s.updateTransaction)
   const bulkChangeCategory = useStore((s) => s.bulkChangeCategory)
@@ -139,6 +143,16 @@ function LedgerContent() {
   const bulkDelete = useStore((s) => s.bulkDelete)
   const customCategories = useStore((s) => s.customCategories)
   const hiddenCategories = useStore((s) => s.hiddenCategories)
+
+  // Pull in the full all-time history the moment the user looks beyond the
+  // current month — opens the filter panel, searches, or picks a period other
+  // than "this month". Until then the bounded initial window is enough, and the
+  // default "this month" view renders instantly without an extra fetch.
+  useEffect(() => {
+    if (filtersOpen || search.trim() !== '' || period !== 'thisMonth') {
+      ensureFullHistory()
+    }
+  }, [filtersOpen, search, period, ensureFullHistory])
 
   const customChips = customCategories.map((c) => ({ value: c.id, label: c.name }))
 

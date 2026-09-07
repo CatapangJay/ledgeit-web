@@ -14,7 +14,7 @@ import SpendingHeatmap from '@/components/dashboard/SpendingHeatmap'
 import TopCategoryBars from '@/components/dashboard/TopCategoryBars'
 import BiggestExpenseCard from '@/components/dashboard/BiggestExpenseCard'
 import TransferInfoCard from '@/components/dashboard/TransferInfoCard'
-import RecurringPaymentsCard from '@/components/dashboard/RecurringPaymentsCard'
+// import RecurringPaymentsCard from '@/components/dashboard/RecurringPaymentsCard' // temporarily disabled — see usage below
 import DebtSummaryCard from '@/components/dashboard/DebtSummaryCard'
 import WalletSummaryCard from '@/components/dashboard/WalletSummaryCard'
 import CoachLine from '@/components/dashboard/CoachLine'
@@ -299,10 +299,13 @@ export default function DashboardPage() {
               <WalletSummaryCard />
             </motion.div>
 
-            {/* ── Recurring bills — additional density for desktop right column ── */}
-            <motion.div variants={item}>
+            {/* ── Recurring bills — temporarily disabled. Its all-time merchant
+                scan doesn't fit the bounded initial transaction load, and its
+                value is under review. Re-enable with a dedicated recurring query
+                (is_recurring=true, all-time) if we bring it back. ── */}
+            {/* <motion.div variants={item}>
               <RecurringPaymentsCard />
-            </motion.div>
+            </motion.div> */}
           </motion.div>
         </motion.div>
         )}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { CaretLeft, CaretRight, Sliders, ArrowsDownUp } from '@phosphor-icons/react'
 import MetricStrip from '@/components/insights/MetricStrip'
@@ -9,7 +9,7 @@ import CategoryBreakdownList from '@/components/insights/CategoryBreakdownList'
 import SpendDonut from '@/components/insights/SpendDonut'
 import WalletInsightsCard from '@/components/insights/WalletInsightsCard'
 import MonthTrendChart from '@/components/dashboard/MonthTrendChart'
-import RecurringPaymentsCard from '@/components/dashboard/RecurringPaymentsCard'
+// import RecurringPaymentsCard from '@/components/dashboard/RecurringPaymentsCard' // temporarily disabled — see usage below
 import BiggestExpenseCard from '@/components/dashboard/BiggestExpenseCard'
 import BudgetAllocationSheet from '@/components/budget/BudgetAllocationSheet'
 import { useStore } from '@/lib/store'
@@ -46,10 +46,17 @@ export default function InsightsPage() {
   // Defer the charts/metrics one paint so the header + month switcher are instant.
   const contentReady = useDeferredMount()
   const transactions = useStore((s) => s.transactions)
+  const ensureFullHistory = useStore((s) => s.ensureFullHistory)
   const budgetLimits = useStore((s) => s.budgetLimits)
   const budgetAllocations = useStore((s) => s.budgetAllocations)
   const customCategories = useStore((s) => s.customCategories)
   const hiddenCategories = useStore((s) => s.hiddenCategories)
+
+  // Insights browses arbitrary months and charts multi-week trends that reach
+  // past the bounded initial window — load the full history on mount.
+  useEffect(() => {
+    ensureFullHistory()
+  }, [ensureFullHistory])
 
   const activePlan = budgetAllocations.find((a) => a.isActive)
 
@@ -285,6 +292,11 @@ export default function InsightsPage() {
           <div className="mt-4">
             <WalletInsightsCard start={start} end={end} />
           </div>
+
+          {/* <RecurringPaymentsCard /> */}
+          <div className="mt-4">
+            <BiggestExpenseCard />
+          </div>
         </div>
 
         {/* Right col: budget breakdown */}
@@ -337,10 +349,7 @@ export default function InsightsPage() {
       </div>
 
       {/* ── Spending patterns ─────────────────────────────────────────────── */}
-      <div className="mt-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <RecurringPaymentsCard />
-        <BiggestExpenseCard />
-      </div>
+      {/* Recurring bills card temporarily disabled (value under review) — see dashboard/page.tsx. */}
         </>
       )}
 

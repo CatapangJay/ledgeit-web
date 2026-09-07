@@ -44,6 +44,7 @@ interface Props {
 
 export default function SpendingHeatmap({ onAddForDate, onViewDate }: Props) {
   const transactions = useStore((s) => s.transactions)
+  const ensureFullHistory = useStore((s) => s.ensureFullHistory)
 
   const now = useMemo(() => new Date(), [])
   const todayISO = useMemo(() => toISO(now), [now])
@@ -96,6 +97,9 @@ export default function SpendingHeatmap({ onAddForDate, onViewDate }: Props) {
 
   function shiftMonth(delta: number) {
     setSelectedIso(null) // a selection from the previous month no longer applies
+    // Browsing back beyond the bounded initial window (current + previous month)
+    // needs the full history — pull it in lazily on the first backward step.
+    if (delta < 0) ensureFullHistory()
     setViewMonth((m) => new Date(m.getFullYear(), m.getMonth() + delta, 1))
   }
 
