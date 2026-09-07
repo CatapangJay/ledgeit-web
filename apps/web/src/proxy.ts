@@ -1,4 +1,4 @@
-import { type NextRequest } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 import { updateSession } from '@/lib/supabase/middleware'
 
 // Runs on every matched request. Two jobs:
@@ -11,6 +11,18 @@ import { updateSession } from '@/lib/supabase/middleware'
 export async function proxy(request: NextRequest) {
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-pathname', request.nextUrl.pathname)
+
+  // Prefetch requests (Next.js warming a route the user is likely to visit) must
+  // stay cheap and side-effect-free: skip the auth round-trip + inactivity cap so
+  // prefetching never blocks and can't redirect to /login (which would poison the
+  // prefetch cache and defeat instant navigation). The real navigation request
+  // that follows still runs the full check below.
+  const isPrefetch =
+    request.headers.get('next-router-prefetch') === '1' ||
+    request.headers.get('purpose') === 'prefetch'
+  if (isPrefetch) {
+    return NextResponse.next({ request: { headers: requestHeaders } })
+  }
 
   return updateSession(request, requestHeaders)
 }

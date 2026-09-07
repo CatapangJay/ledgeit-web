@@ -1,6 +1,7 @@
 'use client'
 
-import { usePathname, useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import {
   ChartPieSlice,
   House,
@@ -9,7 +10,7 @@ import {
   UserCircle,
 } from '@phosphor-icons/react'
 import { motion } from 'framer-motion'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import SmartEntrySheet from '@/components/entry/SmartEntrySheet'
 
 const TABS = [
@@ -22,13 +23,60 @@ const TABS = [
 
 export default function BottomNav() {
   const pathname = usePathname()
-  const router = useRouter()
   const [sheetOpen, setSheetOpen] = useState(false)
+  // Optimistic target for instant highlight on tap (see SideNav for rationale).
+  const [pendingHref, setPendingHref] = useState<string | null>(null)
+
+  useEffect(() => {
+    setPendingHref(null)
+  }, [pathname])
+
+  const activeHref = pendingHref ?? pathname
 
   // Separate the FAB from the regular tabs for layout control
   const leftTabs = TABS.slice(0, 2)
   const rightTabs = TABS.slice(3)
   const fabTab = TABS[2]
+
+  const tabClass =
+    'relative flex flex-1 flex-col items-center justify-center gap-1 py-3 active:scale-[0.94]'
+
+  function renderTab(tab: (typeof TABS)[number]) {
+    const isActive = tab.href ? activeHref === tab.href : false
+    return (
+      <Link
+        key={tab.href}
+        href={tab.href!}
+        prefetch
+        aria-label={tab.label}
+        aria-current={isActive ? 'page' : undefined}
+        onClick={() => setPendingHref(tab.href)}
+        className={tabClass}
+        style={{ transition: 'transform 0.1s' }}
+      >
+        <tab.icon
+          size={20}
+          weight={isActive ? 'fill' : 'regular'}
+          color={isActive ? '#00352e' : '#6e9990'}
+          aria-hidden="true"
+        />
+        <span
+          className="text-[10px] font-semibold tracking-wide"
+          style={{ color: isActive ? '#00352e' : '#6e9990' }}
+        >
+          {tab.label}
+        </span>
+        {isActive && (
+          <motion.div
+            layoutId="nav-indicator"
+            className="absolute bottom-0 left-1/2 h-0.75 w-6 -translate-x-1/2 rounded-full"
+            style={{ background: '#00352e' }}
+            transition={{ type: 'spring', stiffness: 500, damping: 40 }}
+          />
+        )}
+      </Link>
+    )
+  }
 
   return (
     <>
@@ -47,41 +95,7 @@ export default function BottomNav() {
           }}
         >
           {/* Left tabs */}
-          {leftTabs.map((tab) => {
-            const isActive = tab.href ? pathname === tab.href : false
-            return (
-              <motion.button
-                key={tab.href}
-                aria-label={tab.label}
-                aria-current={isActive ? 'page' : undefined}
-                onClick={() => router.push(tab.href!)}
-                className="relative flex flex-1 flex-col items-center justify-center gap-1 py-3"
-                whileTap={{ scale: 0.92 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-              >
-                <tab.icon
-                  size={20}
-                  weight={isActive ? 'fill' : 'regular'}
-                  color={isActive ? '#00352e' : '#6e9990'}
-                  aria-hidden="true"
-                />
-                <span
-                  className="text-[10px] font-semibold tracking-wide"
-                  style={{ color: isActive ? '#00352e' : '#6e9990' }}
-                >
-                  {tab.label}
-                </span>
-                {isActive && (
-                  <motion.div
-                    layoutId="nav-indicator"
-                    className="absolute bottom-0 left-1/2 h-0.75 w-6 -translate-x-1/2 rounded-full"
-                    style={{ background: '#00352e' }}
-                    transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                  />
-                )}
-              </motion.button>
-            )
-          })}
+          {leftTabs.map(renderTab)}
 
           {/* Center FAB — raised above the bar */}
           <div className="relative flex flex-1 flex-col items-center" style={{ marginBottom: '-1px' }}>
@@ -112,41 +126,7 @@ export default function BottomNav() {
           </div>
 
           {/* Right tabs */}
-          {rightTabs.map((tab) => {
-            const isActive = tab.href ? pathname === tab.href : false
-            return (
-              <motion.button
-                key={tab.href}
-                aria-label={tab.label}
-                aria-current={isActive ? 'page' : undefined}
-                onClick={() => router.push(tab.href!)}
-                className="relative flex flex-1 flex-col items-center justify-center gap-1 py-3"
-                whileTap={{ scale: 0.92 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-              >
-                <tab.icon
-                  size={20}
-                  weight={isActive ? 'fill' : 'regular'}
-                  color={isActive ? '#00352e' : '#6e9990'}
-                  aria-hidden="true"
-                />
-                <span
-                  className="text-[10px] font-semibold tracking-wide"
-                  style={{ color: isActive ? '#00352e' : '#6e9990' }}
-                >
-                  {tab.label}
-                </span>
-                {isActive && (
-                  <motion.div
-                    layoutId="nav-indicator"
-                    className="absolute bottom-0 left-1/2 h-0.75 w-6 -translate-x-1/2 rounded-full"
-                    style={{ background: '#00352e' }}
-                    transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                  />
-                )}
-              </motion.button>
-            )
-          })}
+          {rightTabs.map(renderTab)}
         </div>
       </nav>
 

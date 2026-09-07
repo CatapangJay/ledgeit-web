@@ -1,6 +1,7 @@
 'use client'
 
-import { usePathname, useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import {
   ChartPieSliceIcon,
   GridFourIcon,
@@ -8,11 +9,10 @@ import {
   HouseIcon,
   ListIcon,
   PlusCircleIcon,
-  UserCircleIcon,
   WalletIcon,
 } from '@phosphor-icons/react'
 import { motion } from 'framer-motion'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import SmartEntrySheet from '@/components/entry/SmartEntrySheet'
 
 const NAV_ITEMS = [
@@ -22,13 +22,21 @@ const NAV_ITEMS = [
   { label: 'Wallets', icon: WalletIcon, href: '/wallets' },
   { label: 'Debts', icon: HandPalmIcon, href: '/debts' },
   { label: 'History', icon: ListIcon, href: '/history' },
-  // { label: 'Account', icon: UserCircleIcon, href: '/account' },
 ]
 
 export default function SideNav() {
   const pathname = usePathname()
-  const router = useRouter()
   const [sheetOpen, setSheetOpen] = useState(false)
+  // Optimistic target: the moment a nav item is tapped we highlight it, before
+  // the route commits — so the click feels instant even while the page loads.
+  const [pendingHref, setPendingHref] = useState<string | null>(null)
+
+  // Once the real pathname catches up to the tapped route, drop the override.
+  useEffect(() => {
+    setPendingHref(null)
+  }, [pathname])
+
+  const activeHref = pendingHref ?? pathname
 
   return (
     <>
@@ -84,23 +92,26 @@ export default function SideNav() {
         >
           {NAV_ITEMS.map((item) => {
             const isActive =
-              item.href === '/' ? pathname === '/' : pathname.startsWith(item.href)
+              item.href === '/' ? activeHref === '/' : activeHref.startsWith(item.href)
             return (
-              <motion.button
+              <Link
                 key={item.href}
+                href={item.href}
+                prefetch
                 aria-label={item.label}
                 aria-current={isActive ? 'page' : undefined}
-                onClick={() => router.push(item.href)}
-                whileTap={{ scale: 0.97 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-                className="relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left"
+                // Highlight this item instantly on tap — don't wait for the
+                // route to commit.
+                onClick={() => setPendingHref(item.href)}
+                className="relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:scale-[0.98]"
+                style={{ transition: 'transform 0.1s' }}
               >
                 {isActive && (
                   <motion.div
                     layoutId="sidebar-indicator"
                     className="absolute inset-0 rounded-xl"
                     style={{ background: 'rgba(0,53,46,0.08)' }}
-                    transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                    transition={{ type: 'spring', stiffness: 500, damping: 40 }}
                   />
                 )}
                 <item.icon
@@ -116,7 +127,7 @@ export default function SideNav() {
                 >
                   {item.label}
                 </span>
-              </motion.button>
+              </Link>
             )
           })}
         </nav>
