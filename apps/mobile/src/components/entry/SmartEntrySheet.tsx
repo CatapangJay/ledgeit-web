@@ -11,6 +11,7 @@ import {
   buildHistoryOverrides,
   getMerchantSuggestions,
   resolveMerchant,
+  CATEGORIES,
   type Category,
   type MerchantSuggestion,
   type Transaction,
@@ -313,21 +314,23 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
                   onCategoryChange={(cat) => {
                     const newType = cat.id === 'income' ? 'income' : cat.id === 'transfers' ? 'transfer' : 'expense';
                     setParseResult((prev) =>
-                      prev
-                        ? {
-                            ...prev,
-                            category: cat,
-                            // A reimbursement flag only makes sense on a spend category;
-                            // clear it whenever the entry stops being an expense.
-                            draft: { ...prev.draft, type: newType, isReimbursement: newType === 'expense' ? prev.draft.isReimbursement : false },
-                          }
-                        : prev,
+                      prev ? { ...prev, category: cat, draft: { ...prev.draft, type: newType } } : prev,
                     );
                     if (parseResult?.draft) learnCategory(getMerchantKey(parseResult.draft), cat.id);
                   }}
-                  isReimbursement={parseResult.draft.isReimbursement}
-                  onReimbursementChange={(v) =>
-                    setParseResult((prev) => (prev ? { ...prev, draft: { ...prev.draft, isReimbursement: v } } : prev))
+                  onTypeChange={(type) =>
+                    setParseResult((prev) => {
+                      if (!prev) return prev;
+                      // Type drives the category: Income → the Income category;
+                      // switching back to expense from Income falls to Other.
+                      const category =
+                        type === 'income'
+                          ? CATEGORIES.find((c) => c.id === 'income')!
+                          : prev.category.id === 'income'
+                            ? CATEGORIES.find((c) => c.id === 'other')!
+                            : prev.category;
+                      return { ...prev, category, draft: { ...prev.draft, type } };
+                    })
                   }
                   onDateChange={(date) =>
                     setParseResult((prev) => (prev ? { ...prev, draft: { ...prev.draft, date } } : prev))

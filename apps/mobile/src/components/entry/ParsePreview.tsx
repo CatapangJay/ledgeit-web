@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { View, Text, Pressable, TextInput } from 'react-native';
-import { X, CalendarBlank, CheckCircle, CircleIcon as Circle, Wallet as WalletIcon, ArrowUUpLeft } from 'phosphor-react-native';
+import { X, CalendarBlank, CheckCircle, CircleIcon as Circle, Wallet as WalletIcon, ArrowDownLeft, ArrowUpRight } from 'phosphor-react-native';
 import {
   CATEGORIES, PAYMENT_METHODS, resolvePaymentMethod, formatCurrency, formatDate,
   type Category, type TransactionDraft, type CustomCategory, type PaymentMethodId,
@@ -36,9 +36,8 @@ interface Props {
   /** Currently chosen wallet id, or undefined for none. */
   walletId?: string;
   onWalletChange?: (walletId: string | undefined) => void;
-  /** Spend entries only: whether this is a refund/reimbursement credited back. */
-  isReimbursement?: boolean;
-  onReimbursementChange?: (v: boolean) => void;
+  /** Flip this entry between a plain expense and income. */
+  onTypeChange?: (type: 'expense' | 'income') => void;
 }
 
 // Inline category picker (presets minus hidden + custom), ported from web.
@@ -100,7 +99,7 @@ export default function ParsePreview({
   draft, category, confidence, customCategories = [], onCategoryChange, onMerchantChange,
   onDateChange, onPaymentMethodChange, debtDirection, onDebtDirectionChange, debtDueDate,
   onDebtDueDateChange, selected, onToggleSelect, logged = false, wallets = [], walletId, onWalletChange,
-  isReimbursement = false, onReimbursementChange,
+  onTypeChange,
 }: Props) {
   void confidence;
   const hiddenCategories = useStore((s) => s.hiddenCategories);
@@ -118,8 +117,9 @@ export default function ParsePreview({
   const isBulk = onToggleSelect !== undefined;
   const method = resolvePaymentMethod(draft.paymentMethod);
   const canLinkWallet = onWalletChange && wallets.length > 0 && !isDebt && !isTransfer;
-  // A refund/reimbursement toggle only applies to real spend categories.
-  const canReimburse = onReimbursementChange && draft.type === 'expense' && !isDebt;
+  // The expense⇄income toggle applies only to plain money entries — not debts or
+  // transfers, which are typed by their own dedicated flows.
+  const canToggleType = onTypeChange && !isDebt && !isTransfer;
   const selectedWallet = wallets.find((w) => w.id === walletId);
 
   function startEditMerchant() {
@@ -230,12 +230,16 @@ export default function ParsePreview({
         )}
       </View>
 
-      {/* Row 3: Payment method chip */}
-      <View className="mt-2 flex-row items-center gap-2">
+      {/* Row 3: Chip strip — payment method · wallet · reimbursement.
+          A single wrapping row keeps these options compact and side-by-side
+          instead of stacking; each chip's expanded picker/hint renders below
+          the strip so the row itself stays uncluttered. */}
+      <View className="mt-2 flex-row flex-wrap items-center gap-1.5">
+        {/* Payment method */}
         {onPaymentMethodChange && !logged ? (
           <Pressable
-            onPress={() => setMethodPickerOpen((o) => !o)}
-            className="flex-row items-center gap-1.5 self-start rounded-md px-2 py-1"
+            onPress={() => { setMethodPickerOpen((o) => !o); setWalletPickerOpen(false); }}
+            className="flex-row items-center gap-1.5 rounded-md px-2 py-1"
             style={{ backgroundColor: '#f0f4f2' }}
           >
             <MethodIcon size={12} weight="bold" color="#3f4946" />
@@ -243,10 +247,44 @@ export default function ParsePreview({
             <Text className="text-[11px]" style={{ color: '#3f4946', opacity: 0.5 }}>▾</Text>
           </Pressable>
         ) : (
-          <View className="flex-row items-center gap-1.5 self-start rounded-md px-2 py-1" style={{ backgroundColor: '#f0f4f2' }}>
+          <View className="flex-row items-center gap-1.5 rounded-md px-2 py-1" style={{ backgroundColor: '#f0f4f2' }}>
             <MethodIcon size={12} weight="bold" color="#6e9990" />
             <Text className="text-[11px] font-semibold" style={{ color: '#6e9990' }}>{method.label}</Text>
           </View>
+        )}
+
+        {/* Wallet link — pay this expense FROM a wallet, or save income INTO one. */}
+        {canLinkWallet && !logged && (
+          <Pressable
+            onPress={() => { setWalletPickerOpen((o) => !o); setMethodPickerOpen(false); }}
+            className="flex-row items-center gap-1.5 rounded-md px-2 py-1"
+            style={{ backgroundColor: '#f0f4f2' }}
+          >
+            {selectedWallet
+              ? (() => { const Icon = getIconComponent(selectedWallet.icon); return <Icon size={12} weight="fill" color="#1f695d" />; })()
+              : <WalletIcon size={12} weight="regular" color="#6e9990" />}
+            <Text className="text-[11px] font-semibold" style={{ color: selectedWallet ? '#1f695d' : '#6e9990' }}>
+              {selectedWallet ? `${isIncome ? 'Into' : 'From'} ${selectedWallet.name}` : 'Wallet'}
+            </Text>
+            <Text className="text-[11px]" style={{ color: selectedWallet ? '#1f695d' : '#6e9990', opacity: 0.5 }}>▾</Text>
+          </Pressable>
+        )}
+
+        {/* Expense ⇄ Income — flips this entry's type. Income is money in (a
+            deposit); expense is money out. Sits inline with the other chips. */}
+        {canToggleType && !logged && (
+          <Pressable
+            onPress={() => onTypeChange?.(isIncome ? 'expense' : 'income')}
+            className="flex-row items-center gap-1.5 rounded-md px-2 py-1"
+            style={{ backgroundColor: isIncome ? '#1f695d' : '#f0f4f2' }}
+          >
+            {isIncome
+              ? <ArrowDownLeft size={13} weight="bold" color="#ffffff" />
+              : <ArrowUpRight size={13} weight="bold" color="#6e9990" />}
+            <Text className="text-[11px] font-semibold" style={{ color: isIncome ? '#ffffff' : '#6e9990' }}>
+              {isIncome ? 'Income' : 'Expense'}
+            </Text>
+          </Pressable>
         )}
       </View>
 
@@ -272,58 +310,44 @@ export default function ParsePreview({
         </View>
       )}
 
-      {/* Wallet link */}
-      {canLinkWallet && !logged && (
-        <View className="mt-2">
-          <Pressable
-            onPress={() => setWalletPickerOpen((o) => !o)}
-            className="flex-row items-center gap-1.5 self-start rounded-md px-2 py-1"
-            style={{ backgroundColor: '#f0f4f2' }}
-          >
-            {selectedWallet
-              ? (() => { const Icon = getIconComponent(selectedWallet.icon); return <Icon size={12} weight="fill" color="#1f695d" />; })()
-              : <WalletIcon size={12} weight="regular" color="#6e9990" />}
-            <Text className="text-[11px] font-semibold" style={{ color: selectedWallet ? '#1f695d' : '#6e9990' }}>
-              {selectedWallet ? `${isIncome ? 'Into' : 'From'} ${selectedWallet.name}` : isIncome ? 'Save into a wallet' : 'Pay from a wallet'}
-            </Text>
-            <Text className="text-[11px]" style={{ color: selectedWallet ? '#1f695d' : '#6e9990', opacity: 0.5 }}>▾</Text>
-          </Pressable>
-
-          {walletPickerOpen && (
-            <View className="mt-2 flex-row flex-wrap rounded-2xl p-2" style={{ backgroundColor: '#f0f4f2', borderWidth: 1, borderColor: '#e7edeb' }}>
-              <View style={{ width: '50%' }} className="p-0.5">
+      {/* Inline wallet picker — records a matching wallet movement on log so the
+          wallet balance stays in sync. */}
+      {walletPickerOpen && canLinkWallet && !logged && (
+        <View className="mt-2 flex-row flex-wrap rounded-2xl p-2" style={{ backgroundColor: '#f0f4f2', borderWidth: 1, borderColor: '#e7edeb' }}>
+          <View style={{ width: '50%' }} className="p-0.5">
+            <Pressable
+              onPress={() => { onWalletChange?.(undefined); setWalletPickerOpen(false); }}
+              className="items-center justify-center rounded-xl py-2"
+              style={{ backgroundColor: walletId === undefined ? '#1f695d' : '#ffffff' }}
+            >
+              <Text className="text-[11px] font-semibold" style={{ color: walletId === undefined ? '#ffffff' : '#3f4946' }}>None</Text>
+            </Pressable>
+          </View>
+          {wallets.map((w) => {
+            const Icon = getIconComponent(w.icon);
+            const active = w.id === walletId;
+            return (
+              <View key={w.id} style={{ width: '50%' }} className="p-0.5">
                 <Pressable
-                  onPress={() => { onWalletChange?.(undefined); setWalletPickerOpen(false); }}
-                  className="items-center justify-center rounded-xl py-2"
-                  style={{ backgroundColor: walletId === undefined ? '#1f695d' : '#ffffff' }}
+                  onPress={() => { onWalletChange?.(w.id); setWalletPickerOpen(false); }}
+                  className="flex-row items-center justify-center gap-1.5 rounded-xl py-2"
+                  style={{ backgroundColor: active ? '#1f695d' : '#ffffff' }}
                 >
-                  <Text className="text-[11px] font-semibold" style={{ color: walletId === undefined ? '#ffffff' : '#3f4946' }}>None</Text>
+                  <Icon size={13} weight={active ? 'fill' : 'regular'} color={active ? '#ffffff' : '#3f4946'} />
+                  <Text className="text-[11px] font-semibold" numberOfLines={1} style={{ color: active ? '#ffffff' : '#3f4946' }}>{w.name}</Text>
                 </Pressable>
               </View>
-              {wallets.map((w) => {
-                const Icon = getIconComponent(w.icon);
-                const active = w.id === walletId;
-                return (
-                  <View key={w.id} style={{ width: '50%' }} className="p-0.5">
-                    <Pressable
-                      onPress={() => { onWalletChange?.(w.id); setWalletPickerOpen(false); }}
-                      className="flex-row items-center justify-center gap-1.5 rounded-xl py-2"
-                      style={{ backgroundColor: active ? '#1f695d' : '#ffffff' }}
-                    >
-                      <Icon size={13} weight={active ? 'fill' : 'regular'} color={active ? '#ffffff' : '#3f4946'} />
-                      <Text className="text-[11px] font-semibold" numberOfLines={1} style={{ color: active ? '#ffffff' : '#3f4946' }}>{w.name}</Text>
-                    </Pressable>
-                  </View>
-                );
-              })}
-            </View>
-          )}
-          {selectedWallet && (
-            <Text className="mt-1.5 text-[11px] leading-relaxed" style={{ color: '#6e9990' }}>
-              {isIncome ? `Adds to ${selectedWallet.name}'s balance.` : `Comes out of ${selectedWallet.name}'s balance.`}
-            </Text>
-          )}
+            );
+          })}
         </View>
+      )}
+
+      {/* Contextual hints for the chips above — shown only when relevant so the
+          strip stays clean. */}
+      {canLinkWallet && !logged && selectedWallet && (
+        <Text className="mt-1.5 text-[11px] leading-relaxed" style={{ color: '#6e9990' }}>
+          {isIncome ? `Adds to ${selectedWallet.name}'s balance.` : `Comes out of ${selectedWallet.name}'s balance.`}
+        </Text>
       )}
 
       {/* Debt direction toggle */}
@@ -391,43 +415,6 @@ export default function ParsePreview({
         <Text className="mt-2 text-[11px] font-medium" style={{ color: '#6e9990' }}>
           Transfer — not counted as spending.
         </Text>
-      )}
-
-      {/* Reimbursement toggle — spend categories only. When on, the entry is a
-          credit back that reduces this category's spending instead of adding. */}
-      {canReimburse && !logged && (
-        <View className="mt-3">
-          <Pressable
-            onPress={() => onReimbursementChange?.(!isReimbursement)}
-            className="flex-row items-center gap-3 rounded-xl px-4 py-3"
-            style={{
-              backgroundColor: isReimbursement ? 'rgba(31,105,80,0.08)' : '#ffffff',
-              borderWidth: 1,
-              borderColor: isReimbursement ? '#1f695d' : '#e7edeb',
-            }}
-          >
-            <View className="h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: isReimbursement ? '#1f695d' : '#f0f4f2' }}>
-              <ArrowUUpLeft size={15} weight="bold" color={isReimbursement ? '#ffffff' : '#6e9990'} />
-            </View>
-            <View className="min-w-0 flex-1">
-              <Text className="text-[13px] font-semibold" style={{ color: '#191c1c' }}>
-                Reimbursement
-              </Text>
-              <Text className="text-[11px]" style={{ color: '#6e9990' }}>
-                Refunds, rebates, and money paid back
-              </Text>
-            </View>
-            {/* Switch */}
-            <View className="relative h-5 w-9 shrink-0 rounded-full" style={{ backgroundColor: isReimbursement ? '#1f695d' : '#cde0db' }}>
-              <View className="absolute h-4 w-4 rounded-full bg-white" style={{ top: 2, left: isReimbursement ? 18 : 2 }} />
-            </View>
-          </Pressable>
-          {isReimbursement && (
-            <Text className="mt-1.5 text-[11px] leading-relaxed" style={{ color: '#6e9990' }}>
-              Credited back — reduces this category&apos;s spending instead of adding to it.
-            </Text>
-          )}
-        </View>
       )}
 
       {/* Inline category picker */}

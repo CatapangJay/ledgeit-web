@@ -12,6 +12,7 @@ import { useIsDesktop } from '@/lib/useIsDesktop'
 import ParsePreview from './ParsePreview'
 import BulkEntryMode from './BulkEntryMode'
 import type { MerchantSuggestion } from '@/lib/fuzzy'
+import { CATEGORIES } from '@/types'
 import type { Transaction, TransactionDraft, Category } from '@/types'
 
 const EXAMPLES = [
@@ -516,30 +517,26 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
                     const newType = cat.id === 'income' ? 'income' : cat.id === 'transfers' ? 'transfer' : 'expense'
                     setParseResult((prev) =>
                       prev
-                        ? {
-                            ...prev,
-                            category: cat,
-                            // A reimbursement only applies to plain expense
-                            // categories — clear it when moving to income /
-                            // transfer / debts so it can't linger.
-                            draft: {
-                              ...prev.draft,
-                              type: newType,
-                              isReimbursement: newType === 'expense' && cat.id !== 'debts'
-                                ? prev.draft.isReimbursement
-                                : false,
-                            },
-                          }
+                        ? { ...prev, category: cat, draft: { ...prev.draft, type: newType } }
                         : prev,
                     )
                     if (parseResult?.draft) {
                       learnCategory(getMerchantKey(parseResult.draft), cat.id)
                     }
                   }}
-                  onReimbursementChange={(value) =>
-                    setParseResult((prev) =>
-                      prev ? { ...prev, draft: { ...prev.draft, isReimbursement: value } } : prev
-                    )
+                  onTypeChange={(type) =>
+                    setParseResult((prev) => {
+                      if (!prev) return prev
+                      // Type drives the category: Income → the Income category;
+                      // switching back to expense from Income falls to Other.
+                      const category =
+                        type === 'income'
+                          ? CATEGORIES.find((c) => c.id === 'income')!
+                          : prev.category.id === 'income'
+                            ? CATEGORIES.find((c) => c.id === 'other')!
+                            : prev.category
+                      return { ...prev, category, draft: { ...prev.draft, type } }
+                    })
                   }
                   onDateChange={(date) =>
                     setParseResult((prev) =>

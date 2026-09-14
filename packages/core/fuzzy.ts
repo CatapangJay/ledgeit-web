@@ -132,6 +132,19 @@ function scoreCandidate(input: string, candidate: string): number {
   const aDedoubled = a.replace(/(.)\1+/g, '$1')
   if (bDedoubled === a || aDedoubled === b || aDedoubled === bDedoubled) return 0.87
 
+  // ── Adjacent-swap typo: "mcod" → "mcdo", "recieve" → "receive" ──
+  // Try every single adjacent-character swap in the input. If a swap lands on
+  // the whole candidate it's a clean typo; if it lands on the candidate's start
+  // it's a typo'd abbreviation of a longer brand ("mcod" → "mcdo…nald's").
+  for (let i = 0; i < a.length - 1; i++) {
+    if (a[i] === a[i + 1]) continue
+    const swapped = a.slice(0, i) + a[i + 1] + a[i] + a.slice(i + 2)
+    if (swapped === b) return 0.9
+    if (b.startsWith(swapped) && swapped.length >= 3) {
+      return Math.max(0.8, 0.9 - (b.length - swapped.length) * 0.012)
+    }
+  }
+
   // ── Levenshtein on full strings ──
   const minLen = Math.min(a.length, b.length)
   const threshold = Math.max(1, Math.floor(minLen / 4))
@@ -219,7 +232,17 @@ export function getMerchantSuggestions(
 
 /**
  * Returns the single best merchant resolution, or `null` if confidence is below
- * `threshold`. Used for silent auto-correction in bulk mode.
+ * `threshold`. Used for *silent* auto-correction of the merchant name.
+ *
+ * Silent correction is intentionally conservative: it fixes typos and expands
+ * abbreviations ("mcod" → "McDonald's") but must NEVER flatten a name the user
+ * deliberately made more specific. When someone types "Grocers gulay and stuff"
+ * they want that verbatim, not a silent replacement with the generic "Groceries"
+ * from their history. So a match is only auto-applied when it doesn't DROP words
+ * the user typed — i.e. the correction has at least as many words as the input.
+ * Anything that would shorten a multi-word entry is left to the (non-destructive)
+ * suggestion chips instead. `getMerchantSuggestions` is unaffected, so the match
+ * still surfaces there as an opt-in.
  */
 export function resolveMerchant(
   input: string,
@@ -230,5 +253,12 @@ export function resolveMerchant(
     maxResults: 1,
     minScore: threshold,
   })
-  return top?.name ?? null
+  if (!top) return null
+
+  const inputWords = input.trim().split(/\s+/).filter(Boolean).length
+  const matchWords = top.name.trim().split(/\s+/).filter(Boolean).length
+  // The user added descriptive words the match doesn't preserve → keep theirs.
+  if (matchWords < inputWords) return null
+
+  return top.name
 }

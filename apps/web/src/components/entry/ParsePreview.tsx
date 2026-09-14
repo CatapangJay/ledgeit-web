@@ -2,7 +2,7 @@
 
 import { createElement, useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, CalendarBlank, CheckCircle, Circle, Wallet as WalletIcon, ArrowUUpLeft } from '@phosphor-icons/react'
+import { X, CalendarBlank, CheckCircle, Circle, Wallet as WalletIcon, ArrowDownLeft, ArrowUpRight } from '@phosphor-icons/react'
 import CategoryBadge from './CategoryBadge'
 import DatePickerSheet from '@/components/ui/DatePickerSheet'
 import { formatCurrency, formatDate } from '@/lib/formatters'
@@ -102,8 +102,8 @@ interface Props {
   onMerchantChange?: (name: string) => void
   onDateChange?: (date: string) => void
   onPaymentMethodChange?: (method: PaymentMethodId) => void
-  /** Toggle whether this expense is a reimbursement (credited back). */
-  onReimbursementChange?: (value: boolean) => void
+  /** Flip this entry between a plain expense and income. */
+  onTypeChange?: (type: 'expense' | 'income') => void
   /** Debt entries only: current lent-out vs borrowed direction. */
   debtDirection?: DebtDirection
   onDebtDirectionChange?: (direction: DebtDirection) => void
@@ -140,7 +140,7 @@ const itemVariants = {
   },
 }
 
-export default function ParsePreview({ draft, category, confidence, customCategories = [], onCategoryChange, onMerchantChange, onDateChange, onPaymentMethodChange, onReimbursementChange, debtDirection, onDebtDirectionChange, debtDueDate, onDebtDueDateChange, selected, onToggleSelect, logged = false, wallets = [], walletId, onWalletChange }: Props) {
+export default function ParsePreview({ draft, category, confidence, customCategories = [], onCategoryChange, onMerchantChange, onDateChange, onPaymentMethodChange, onTypeChange, debtDirection, onDebtDirectionChange, debtDueDate, onDebtDueDateChange, selected, onToggleSelect, logged = false, wallets = [], walletId, onWalletChange }: Props) {
   const hiddenCategories = useStore((s) => s.hiddenCategories)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [datePickerOpen, setDatePickerOpen] = useState(false)
@@ -154,11 +154,9 @@ export default function ParsePreview({ draft, category, confidence, customCatego
   const isTransfer = draft.type === 'transfer'
   const isDebt = category.id === 'debts'
   const isBulk = onToggleSelect !== undefined
-  // A reimbursement only applies to plain expense categories (not income /
-  // transfer / debts). When it does, offer a toggle that flips this expense into
-  // a credit back to the category.
-  const canReimburse = onReimbursementChange && draft.type === 'expense' && !isDebt
-  const isReimbursement = draft.isReimbursement === true
+  // The expense⇄income toggle applies only to plain money entries — not debts or
+  // transfers, which are typed by their own dedicated flows.
+  const canToggleType = onTypeChange && !isDebt && !isTransfer
   const method = resolvePaymentMethod(draft.paymentMethod)
   // A wallet link is offered only for plain spending/income (not debts or
   // transfers, which already move money between pockets). Expenses are paid FROM
@@ -314,11 +312,15 @@ export default function ParsePreview({ draft, category, confidence, customCatego
         )}
       </motion.div>
 
-      {/* Row 3: Payment method chip */}
-      <motion.div variants={itemVariants} className="mt-2 flex items-center gap-2">
+      {/* Row 3: Chip strip — payment method · wallet · reimbursement.
+          A single wrapping row keeps these options compact and side-by-side
+          instead of stacking; each chip's expanded picker/hint renders below
+          the strip so the row itself stays uncluttered. */}
+      <motion.div variants={itemVariants} className="mt-2 flex flex-wrap items-center gap-1.5">
+        {/* Payment method */}
         {onPaymentMethodChange && !logged ? (
           <button
-            onClick={() => setMethodPickerOpen((o) => !o)}
+            onClick={() => { setMethodPickerOpen((o) => !o); setWalletPickerOpen(false) }}
             aria-label={`Payment method: ${method.label}. Tap to change`}
             className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold transition-all ${methodPickerOpen ? 'ring-1 ring-[#1f695d]/40' : ''}`}
             style={{ background: '#f0f4f2', color: '#3f4946' }}
@@ -335,6 +337,44 @@ export default function ParsePreview({ draft, category, confidence, customCatego
             <MethodIcon name={method.icon} />
             {method.label}
           </span>
+        )}
+
+        {/* Wallet link — pay this expense FROM a wallet, or save income INTO one. */}
+        {canLinkWallet && !logged && (
+          <button
+            onClick={() => { setWalletPickerOpen((o) => !o); setMethodPickerOpen(false) }}
+            aria-label={selectedWallet ? `Wallet: ${selectedWallet.name}. Tap to change` : 'Link a wallet'}
+            className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold transition-all ${walletPickerOpen ? 'ring-1 ring-[#1f695d]/40' : ''}`}
+            style={{ background: '#f0f4f2', color: selectedWallet ? '#1f695d' : '#6e9990' }}
+          >
+            {selectedWallet
+              ? createElement(getIconComponent(selectedWallet.icon), { size: 12, weight: 'fill', 'aria-hidden': true })
+              : <WalletIcon size={12} weight="regular" aria-hidden="true" />}
+            {selectedWallet
+              ? `${isIncome ? 'Into' : 'From'} ${selectedWallet.name}`
+              : 'Wallet'}
+            <span className="opacity-50">▾</span>
+          </button>
+        )}
+
+        {/* Expense ⇄ Income — flips this entry's type. Income is money in (a
+            deposit); expense is money out. Sits inline with the other chips. */}
+        {canToggleType && !logged && (
+          <button
+            type="button"
+            onClick={() => onTypeChange!(isIncome ? 'expense' : 'income')}
+            aria-label={`This is ${isIncome ? 'income' : 'an expense'}. Tap to switch.`}
+            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold transition-all"
+            style={{
+              background: isIncome ? '#1f695d' : '#f0f4f2',
+              color: isIncome ? '#ffffff' : '#6e9990',
+            }}
+          >
+            {isIncome
+              ? <ArrowDownLeft size={13} weight="bold" aria-hidden="true" />
+              : <ArrowUpRight size={13} weight="bold" aria-hidden="true" />}
+            {isIncome ? 'Income' : 'Expense'}
+          </button>
         )}
       </motion.div>
 
@@ -372,73 +412,57 @@ export default function ParsePreview({ draft, category, confidence, customCatego
         )}
       </AnimatePresence>
 
-      {/* Wallet link — pay this expense FROM a wallet, or save income INTO one.
-          Records a matching wallet movement so the wallet balance stays in sync. */}
-      {canLinkWallet && !logged && (
-        <motion.div variants={itemVariants} className="mt-2">
-          <button
-            onClick={() => setWalletPickerOpen((o) => !o)}
-            aria-label={selectedWallet ? `Wallet: ${selectedWallet.name}. Tap to change` : 'Link a wallet'}
-            className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold transition-all ${walletPickerOpen ? 'ring-1 ring-[#1f695d]/40' : ''}`}
-            style={{ background: '#f0f4f2', color: selectedWallet ? '#1f695d' : '#6e9990' }}
+      {/* Inline wallet picker — records a matching wallet movement on log so the
+          wallet balance stays in sync. */}
+      <AnimatePresence>
+        {walletPickerOpen && canLinkWallet && !logged && (
+          <motion.div
+            initial={{ opacity: 0, y: -4, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.97 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+            className="mt-2 grid grid-cols-2 gap-1.5 rounded-2xl p-2"
+            style={{ background: '#f0f4f2', border: '1px solid #e7edeb' }}
           >
-            {selectedWallet
-              ? createElement(getIconComponent(selectedWallet.icon), { size: 12, weight: 'fill', 'aria-hidden': true })
-              : <WalletIcon size={12} weight="regular" aria-hidden="true" />}
-            {selectedWallet
-              ? `${isIncome ? 'Into' : 'From'} ${selectedWallet.name}`
-              : isIncome ? 'Save into a wallet' : 'Pay from a wallet'}
-            <span className="opacity-50">▾</span>
-          </button>
-
-          <AnimatePresence>
-            {walletPickerOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: -4, scale: 0.97 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -4, scale: 0.97 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-                className="mt-2 grid grid-cols-2 gap-1.5 rounded-2xl p-2"
-                style={{ background: '#f0f4f2', border: '1px solid #e7edeb' }}
-              >
-                {/* None option */}
+            {/* None option */}
+            <button
+              onClick={() => { onWalletChange?.(undefined); setWalletPickerOpen(false) }}
+              className="flex items-center justify-center gap-1.5 rounded-xl py-2 text-[11px] font-semibold transition-colors"
+              style={walletId === undefined
+                ? { background: '#1f695d', color: '#ffffff' }
+                : { background: '#ffffff', color: '#3f4946' }}
+            >
+              None
+            </button>
+            {wallets.map((w) => {
+              const Icon = getIconComponent(w.icon)
+              const active = w.id === walletId
+              return (
                 <button
-                  onClick={() => { onWalletChange?.(undefined); setWalletPickerOpen(false) }}
+                  key={w.id}
+                  onClick={() => { onWalletChange?.(w.id); setWalletPickerOpen(false) }}
                   className="flex items-center justify-center gap-1.5 rounded-xl py-2 text-[11px] font-semibold transition-colors"
-                  style={walletId === undefined
+                  style={active
                     ? { background: '#1f695d', color: '#ffffff' }
                     : { background: '#ffffff', color: '#3f4946' }}
                 >
-                  None
+                  <Icon size={13} weight={active ? 'fill' : 'regular'} aria-hidden="true" />
+                  <span className="truncate">{w.name}</span>
                 </button>
-                {wallets.map((w) => {
-                  const Icon = getIconComponent(w.icon)
-                  const active = w.id === walletId
-                  return (
-                    <button
-                      key={w.id}
-                      onClick={() => { onWalletChange?.(w.id); setWalletPickerOpen(false) }}
-                      className="flex items-center justify-center gap-1.5 rounded-xl py-2 text-[11px] font-semibold transition-colors"
-                      style={active
-                        ? { background: '#1f695d', color: '#ffffff' }
-                        : { background: '#ffffff', color: '#3f4946' }}
-                    >
-                      <Icon size={13} weight={active ? 'fill' : 'regular'} aria-hidden="true" />
-                      <span className="truncate">{w.name}</span>
-                    </button>
-                  )
-                })}
-              </motion.div>
-            )}
-          </AnimatePresence>
-          {selectedWallet && (
-            <p className="mt-1.5 text-[11px] leading-relaxed" style={{ color: '#6e9990' }}>
-              {isIncome
-                ? `Adds to ${selectedWallet.name}'s balance.`
-                : `Comes out of ${selectedWallet.name}'s balance.`}
-            </p>
-          )}
-        </motion.div>
+              )
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Contextual hints for the chips above — shown only when relevant so the
+          strip stays clean. */}
+      {canLinkWallet && !logged && selectedWallet && (
+        <p className="mt-1.5 text-[11px] leading-relaxed" style={{ color: '#6e9990' }}>
+          {isIncome
+            ? `Adds to ${selectedWallet.name}'s balance.`
+            : `Comes out of ${selectedWallet.name}'s balance.`}
+        </p>
       )}
 
       {/* Debt direction toggle — lets the user confirm/correct the inferred
@@ -513,45 +537,6 @@ export default function ParsePreview({ draft, category, confidence, customCatego
         <p className="mt-2 text-[11px] font-medium" style={{ color: '#6e9990' }}>
           Transfer — not counted as spending.
         </p>
-      )}
-
-      {/* Reimbursement toggle — expense categories only. Flips this entry into a
-          credit that reduces the category's spending instead of adding to it. */}
-      {canReimburse && !logged && (
-        <motion.button
-          variants={itemVariants}
-          type="button"
-          onClick={() => onReimbursementChange!(!isReimbursement)}
-          aria-pressed={isReimbursement}
-          className="mt-3 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors"
-          style={{
-            background: isReimbursement ? 'rgba(31,105,80,0.08)' : '#f0f4f2',
-            border: `1px solid ${isReimbursement ? '#1f695d' : '#e7edeb'}`,
-          }}
-        >
-          <div
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
-            style={{ background: isReimbursement ? '#1f695d' : '#ffffff' }}
-          >
-            <ArrowUUpLeft size={15} weight="bold" color={isReimbursement ? '#ffffff' : '#6e9990'} aria-hidden="true" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-semibold" style={{ color: '#191c1c' }}>Reimbursement</p>
-            <p className="text-[11px] leading-relaxed" style={{ color: '#6e9990' }}>
-              Credited back — reduces this category&apos;s spending instead of adding to it.
-            </p>
-          </div>
-          {/* Switch */}
-          <div
-            className="relative h-5 w-9 shrink-0 rounded-full transition-colors"
-            style={{ background: isReimbursement ? '#1f695d' : '#cde0db' }}
-          >
-            <span
-              className="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all"
-              style={{ left: isReimbursement ? '18px' : '2px' }}
-            />
-          </div>
-        </motion.button>
       )}
 
       {/* Inline category picker */}
