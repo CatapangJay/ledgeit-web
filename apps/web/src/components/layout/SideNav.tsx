@@ -9,6 +9,7 @@ import {
   HouseIcon,
   ListIcon,
   PlusCircleIcon,
+  UserCircleIcon,
   WalletIcon,
 } from '@phosphor-icons/react'
 import { motion } from 'framer-motion'
@@ -24,6 +25,11 @@ const NAV_ITEMS = [
   { label: 'History', icon: ListIcon, href: '/history' },
 ]
 
+// Rendered separately, pinned to the bottom of the rail.
+const ACCOUNT_ITEM = { label: 'Account', icon: UserCircleIcon, href: '/account' }
+
+type NavItem = (typeof NAV_ITEMS)[number]
+
 export default function SideNav() {
   const pathname = usePathname()
   const [sheetOpen, setSheetOpen] = useState(false)
@@ -37,6 +43,46 @@ export default function SideNav() {
   }, [pathname])
 
   const activeHref = pendingHref ?? pathname
+
+  function renderNavItem(item: NavItem) {
+    const isActive =
+      item.href === '/' ? activeHref === '/' : activeHref.startsWith(item.href)
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        prefetch
+        aria-label={item.label}
+        aria-current={isActive ? 'page' : undefined}
+        // Highlight this item instantly on tap — don't wait for the route to commit.
+        onClick={() => setPendingHref(item.href)}
+        className="relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:scale-[0.98]"
+        style={{ transition: 'transform 0.1s' }}
+      >
+        {isActive && (
+          <motion.div
+            layoutId="sidebar-indicator"
+            className="absolute inset-0 rounded-xl"
+            style={{ background: 'rgba(0,53,46,0.08)' }}
+            transition={{ type: 'spring', stiffness: 500, damping: 40 }}
+          />
+        )}
+        <item.icon
+          size={18}
+          weight={isActive ? 'fill' : 'regular'}
+          color={isActive ? '#00352e' : '#6e9990'}
+          aria-hidden="true"
+          className="relative shrink-0"
+        />
+        <span
+          className="relative text-sm font-semibold"
+          style={{ color: isActive ? '#00352e' : '#6e9990' }}
+        >
+          {item.label}
+        </span>
+      </Link>
+    )
+  }
 
   return (
     <>
@@ -90,47 +136,13 @@ export default function SideNav() {
           className="flex flex-1 flex-col gap-0.5 px-3"
           aria-label="Primary navigation"
         >
-          {NAV_ITEMS.map((item) => {
-            const isActive =
-              item.href === '/' ? activeHref === '/' : activeHref.startsWith(item.href)
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                prefetch
-                aria-label={item.label}
-                aria-current={isActive ? 'page' : undefined}
-                // Highlight this item instantly on tap — don't wait for the
-                // route to commit.
-                onClick={() => setPendingHref(item.href)}
-                className="relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left active:scale-[0.98]"
-                style={{ transition: 'transform 0.1s' }}
-              >
-                {isActive && (
-                  <motion.div
-                    layoutId="sidebar-indicator"
-                    className="absolute inset-0 rounded-xl"
-                    style={{ background: 'rgba(0,53,46,0.08)' }}
-                    transition={{ type: 'spring', stiffness: 500, damping: 40 }}
-                  />
-                )}
-                <item.icon
-                  size={18}
-                  weight={isActive ? 'fill' : 'regular'}
-                  color={isActive ? '#00352e' : '#6e9990'}
-                  aria-hidden="true"
-                  className="relative shrink-0"
-                />
-                <span
-                  className="relative text-sm font-semibold"
-                  style={{ color: isActive ? '#00352e' : '#6e9990' }}
-                >
-                  {item.label}
-                </span>
-              </Link>
-            )
-          })}
+          {NAV_ITEMS.map(renderNavItem)}
         </nav>
+
+        {/* Account — pinned to the bottom (profile, settings & sign out live here) */}
+        <div className="border-t px-3 py-3" style={{ borderColor: 'rgba(205,224,219,0.6)' }}>
+          {renderNavItem(ACCOUNT_ITEM)}
+        </div>
       </aside>
 
       <SmartEntrySheet open={sheetOpen} onClose={() => setSheetOpen(false)} />

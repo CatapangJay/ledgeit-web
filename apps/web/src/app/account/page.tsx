@@ -13,6 +13,7 @@ import BudgetAllocationSheet from '@/components/budget/BudgetAllocationSheet'
 import CategoryManagerSheet from '@/components/budget/CategoryManagerSheet'
 import MonthlyRecapModal from '@/components/dashboard/MonthlyRecapModal'
 import { computeMonthlyRecap, previousMonthKey } from '@/lib/monthlyRecap'
+import { usePreviousMonthLimits } from '@/lib/usePreviousMonthLimits'
 
 type Section = 'profile' | 'password'
 
@@ -41,7 +42,6 @@ export default function AccountPage() {
   const [recapOpen, setRecapOpen] = useState(false)
 
   const transactions = useStore((s) => s.transactions)
-  const budgetLimits = useStore((s) => s.budgetLimits)
   const budgetAllocations = useStore((s) => s.budgetAllocations)
   const activePlan = budgetAllocations.find((a) => a.isActive) ?? null
   const debts = useStore((s) => s.debts)
@@ -53,10 +53,12 @@ export default function AccountPage() {
   const hiddenCategories = useStore((s) => s.hiddenCategories)
 
   // Last month's recap — re-openable here any time (it auto-shows once on the
-  // dashboard at the start of a new month).
+  // dashboard at the start of a new month). Uses last month's frozen budget, not
+  // today's active plan.
+  const { limits: prevMonthLimits } = usePreviousMonthLimits()
   const recap = useMemo(
-    () => computeMonthlyRecap(previousMonthKey(new Date()), transactions, budgetLimits, customCategories),
-    [transactions, budgetLimits, customCategories]
+    () => computeMonthlyRecap(previousMonthKey(new Date()), transactions, prevMonthLimits, customCategories),
+    [transactions, prevMonthLimits, customCategories]
   )
 
   useEffect(() => {
@@ -131,7 +133,7 @@ export default function AccountPage() {
     : '?'
 
   return (
-    <div className="mx-auto max-w-md px-5 pt-16 pb-10 md:pt-10 md:max-w-lg">
+    <div className="mx-auto max-w-md px-5 pt-16 pb-10 md:max-w-3xl md:pt-12">
       {/* Avatar + email */}
       <motion.div
         initial={{ opacity: 0, y: 14 }}
@@ -152,7 +154,7 @@ export default function AccountPage() {
       </motion.div>
 
       {/* Section toggle */}
-      <div className="mb-6 flex rounded-lg border border-ledge-border bg-ledge-surface p-1">
+      <div className="mx-auto mb-6 flex max-w-md rounded-lg border border-ledge-border bg-ledge-surface p-1">
         {(['profile', 'password'] as Section[]).map((s) => (
           <button
             key={s}
@@ -248,6 +250,8 @@ export default function AccountPage() {
               </AnimatePresence>
             </div>
 
+            {/* Quick links — 2-up grid on desktop, single column on mobile */}
+            <div className="grid gap-4 md:grid-cols-2">
             {/* Budget plans */}
             <button
               onClick={() => setBudgetSheetOpen(true)}
@@ -363,6 +367,7 @@ export default function AccountPage() {
               </div>
               <CaretRight size={15} weight="bold" color="#6e9990" aria-hidden="true" />
             </button>
+            </div>
 
             {/* Account metadata */}
             <div
@@ -400,12 +405,12 @@ export default function AccountPage() {
               </dl>
             </div>
 
-            {/* Sign out */}
+            {/* Sign out — centered, not stretched full-width on desktop */}
             <motion.button
               onClick={handleSignOut}
               whileTap={{ scale: 0.97 }}
               transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-rose-500/20 bg-rose-500/5 py-3 font-mono text-sm font-semibold text-rose-400 hover:bg-rose-500/10 transition-colors"
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-rose-500/20 bg-rose-500/5 py-3 font-mono text-sm font-semibold text-rose-400 transition-colors hover:bg-rose-500/10 md:mx-auto md:w-auto md:px-10"
             >
               <SignOut size={15} weight="bold" aria-hidden="true" />
               Sign Out
@@ -419,7 +424,7 @@ export default function AccountPage() {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -10 }}
             transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-            className="flex flex-col gap-4"
+            className="mx-auto flex max-w-md flex-col gap-4"
           >
             <div
               className="flex flex-col gap-4 rounded-xl border border-ledge-border bg-ledge-surface p-4"

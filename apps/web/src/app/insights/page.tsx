@@ -47,7 +47,12 @@ export default function InsightsPage() {
   const contentReady = useDeferredMount()
   const transactions = useStore((s) => s.transactions)
   const ensureFullHistory = useStore((s) => s.ensureFullHistory)
-  const budgetLimits = useStore((s) => s.budgetLimits)
+  const budgetLimitsByMonth = useStore((s) => s.budgetLimitsByMonth)
+  const liveBudgetLimits = useStore((s) => s.budgetLimits)
+  const loadBudgetLimitsForMonth = useStore((s) => s.loadBudgetLimitsForMonth)
+  const backfillBudgetSnapshots = useStore((s) => s.backfillBudgetSnapshots)
+  const budgetAllocationsLoaded = useStore((s) => s.budgetAllocationsLoaded)
+  const fullHistoryLoaded = useStore((s) => s.fullHistoryLoaded)
   const budgetAllocations = useStore((s) => s.budgetAllocations)
   const customCategories = useStore((s) => s.customCategories)
   const hiddenCategories = useStore((s) => s.hiddenCategories)
@@ -58,9 +63,35 @@ export default function InsightsPage() {
     ensureFullHistory()
   }, [ensureFullHistory])
 
+  // One-time: seed historical budget snapshots for past months that predate this
+  // feature, using the current plan. Gated on BOTH the active plan being loaded
+  // (so there's something to seed from — it self-guards otherwise) and the full
+  // history being present (so every past month with activity is counted; the
+  // pass runs once per session and won't retry against a partial set).
+  useEffect(() => {
+    if (budgetAllocationsLoaded && fullHistoryLoaded) backfillBudgetSnapshots()
+  }, [budgetAllocationsLoaded, fullHistoryLoaded, backfillBudgetSnapshots])
+
   const activePlan = budgetAllocations.find((a) => a.isActive)
 
   const { start, end, label } = useMemo(() => getMonthBounds(monthOffset), [monthOffset])
+
+  // 'YYYY-MM' of the viewed month — the key both transactions and the budget
+  // snapshot share.
+  const monthKey = start.slice(0, 7)
+
+  // Historical months show the budget that applied *then* (a per-month
+  // snapshot), not today's active plan. The current/future month is served live.
+  useEffect(() => {
+    loadBudgetLimitsForMonth(monthKey)
+  }, [monthKey, loadBudgetLimitsForMonth])
+
+  // Current (and future) month reflects the live active plan; past months use
+  // their frozen snapshot (empty until one was captured).
+  const budgetLimits = useMemo(
+    () => (monthOffset < 0 ? (budgetLimitsByMonth[monthKey] ?? []) : liveBudgetLimits),
+    [monthOffset, monthKey, budgetLimitsByMonth, liveBudgetLimits]
+  )
 
   const monthTxns = useMemo(
     () => transactions.filter((t) => t.date >= start && t.date <= end),
@@ -325,12 +356,13 @@ export default function InsightsPage() {
           </div>
 
           {/* Budget bars — click a category to expand its breakdown for the month */}
-          {visibleCategories.map(({ cat, spent, limit }) => (
+          {visibleCategories.map(({ cat, spent, limit, hasLimit }) => (
             <BudgetBar
               key={cat.id}
               category={cat}
               spent={spent}
               limit={limit}
+              hasLimit={hasLimit}
               expanded={expandedCategory === cat.id}
               onToggle={toggleCategory}
             >

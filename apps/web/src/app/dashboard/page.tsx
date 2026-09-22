@@ -27,6 +27,7 @@ import MonthlyRecapModal from '@/components/dashboard/MonthlyRecapModal'
 import { useDeferredMount } from '@/lib/useDeferredMount'
 import { useStore } from '@/lib/store'
 import { computeMonthlyRecap, previousMonthKey } from '@/lib/monthlyRecap'
+import { usePreviousMonthLimits } from '@/lib/usePreviousMonthLimits'
 
 // Product register: no page-load choreography. A single fast fade acknowledges
 // the load without making the user wait for a spatial reveal sequence.
@@ -79,26 +80,31 @@ export default function DashboardPage() {
   // visit of the new month. Derived (not an effect) so it can't flash before we
   // know whether it was already dismissed.
   const transactions = useStore((s) => s.transactions)
-  const budgetLimits = useStore((s) => s.budgetLimits)
   const customCategories = useStore((s) => s.customCategories)
   const lastRecapMonth = useStore((s) => s.lastRecapMonth)
   const lastRecapMonthLoaded = useStore((s) => s.lastRecapMonthLoaded)
   const budgetAllocationsLoaded = useStore((s) => s.budgetAllocationsLoaded)
   const markRecapSeen = useStore((s) => s.markRecapSeen)
+  // The recap covers LAST month — use the budget that applied then, not today's.
+  const { limits: prevMonthLimits, loaded: prevMonthLimitsLoaded } = usePreviousMonthLimits()
 
   const recap = useMemo(() => {
     const key = previousMonthKey(new Date())
-    return computeMonthlyRecap(key, transactions, budgetLimits, customCategories)
-  }, [transactions, budgetLimits, customCategories])
+    return computeMonthlyRecap(key, transactions, prevMonthLimits, customCategories)
+  }, [transactions, prevMonthLimits, customCategories])
 
   // Eligible once we know both whether the recap was already seen AND that the
   // budget/onboarding state has resolved (a first-time user gets onboarding, not
   // a recap — and would have no prior-month data anyway). markRecapSeen flips
   // lastRecapMonth, which closes this naturally; recapDismissed is the belt-and-
   // suspenders guard against a rolled-back write reopening it.
+  // Also wait for last month's budget snapshot so the once-per-month recap opens
+  // with its budget-adherence section already populated — never flashing it in
+  // late or (if the user dismisses first) missing it for the month entirely.
   const recapEligible =
     lastRecapMonthLoaded &&
     budgetAllocationsLoaded &&
+    prevMonthLimitsLoaded &&
     !recapDismissed &&
     lastRecapMonth !== recap.monthKey &&
     !recap.isEmpty

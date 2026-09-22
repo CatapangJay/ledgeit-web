@@ -9,7 +9,7 @@ import {
   bulkSetDate,
   bulkDeleteTransactions,
 } from '@/lib/db/transactions'
-import { fetchBudgetLimits } from '@/lib/db/budgetLimits'
+import { fetchBudgetLimits, replaceBudgetLimits, fetchSnapshottedMonths } from '@/lib/db/budgetLimits'
 import {
   fetchBudgetAllocations,
   createBudgetAllocation,
@@ -77,6 +77,13 @@ function currentMonthFirstDay(): string {
   return `${y}-${m}-01`
 }
 
+// Local-time 'YYYY-MM' key for the current calendar month. Budget snapshots are
+// keyed by this so historical months keep the limits that applied then.
+function currentMonthKey(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
 // First day (local-time YYYY-MM-DD) of the *previous* month. This is the lower
 // bound for the initial transaction load: the app fetches current + previous
 // month up front — enough for the dashboard (previous-month recap, "vs last
@@ -117,11 +124,43 @@ function allocationToLimits(allocation: BudgetAllocation): BudgetLimit[] {
   }))
 }
 
+// Resolve the effective current-month limits from a set of allocations.
+function activeLimitsOf(allocations: BudgetAllocation[]): BudgetLimit[] {
+  const active = allocations.find((a) => a.isActive)
+  return active ? allocationToLimits(active) : DEFAULT_BUDGETS
+}
+
+// State patch that swaps in a new allocation set and keeps `budgetLimits`
+// consistent with it. Shared by every action that mutates allocations so the
+// derivation lives in exactly one place. Note: the current month is served from
+// `budgetLimits` (never the byMonth cache), so this deliberately does NOT seed
+// `budgetLimitsByMonth[currentMonthKey()]` — doing so would shadow the DB
+// snapshot once the app crosses a month boundary while open.
+function applyActiveLimits(
+  allocations: BudgetAllocation[]
+): Partial<StoreState> {
+  return {
+    budgetAllocations: allocations,
+    budgetLimits: activeLimitsOf(allocations),
+  }
+}
+
+// Module-level chain that serializes current-month snapshot writes so rapid
+// successive mutations (e.g. activate A then B) can't land out of order and
+// leave the frozen month reflecting an earlier plan.
+let snapshotChain: Promise<void> = Promise.resolve()
+
 // ─── Store Definition ─────────────────────────────────────────────────────────
 
 interface StoreState {
   transactions: Transaction[]
+  /** Limits for the CURRENT month, derived from the active allocation plan. */
   budgetLimits: BudgetLimit[]
+  /** Per-month snapshots of limits, keyed 'YYYY-MM'. Populated lazily when a
+   *  historical month is viewed. A key mapping to [] means "loaded, no snapshot
+   *  existed" (older months before snapshots shipped) — distinct from absent
+   *  (not yet fetched). The current month is served from `budgetLimits`. */
+  budgetLimitsByMonth: Record<string, BudgetLimit[]>
   budgetAllocations: BudgetAllocation[]
   customCategories: CustomCategory[]
   /** Ids of preset categories the user has hidden ("deleted"). */
@@ -147,6 +186,9 @@ interface StoreState {
   fullHistoryLoaded: boolean
   /** True while ensureFullHistory's all-time fetch is in flight. */
   isLoadingFullHistory: boolean
+  /** True once the one-time historical snapshot backfill has run this session
+   *  (idempotent guard — the backfill itself also skips months already snapshotted). */
+  budgetSnapshotsBackfilled: boolean
 }
 
 interface StoreActions {
@@ -162,6 +204,18 @@ interface StoreActions {
   /** @deprecated Delegates to loadBudgetAllocations */
   loadBudgetLimits: (userId: string) => Promise<void>
   loadBudgetAllocations: (userId: string) => Promise<void>
+  /** Ensure the per-month limit snapshot for 'YYYY-MM' is loaded into
+   *  `budgetLimitsByMonth`. No-op for the current month (served live) and
+   *  idempotent per month. */
+  loadBudgetLimitsForMonth: (monthKey: string) => Promise<void>
+  /** Persist the current month's effective limits to its snapshot row so the
+   *  budget shown now is preserved once this month becomes historical. */
+  persistCurrentMonthSnapshot: () => void
+  /** One-time, idempotent: seed a snapshot for every PAST month that has
+   *  transactions but no snapshot yet, using the current active plan (the only
+   *  budget the app has ever recorded). Requires the full transaction history —
+   *  loads it if needed. No-op without a real active plan. */
+  backfillBudgetSnapshots: () => Promise<void>
   saveBudgetAllocation: (payload: { id?: string; name: string; items: BudgetAllocationItem[] }) => Promise<void>
   activateAllocation: (allocationId: string) => Promise<void>
   deleteAllocation: (allocationId: string) => Promise<void>
@@ -233,6 +287,7 @@ export type AppStore = StoreState & StoreActions
 export const useStore = create<AppStore>()((set, get) => ({
   transactions: [],
   budgetLimits: DEFAULT_BUDGETS,
+  budgetLimitsByMonth: {},
   budgetAllocations: [],
   customCategories: [],
   hiddenCategories: [],
@@ -248,6 +303,7 @@ export const useStore = create<AppStore>()((set, get) => ({
   lastRecapMonthLoaded: false,
   fullHistoryLoaded: false,
   isLoadingFullHistory: false,
+  budgetSnapshotsBackfilled: false,
 
   setUserId(userId) {
     set({
@@ -255,6 +311,7 @@ export const useStore = create<AppStore>()((set, get) => ({
       ...(userId === null ? {
         budgetAllocationsLoaded: false,
         budgetAllocations: [],
+        budgetLimitsByMonth: {},
         incomeAllocationsLoaded: false,
         incomeAllocations: [],
         debts: [],
@@ -264,6 +321,7 @@ export const useStore = create<AppStore>()((set, get) => ({
         transactions: [],
         fullHistoryLoaded: false,
         isLoadingFullHistory: false,
+        budgetSnapshotsBackfilled: false,
       } : {}),
     })
   },
@@ -313,15 +371,116 @@ export const useStore = create<AppStore>()((set, get) => ({
   async loadBudgetAllocations(userId) {
     try {
       const allocations = await fetchBudgetAllocations(userId)
-      const active = allocations.find((a) => a.isActive)
-      set({
-        budgetAllocations: allocations,
-        budgetLimits: active ? allocationToLimits(active) : DEFAULT_BUDGETS,
-        budgetAllocationsLoaded: true,
-      })
+      set({ ...applyActiveLimits(allocations), budgetAllocationsLoaded: true })
+      // Persist the current month's snapshot so once this month rolls into the
+      // past it keeps the limits that apply now.
+      get().persistCurrentMonthSnapshot()
     } catch {
       // Keep defaults on error
       set({ budgetAllocationsLoaded: true })
+    }
+  },
+
+  async loadBudgetLimitsForMonth(monthKey) {
+    // The current (and any future) month is served live from `budgetLimits`.
+    if (monthKey >= currentMonthKey()) return
+    // Idempotent: already fetched (even if the snapshot was empty).
+    if (get().budgetLimitsByMonth[monthKey] !== undefined) return
+    const userId = get().userId
+    if (!userId) return
+    try {
+      const limits = await fetchBudgetLimits(userId, monthKey)
+      // Re-check after the await: if the backfill (or a concurrent load) populated
+      // this month while the fetch was in flight, don't clobber it with a possibly
+      // stale/empty result. Also bail if the session changed underneath us.
+      if (get().userId !== userId) return
+      if (get().budgetLimitsByMonth[monthKey] !== undefined) return
+      set({ budgetLimitsByMonth: { ...get().budgetLimitsByMonth, [monthKey]: limits } })
+    } catch (err) {
+      console.error('[store] loadBudgetLimitsForMonth failed:', err)
+    }
+  },
+
+  persistCurrentMonthSnapshot() {
+    const userId = get().userId
+    if (!userId) return
+    // Only freeze a snapshot when the user has a REAL active plan. When they
+    // don't, `budgetLimits` is DEFAULT_BUDGETS — persisting those would make a
+    // never-configured month show phantom limits historically, defeating the
+    // "no snapshot → no limit shown" degradation.
+    const hasRealPlan = get().budgetAllocations.some((a) => a.isActive)
+    if (!hasRealPlan) return
+
+    const month = currentMonthKey()
+    const limits = get().budgetLimits
+    // Serialize writes so rapid successive mutations can't land out of order and
+    // leave the frozen month reflecting an earlier plan. Fire-and-forget: the
+    // live UI already reflects the change regardless of when this settles.
+    snapshotChain = snapshotChain
+      .catch(() => {}) // never let a prior failure break the chain
+      .then(() => replaceBudgetLimits(userId, limits, month))
+      .catch((err) => console.error('[store] snapshot budget limits failed:', err))
+  },
+
+  async backfillBudgetSnapshots() {
+    // Run at most once per session.
+    if (get().budgetSnapshotsBackfilled) return
+    const userId = get().userId
+    if (!userId) return
+    // The current plan is the only budget the app has ever recorded, so it's the
+    // only thing we can seed history with. Without a real active plan there's
+    // nothing meaningful to backfill — leave past months blank (honest).
+    if (!get().budgetAllocations.some((a) => a.isActive)) return
+
+    // Mark up front so overlapping callers (e.g. two pages mounting) don't both
+    // run the pass; re-armed on sign-out via setUserId.
+    set({ budgetSnapshotsBackfilled: true })
+    try {
+      // Need the full history to know which past months actually had activity.
+      await get().ensureFullHistory()
+      // The session may have changed during the await; never write another
+      // user's rows with this user's id.
+      if (get().userId !== userId) return
+
+      const nowKey = currentMonthKey()
+      // Distinct PAST months (strictly before the current one) that have any
+      // transaction — those are the months worth showing a budget for.
+      const monthsWithActivity = new Set<string>()
+      for (const t of get().transactions) {
+        const key = t.date.slice(0, 7)
+        if (key < nowKey) monthsWithActivity.add(key)
+      }
+      if (monthsWithActivity.size === 0) return
+
+      // Skip months that already have a real snapshot — never overwrite.
+      const existing = await fetchSnapshottedMonths(userId)
+      if (get().userId !== userId) return
+      const toSeed = [...monthsWithActivity].filter((m) => !existing.has(m))
+      if (toSeed.length === 0) return
+
+      const limits = get().budgetLimits
+      // Seed each month, and cache the result so the insights view reflects it
+      // without a refetch. Sequential to stay gentle on the connection; a
+      // per-user backfill is a handful of months in practice.
+      for (const m of toSeed) {
+        // Re-check each iteration: a mid-pass session switch must not leak writes.
+        if (get().userId !== userId) return
+        try {
+          await replaceBudgetLimits(userId, limits, m)
+          if (get().userId !== userId) return
+          set({ budgetLimitsByMonth: { ...get().budgetLimitsByMonth, [m]: limits } })
+        } catch (err) {
+          // Best-effort: a single month failing is swallowed and the pass
+          // continues. The whole session stays marked done, so a failed month
+          // isn't retried until the next reload — self-heals then, since it's
+          // still missing a snapshot.
+          console.error(`[store] backfill snapshot for ${m} failed:`, err)
+        }
+      }
+    } catch (err) {
+      // Allow a retry next session if the pass couldn't complete.
+      console.error('[store] backfillBudgetSnapshots failed:', err)
+      set({ budgetSnapshotsBackfilled: false })
     }
   },
 
@@ -341,27 +500,21 @@ export const useStore = create<AppStore>()((set, get) => ({
       const optimistic = prev.map((a) =>
         a.id === id ? { ...a, name, items } : a
       )
-      const active = optimistic.find((a) => a.isActive)
-      set({
-        budgetAllocations: optimistic,
-        budgetLimits: active ? allocationToLimits(active) : DEFAULT_BUDGETS,
-      })
+      set(applyActiveLimits(optimistic))
       try {
         await updateBudgetAllocation(id, name, items)
+        get().persistCurrentMonthSnapshot()
       } catch (err) {
         console.error('[store] updateBudgetAllocation failed:', err)
-        set({ budgetAllocations: prev })
+        set(applyActiveLimits(prev))
       }
     } else {
       // ── Create new ────────────────────────────────────────────────────────
       try {
         const created = await createBudgetAllocation(userId, name, items)
         const next = [created, ...prev.map((a) => ({ ...a, isActive: created.isActive ? false : a.isActive }))]
-        const active = next.find((a) => a.isActive)
-        set({
-          budgetAllocations: next,
-          budgetLimits: active ? allocationToLimits(active) : DEFAULT_BUDGETS,
-        })
+        set(applyActiveLimits(next))
+        get().persistCurrentMonthSnapshot()
       } catch (err) {
         console.error('[store] createBudgetAllocation failed:', err)
       }
@@ -374,16 +527,13 @@ export const useStore = create<AppStore>()((set, get) => ({
 
     const prev = get().budgetAllocations
     const optimistic = prev.map((a) => ({ ...a, isActive: a.id === allocationId }))
-    const active = optimistic.find((a) => a.isActive)
-    set({
-      budgetAllocations: optimistic,
-      budgetLimits: active ? allocationToLimits(active) : DEFAULT_BUDGETS,
-    })
+    set(applyActiveLimits(optimistic))
     try {
       await activateBudgetAllocation(userId, allocationId)
+      get().persistCurrentMonthSnapshot()
     } catch (err) {
       console.error('[store] activateBudgetAllocation failed:', err)
-      set({ budgetAllocations: prev })
+      set(applyActiveLimits(prev))
     }
   },
 
@@ -404,16 +554,15 @@ export const useStore = create<AppStore>()((set, get) => ({
     const promoted = shouldPromote
       ? remaining.map((a, i) => ({ ...a, isActive: i === 0 }))
       : remaining
-    const active = promoted.find((a) => a.isActive)
-    set({
-      budgetAllocations: promoted,
-      budgetLimits: active ? allocationToLimits(active) : DEFAULT_BUDGETS,
-    })
+    set(applyActiveLimits(promoted))
     try {
       await deleteBudgetAllocation(userId, allocationId, target.isActive)
+      // Only the active plan feeds the current-month snapshot; re-snapshot only
+      // when deleting the active plan actually changed the effective limits.
+      if (target.isActive) get().persistCurrentMonthSnapshot()
     } catch (err) {
       console.error('[store] deleteBudgetAllocation failed:', err)
-      set({ budgetAllocations: prev })
+      set(applyActiveLimits(prev))
     }
   },
 

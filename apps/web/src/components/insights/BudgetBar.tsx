@@ -10,6 +10,9 @@ interface Props {
   category: Category
   spent: number
   limit: number
+  /** Whether `limit` is a real user-set budget (vs. a derived fallback). Only
+   *  then is "remaining" meaningful and shown. */
+  hasLimit?: boolean
   /** When set, the bar becomes an accordion toggle showing `children` when open. */
   expanded?: boolean
   onToggle?: (categoryId: string) => void
@@ -29,7 +32,7 @@ function getLabelColor(ratio: number): string {
   return '#1f6950'
 }
 
-export default function BudgetBar({ category, spent, limit, expanded = false, onToggle, children }: Props) {
+export default function BudgetBar({ category, spent, limit, hasLimit = false, expanded = false, onToggle, children }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const isInView = useInView(ref, { once: true, amount: 0.4 })
   // Clamp at 0 so a net-negative category (refunds exceed spend) shows an empty
@@ -37,6 +40,10 @@ export default function BudgetBar({ category, spent, limit, expanded = false, on
   const ratio = limit > 0 ? Math.max(Math.min(spent / limit, 1), 0) : 0
   const pct = Math.round(ratio * 100)
   const clickable = !!onToggle
+  // Remaining budget — only meaningful against a real user-set limit. Can go
+  // negative when overspent, which we surface in red as "over".
+  const remaining = limit - spent
+  const overspent = remaining < 0
 
   return (
     <div
@@ -95,8 +102,17 @@ export default function BudgetBar({ category, spent, limit, expanded = false, on
           />
         </div>
 
-        {/* Percentage */}
-        <div className="flex justify-end">
+        {/* Percentage + remaining budget */}
+        <div className="flex items-center justify-between">
+          {hasLimit ? (
+            <span className="text-[11px] font-medium" style={{ color: overspent ? '#ba1a1a' : '#6e9990' }}>
+              {overspent
+                ? `${formatCurrency(Math.abs(remaining))} over`
+                : `${formatCurrency(remaining)} left`}
+            </span>
+          ) : (
+            <span aria-hidden="true" />
+          )}
           <span className="text-[11px] font-semibold" style={{ color: getLabelColor(ratio) }}>{pct}%</span>
         </div>
       </div>
