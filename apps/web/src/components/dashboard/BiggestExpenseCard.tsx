@@ -23,22 +23,39 @@ const CATEGORY_HEX: Record<string, string> = {
   other:         '#64748b',
 }
 
-export default function BiggestExpenseCard() {
+interface Props {
+  /** Inclusive 'YYYY-MM-DD' bounds to scope the spotlight to a specific month.
+   *  When set (e.g. the Insights month switcher), only expenses in this range
+   *  are considered — no all-time fallback. Omitted on the dashboard, which
+   *  spotlights the current month and falls back to all-time when it's empty. */
+  start?: string
+  end?: string
+}
+
+export default function BiggestExpenseCard({ start, end }: Props = {}) {
   const transactions = useStore((s) => s.transactions)
 
   const biggest = useMemo(() => {
-    const now = new Date()
-    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-
     // Reimbursements are credits, not purchases — never spotlight one.
-    const thisMonth = transactions.filter((t) => isSpend(t) && !isReimbursement(t) && t.date.startsWith(month))
-    const pool = thisMonth.length > 0 ? thisMonth : transactions.filter((t) => isSpend(t) && !isReimbursement(t))
+    const isCandidate = (t: typeof transactions[number]) => isSpend(t) && !isReimbursement(t)
+
+    let pool: typeof transactions
+    if (start && end) {
+      // Scoped to an explicit month — no all-time fallback so the card tracks
+      // the selected month exactly (empty range → empty state).
+      pool = transactions.filter((t) => isCandidate(t) && t.date >= start && t.date <= end)
+    } else {
+      const now = new Date()
+      const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+      const thisMonth = transactions.filter((t) => isCandidate(t) && t.date.startsWith(month))
+      pool = thisMonth.length > 0 ? thisMonth : transactions.filter(isCandidate)
+    }
 
     return pool.reduce<typeof transactions[number] | null>((max, tx) => {
       if (!max || tx.amount > max.amount) return tx
       return max
     }, null)
-  }, [transactions])
+  }, [transactions, start, end])
 
   const hex = biggest ? CATEGORY_HEX[biggest.category.id] ?? '#64748b' : '#64748b'
   const Icon = biggest ? getIconComponent(biggest.category.icon) : Trophy

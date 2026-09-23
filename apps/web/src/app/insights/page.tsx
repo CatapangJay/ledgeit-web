@@ -326,7 +326,7 @@ export default function InsightsPage() {
 
           {/* <RecurringPaymentsCard /> */}
           <div className="mt-4">
-            <BiggestExpenseCard />
+            <BiggestExpenseCard start={start} end={end} />
           </div>
         </div>
 
