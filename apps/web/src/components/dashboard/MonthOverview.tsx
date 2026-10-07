@@ -5,6 +5,7 @@ import { motion, useReducedMotion, useInView } from 'framer-motion'
 import { CaretRight, SlidersHorizontal } from '@phosphor-icons/react'
 import { formatCurrency, formatCurrencyCompact } from '@/lib/formatters'
 import { useStore } from '@/lib/store'
+import { useEffectiveBudgetLimits } from '@/lib/useEffectiveBudgetLimits'
 import { CATEGORIES, isSpend, isEarn, spendAmount } from '@/types'
 
 interface Props {
@@ -41,7 +42,7 @@ const TOP_N = 3
 
 export default function MonthOverview({ onManageBudget }: Props) {
   const transactions = useStore((s) => s.transactions)
-  const budgetLimits = useStore((s) => s.budgetLimits)
+  const budgetLimits = useEffectiveBudgetLimits()
   const budgetAllocations = useStore((s) => s.budgetAllocations)
   const activePlan = budgetAllocations.find((a) => a.isActive) ?? null
   const reduceMotion = useReducedMotion()

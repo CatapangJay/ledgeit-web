@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   motion, AnimatePresence, useReducedMotion,
   useMotionValue, useTransform, animate,
@@ -9,11 +9,13 @@ import {
 import {
   X, Confetti, TrendUp, TrendDown, Trophy,
   CalendarCheck, Target, ArrowUpRight, Sparkle,
-  PiggyBank, ShieldCheck, Clock, Lightbulb,
+  ArrowBendDownRight, Check, Wallet as WalletIcon, ArrowCounterClockwise, CaretDown,
+  ArrowLeft, ArrowRight,
 } from '@phosphor-icons/react'
 import { formatCurrency, formatCurrencyCompact, formatPercent } from '@/lib/formatters'
 import { getIconComponent } from '@/lib/iconMap'
-import type { MonthlyRecap, RecapCategoryStat } from '@/lib/monthlyRecap'
+import { useStore } from '@/lib/store'
+import type { MonthlyRecap, RecapCategoryStat, RecapCarryoverCandidate } from '@/lib/monthlyRecap'
 
 // ─── Palette ─────────────────────────────────────────────────────────────────
 // A dark, green-undertoned canvas holds a bento of predominantly warm, light
@@ -105,6 +107,15 @@ const bento: Variants = {
 const tile: Variants = {
   hidden: { opacity: 0, y: 16, scale: 0.96 },
   show: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 300, damping: 24 } },
+}
+
+// Horizontal slide between the recap overview (step 1) and the carry-over page
+// (step 2). `dir` is +1 going forward, −1 going back, so the pages slide the way
+// the navigation implies.
+const stepSlide: Variants = {
+  enter: (d: number) => ({ x: d > 0 ? 48 : -48, opacity: 0 }),
+  center: { x: 0, opacity: 1, transition: { type: 'spring', stiffness: 320, damping: 32 } },
+  exit: (d: number) => ({ x: d > 0 ? -48 : 48, opacity: 0, transition: { duration: 0.16 } }),
 }
 
 // ─── Count-up number ──────────────────────────────────────────────────────────
@@ -528,32 +539,379 @@ function BigStat({ value, tone, animateIt, delay = 0, color, sub, format = forma
 //   )
 // }
 
-// ─── Finance tips — full-width behavioral cues ──────────────────────────────────
-// Three evidence-backed, jargon-free habits (Bank of America BetterMoneyHabits,
-// Fidelity, MoneyUnder30). Kept concrete and non-preachy for first-time budgeters.
-const FINANCE_TIPS: { icon: typeof PiggyBank; title: string; body: string }[] = [
-  { icon: ShieldCheck, title: 'Build a safety net', body: 'Aim to save 3–6 months of expenses somewhere separate — for job loss, illness, or emergencies.' },
-  { icon: TrendUp, title: 'Pay yourself first', body: 'Move savings out the moment you get paid, before you spend. Automate it so it is not a choice.' },
-  { icon: Clock, title: 'Beat impulse buys', body: 'Wait 24 hours before any unplanned purchase. Still want it tomorrow? Then it is probably worth it.' },
-]
-function FinanceTips() {
+// ─── Carryover section — roll leftovers / overages into next month ──────────────
+// The month that just ended left each budgeted category either UNDER its limit
+// (a leftover) or OVER it (an overage). Here the user decides, per category,
+// whether to carry that balance into the coming month: a leftover can top up
+// next month's budget for the category OR be stashed in a wallet; an overage can
+// only pull next month's budget for that category down (envelope-style). Each
+// choice logs a `transfer` — tracked in history, excluded from next month's
+// spend/income totals. The whole section self-hides when the month had no
+// budget or every category landed exactly on target.
+
+function carryoverRowLabel(nextMonth: string, delta: number): string {
+  return delta > 0 ? `Top up ${nextMonth}` : `Reduce ${nextMonth}`
+}
+
+function CarryoverRow({
+  candidate, nextMonth, applied, wallets, onApply, onUndo,
+}: {
+  candidate: RecapCarryoverCandidate
+  nextMonth: string
+  applied: { destination: 'category' | 'wallet'; walletId?: string; amount: number } | null
+  wallets: { id: string; name: string }[]
+  onApply: (dest: 'category' | 'wallet', walletId?: string) => Promise<void>
+  onUndo: () => Promise<void>
+}) {
+  const Icon = getIconComponent(candidate.category.icon)
+  const hex = catHex(candidate.category.id)
+  const isLeftover = candidate.delta > 0
+  const magnitude = Math.abs(candidate.delta)
+
+  // Destination for an un-applied carryover: either next month's category budget
+  // or one of the user's wallets. A leftover DEPOSITS into the wallet; an overage
+  // WITHDRAWS from it to cover the overspend — both are valid, so the toggle shows
+  // whenever a wallet exists.
+  const canChooseWallet = wallets.length > 0
+  const [destMode, setDestMode] = useState<'category' | 'wallet'>('category')
+  const [walletChoice, setWalletChoice] = useState<string>(wallets[0]?.id ?? '')
+  const [busy, setBusy] = useState(false)
+
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true)
+    try { await fn() } finally { setBusy(false) }
+  }
+
+  const appliedDestLabel = applied
+    ? applied.destination === 'wallet'
+      ? wallets.find((w) => w.id === applied.walletId)?.name ?? 'a wallet'
+      : `${nextMonth} budget`
+    : null
+
+  // Card tints to the category's own colour so each card is instantly scannable
+  // by its category — a faint wash of the icon hue, with a slightly stronger
+  // hairline border in the same colour.
   return (
-    <Tile tone="light" className="lg:col-span-2 !justify-start !gap-3">
-      <TileLabel icon={Lightbulb} text="Money habits worth keeping" accent={C.gainInk} />
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {FINANCE_TIPS.map((t) => (
-          <div key={t.title} className="flex items-start gap-2.5">
-            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg" style={{ background: 'rgba(14,122,90,0.12)' }}>
-              <t.icon size={15} weight="bold" color={C.gainInk} aria-hidden="true" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-[12px] font-bold" style={{ color: C.numberInk }}>{t.title}</p>
-              <p className="mt-0.5 text-[11.5px] leading-snug" style={{ color: C.bodyInk }}>{t.body}</p>
-            </div>
-          </div>
-        ))}
+    <div className="flex h-full flex-col gap-2 rounded-2xl p-2.5" style={{ background: `${hex}14`, border: `1px solid ${hex}2e` }}>
+      {/* Header — icon, name, and the signed leftover/overage amount. */}
+      <div className="flex items-center gap-2">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg" style={{ background: `${hex}26` }}>
+          <Icon size={14} weight="fill" color={hex} aria-hidden="true" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[12px] font-bold leading-tight" style={{ color: C.numberInk }}>{candidate.category.label}</p>
+          <p className="truncate text-[10px] font-medium" style={{ color: C.labelInk }}>
+            {isLeftover ? 'Under' : 'Over'} · {formatCurrencyCompact(candidate.spent)}/{formatCurrencyCompact(candidate.limit)}
+          </p>
+        </div>
+        <span
+          className="shrink-0 font-mono text-[13px] font-bold tabular-nums"
+          style={{ color: isLeftover ? C.gainInk : C.dangerInk }}
+        >
+          {isLeftover ? '+' : '−'}{formatCurrencyCompact(magnitude)}
+        </span>
       </div>
-    </Tile>
+
+      {applied ? (
+        <div className="mt-auto flex items-center justify-between gap-2 rounded-xl px-2.5 py-1.5" style={{ background: 'rgba(255,255,255,0.72)' }}>
+          <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-semibold" style={{ color: C.gainInk }}>
+            <Check size={12} weight="bold" aria-hidden="true" className="shrink-0" />
+            <span className="truncate">
+              {applied.amount > 0 ? '→ ' : '← '}{appliedDestLabel}
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={() => run(onUndo)}
+            disabled={busy}
+            className="flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-bold transition-opacity hover:opacity-80 disabled:opacity-40"
+            style={{ background: 'rgba(0,53,46,0.06)', color: C.bodyInk }}
+          >
+            <ArrowCounterClockwise size={10} weight="bold" aria-hidden="true" />
+            Undo
+          </button>
+        </div>
+      ) : (
+        <div className="mt-auto flex flex-col gap-1.5">
+          {/* Destination toggle — budget vs. a wallet. A leftover deposits into the
+              wallet; an overage withdraws from it. */}
+          {canChooseWallet && (
+            <div className="flex gap-0.5 rounded-lg p-0.5" style={{ background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(0,53,46,0.08)' }}>
+              {([
+                { mode: 'category' as const, icon: ArrowBendDownRight, label: 'Budget' },
+                { mode: 'wallet' as const, icon: WalletIcon, label: 'Account' },
+              ]).map(({ mode, icon: TabIcon, label }) => {
+                const active = destMode === mode
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setDestMode(mode)}
+                    className="flex flex-1 items-center justify-center gap-1 rounded-md py-1 text-[11px] font-bold transition-colors"
+                    style={active
+                      ? { background: '#ffffff', color: C.forest, boxShadow: '0 1px 3px rgba(0,40,32,0.1)' }
+                      : { background: 'transparent', color: C.labelInk }}
+                  >
+                    <TabIcon size={12} weight="bold" aria-hidden="true" />
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          <div className="flex items-center gap-1.5">
+            {/* Target label (budget) or custom wallet picker (account). */}
+            {destMode === 'wallet' && canChooseWallet ? (
+              <WalletPicker
+                wallets={wallets}
+                value={walletChoice}
+                onChange={setWalletChoice}
+                categoryLabel={candidate.category.label}
+              />
+            ) : (
+              <span className="min-w-0 flex-1 truncate rounded-lg py-1.5 pl-2.5 pr-2.5 text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.6)', color: C.bodyInk, border: '1px solid rgba(0,53,46,0.08)' }}>
+                {carryoverRowLabel(nextMonth, candidate.delta)}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => run(() => (destMode === 'wallet' && canChooseWallet
+                ? onApply('wallet', walletChoice)
+                : onApply('category')))}
+              disabled={busy || (destMode === 'wallet' && !walletChoice)}
+              className="flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11.5px] font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+              style={{ background: 'linear-gradient(135deg, #1f695d, #00352e)' }}
+            >
+              {destMode === 'wallet' && canChooseWallet
+                ? <WalletIcon size={12} weight="bold" aria-hidden="true" />
+                : <ArrowBendDownRight size={12} weight="bold" aria-hidden="true" />}
+              {busy ? '…' : 'Carry'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Wallet picker — a styled popover replacing the native <select> ─────────────
+// A compact button that opens a floating list of the user's wallets. Replaces the
+// OS-chrome dropdown with one that matches the recap's editorial surface. Closes
+// on outside-click or Escape; selection collapses it immediately.
+function WalletPicker({ wallets, value, onChange, categoryLabel }: {
+  wallets: { id: string; name: string }[]
+  value: string
+  onChange: (id: string) => void
+  categoryLabel: string
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const selected = wallets.find((w) => w.id === value) ?? wallets[0]
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative min-w-0 flex-1">
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={`Which account to carry ${categoryLabel} into`}
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full cursor-pointer items-center gap-1.5 rounded-lg py-1.5 pl-2.5 pr-2 text-[11px] font-semibold outline-none transition-colors"
+        style={{ background: 'rgba(255,255,255,0.6)', color: C.bodyInk, border: '1px solid rgba(0,53,46,0.08)' }}
+      >
+        <WalletIcon size={12} weight="bold" aria-hidden="true" className="shrink-0" style={{ color: C.gainInk }} />
+        <span className="min-w-0 flex-1 truncate text-left">{selected?.name ?? 'Select'}</span>
+        <CaretDown
+          size={10} weight="bold" aria-hidden="true"
+          className="shrink-0 transition-transform"
+          style={{ color: C.labelInk, transform: open ? 'rotate(180deg)' : 'none' }}
+        />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.ul
+            role="listbox"
+            initial={{ opacity: 0, y: -4, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
+            className="absolute bottom-full left-0 z-30 mb-1 max-h-40 w-full overflow-y-auto rounded-xl p-1"
+            style={{ background: '#ffffff', boxShadow: '0 8px 28px rgba(0,32,26,0.2)', border: '1px solid rgba(0,53,46,0.08)' }}
+          >
+            {wallets.map((w) => {
+              const active = w.id === value
+              return (
+                <li key={w.id} role="option" aria-selected={active}>
+                  <button
+                    type="button"
+                    onClick={() => { onChange(w.id); setOpen(false) }}
+                    className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-[11px] font-semibold transition-colors hover:bg-[rgba(0,53,46,0.05)]"
+                    style={{ color: active ? C.gainInk : C.bodyInk, background: active ? 'rgba(14,122,90,0.1)' : 'transparent' }}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{w.name}</span>
+                    {active && <Check size={12} weight="bold" aria-hidden="true" className="shrink-0" />}
+                  </button>
+                </li>
+              )
+            })}
+          </motion.ul>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+// ─── Carryover summary — step-1 teaser that routes to the carry-over page ───────
+// A compact card on the recap overview. It counts how many budgeted categories
+// came in under vs. over this month and sums the leftover/overage, then invites
+// the user to the dedicated carry-over step rather than inlining the controls.
+function CarryoverSummary({ recap, onOpen }: { recap: MonthlyRecap; onOpen: () => void }) {
+  const carryovers = useStore((s) => s.budgetCarryovers)
+  const nextMonth = nextMonthName(recap.monthKey)
+
+  const { underCount, overCount, leftoverTotal, overageTotal, carriedCount } = useMemo(() => {
+    let underCount = 0, overCount = 0, leftoverTotal = 0, overageTotal = 0
+    for (const c of recap.carryoverCandidates) {
+      if (c.delta > 0) { underCount++; leftoverTotal += c.delta }
+      else { overCount++; overageTotal += Math.abs(c.delta) }
+    }
+    const carriedCount = carryovers.filter((c) => c.fromMonth === recap.monthKey).length
+    return { underCount, overCount, leftoverTotal, overageTotal, carriedCount }
+  }, [recap.carryoverCandidates, carryovers, recap.monthKey])
+
+  const total = recap.carryoverCandidates.length
+  const allHandled = carriedCount >= total
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group flex h-full w-full items-center gap-3 rounded-3xl p-4 text-left transition-shadow hover:shadow-md"
+      style={{ background: C.cream, boxShadow: '0 2px 16px rgba(0,40,32,0.08)', border: '1px solid rgba(0,53,46,0.05)' }}
+    >
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl" style={{ background: 'rgba(14,122,90,0.14)' }}>
+        <ArrowBendDownRight size={18} weight="bold" color={C.gainInk} aria-hidden="true" />
+      </span>
+
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: C.labelInk }}>
+          Carry over to {nextMonth}
+        </p>
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+          {underCount > 0 && (
+            <span className="text-[12.5px] font-semibold" style={{ color: C.gainInk }}>
+              {underCount} under budget · +{formatCurrencyCompact(leftoverTotal)}
+            </span>
+          )}
+          {overCount > 0 && (
+            <span className="text-[12.5px] font-semibold" style={{ color: C.dangerInk }}>
+              {overCount} over budget · −{formatCurrencyCompact(overageTotal)}
+            </span>
+          )}
+        </div>
+        <p className="mt-0.5 text-[11px] font-medium" style={{ color: C.labelInk }}>
+          {allHandled
+            ? `All ${total} handled — tap to review`
+            : carriedCount > 0
+              ? `${carriedCount} of ${total} carried — tap to finish`
+              : `Decide what rolls into ${nextMonth}`}
+        </p>
+      </div>
+
+      <span
+        className="flex h-8 shrink-0 items-center gap-1 rounded-full px-3 text-[12px] font-bold text-white transition-transform group-hover:translate-x-0.5"
+        style={{ background: 'linear-gradient(135deg, #1f695d, #00352e)' }}
+      >
+        {allHandled ? 'Review' : 'Carry over'}
+        <ArrowRight size={13} weight="bold" aria-hidden="true" />
+      </span>
+    </button>
+  )
+}
+
+function CarryoverSection({ recap }: { recap: MonthlyRecap }) {
+  const storeWallets = useStore((s) => s.wallets)
+  const carryovers = useStore((s) => s.budgetCarryovers)
+  const applyCarryover = useStore((s) => s.applyCarryover)
+  const removeCarryover = useStore((s) => s.removeCarryover)
+
+  const nextMonth = nextMonthName(recap.monthKey)
+  const activeWallets = useMemo(
+    () => storeWallets.filter((w) => !w.isArchived).map((w) => ({ id: w.id, name: w.name })),
+    [storeWallets]
+  )
+
+  // Carryovers already recorded for the month being recapped, keyed by category.
+  const appliedByCat = useMemo(() => {
+    const map: Record<string, { id: string; destination: 'category' | 'wallet'; walletId?: string; amount: number }> = {}
+    for (const c of carryovers) {
+      if (c.fromMonth === recap.monthKey) {
+        map[c.categoryId] = { id: c.id, destination: c.destination, walletId: c.walletId, amount: c.amount }
+      }
+    }
+    return map
+  }, [carryovers, recap.monthKey])
+
+  if (!recap.hasBudget || recap.carryoverCandidates.length === 0) return null
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      <div className="flex items-start gap-2.5">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ background: 'rgba(14,122,90,0.14)' }}>
+          <ArrowBendDownRight size={16} weight="bold" color={C.gainInk} aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: C.labelInk }}>Carry over to {nextMonth}</p>
+          <p className="mt-1 text-[12.5px] leading-relaxed" style={{ color: C.bodyInk }}>
+            Roll each category&apos;s leftover or overage into {nextMonth}. Carried amounts adjust next month&apos;s budget (or move a leftover to a wallet) and are logged as transfers — they won&apos;t count as {nextMonth} spending.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {recap.carryoverCandidates.map((candidate) => {
+          const applied = appliedByCat[candidate.category.id] ?? null
+          return (
+            <CarryoverRow
+              key={candidate.category.id}
+              candidate={candidate}
+              nextMonth={nextMonth}
+              applied={applied}
+              wallets={activeWallets}
+              onApply={async (dest, walletId) => {
+                await applyCarryover({
+                  categoryId: candidate.category.id,
+                  categoryLabel: candidate.category.label,
+                  fromMonth: recap.monthKey,
+                  amount: candidate.delta,
+                  destination: dest,
+                  walletId,
+                })
+              }}
+              onUndo={async () => {
+                if (applied) await removeCarryover(applied.id)
+              }}
+            />
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
@@ -565,6 +923,44 @@ export default function MonthlyRecapModal({ recap, open, onClose }: {
   const reduceMotion = useReducedMotion()
   const animateIt = !reduceMotion
 
+  // Two-step flow: 1 = the recap overview, 2 = the carry-over workspace. The
+  // overview carries a compact summary that links through to step 2; step 2 is
+  // where the per-category carry decisions actually happen.
+  const [step, setStep] = useState<1 | 2>(1)
+  // Always reopen on the overview — a new month's recap should never land the
+  // user mid-flow on last session's carry-over page. React's sanctioned "adjust
+  // state during render" pattern: track the previous `open` in state and reset
+  // the step the render the modal transitions closed→open, before paint.
+  const [prevOpen, setPrevOpen] = useState(open)
+  // Whether the user has visited the carry-over page this session. Until they
+  // have, the recap won't let them dismiss past an outstanding carry-over —
+  // closing redirects them there instead (see `attemptClose`).
+  const [seenCarryover, setSeenCarryover] = useState(false)
+  if (open !== prevOpen) {
+    setPrevOpen(open)
+    if (open) { setStep(1); setSeenCarryover(false) }
+  }
+
+  const hasCarryover = !!recap && recap.hasBudget && recap.carryoverCandidates.length > 0
+
+  // Direction drives the slide between steps (forward = +1, back = −1).
+  const [dir, setDir] = useState(1)
+  const goStep = (next: 1 | 2) => {
+    setDir(next > step ? 1 : -1)
+    setStep(next)
+    if (next === 2) setSeenCarryover(true)
+  }
+
+  // Guard dismissal: if there's a carry-over the user hasn't looked at yet, an
+  // attempt to close (backdrop tap, close button, or the hero CTA) routes them
+  // to the carry-over page first instead of dismissing. Once they've seen it,
+  // closing works normally — carrying over stays optional, seeing it doesn't.
+  const mustSeeCarryover = hasCarryover && !seenCarryover
+  const attemptClose = () => {
+    if (mustSeeCarryover) { goStep(2); return }
+    onClose()
+  }
+
   return (
     <AnimatePresence>
       {open && recap && (
@@ -575,7 +971,7 @@ export default function MonthlyRecapModal({ recap, open, onClose }: {
           exit={{ opacity: 0 }}
           transition={{ duration: 0.25 }}
           style={{ background: 'rgba(0,24,18,0.55)', backdropFilter: 'blur(3px)' }}
-          onClick={onClose}
+          onClick={attemptClose}
           role="dialog"
           aria-modal="true"
           aria-label={`${recap.label} monthly recap`}
@@ -594,21 +990,31 @@ export default function MonthlyRecapModal({ recap, open, onClose }: {
             {/* Close — top-right; both the mobile hero and the desktop Earned tile
                 behind it are dark, so the translucent-white control stays legible. */}
             <button
-              aria-label="Close recap"
-              onClick={onClose}
+              aria-label={mustSeeCarryover ? 'Review carry over' : 'Close recap'}
+              onClick={attemptClose}
               className="absolute right-4 top-4 z-30 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full backdrop-blur-sm transition-transform hover:scale-105 active:scale-90 lg:right-5 lg:top-5"
               style={{ background: 'rgba(0,20,15,0.4)', border: '1px solid rgba(255,255,255,0.25)' }}
             >
               <X size={14} weight="bold" color="#ffffff" aria-hidden="true" />
             </button>
 
+            <AnimatePresence mode="wait" custom={dir} initial={false}>
+            {step === 1 ? (
+            <motion.div
+              key="recap-step"
+              custom={dir}
+              variants={stepSlide}
+              initial="enter"
+              animate="center"
+              exit="exit"
+            >
             {/* ── Bento grid ──────────────────────────────────────────────────
                 Squarish canvas. A 4-col × auto-row grid that mixes footprints:
                 the hero is a tall 2×2, the donut a tall 2×2, weekly bars a wide
                 2×1, and single stat cells fill the gaps — vertical + horizontal
                 rectangles rather than a row of wide strips. */}
             <motion.div
-              className="relative z-[1] grid grid-cols-2 gap-2.5 p-2.5 sm:gap-3 sm:p-3 lg:grid-cols-4 lg:auto-rows-[158px]"
+              className="relative z-[1] grid grid-cols-2 gap-2.5 p-2.5 sm:gap-3 sm:p-3 lg:grid-cols-4 lg:auto-rows-[clamp(118px,15.5vh,158px)]"
               variants={bento}
               initial={animateIt ? 'hidden' : false}
               animate="show"
@@ -684,14 +1090,16 @@ export default function MonthlyRecapModal({ recap, open, onClose }: {
                       call to action, integrated into the bento rather than a
                       detached footer bar. */}
                   <motion.button
-                    onClick={onClose}
+                    onClick={attemptClose}
                     whileTap={{ scale: 0.97 }}
                     whileHover={animateIt ? { scale: 1.02 } : undefined}
                     className="group mt-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl py-2.5 text-[13px] font-bold transition-colors sm:w-auto sm:px-6"
                     style={{ background: '#ffffff', color: C.forest }}
                   >
-                    Start a fresh month
-                    <ArrowUpRight size={15} weight="bold" aria-hidden="true" className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                    {mustSeeCarryover ? 'Review carry over' : 'Start a fresh month'}
+                    {mustSeeCarryover
+                      ? <ArrowRight size={15} weight="bold" aria-hidden="true" className="transition-transform group-hover:translate-x-0.5" />
+                      : <ArrowUpRight size={15} weight="bold" aria-hidden="true" className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />}
                   </motion.button>
                 </div>
               </motion.div>
@@ -768,17 +1176,18 @@ export default function MonthlyRecapModal({ recap, open, onClose }: {
 
             </motion.div>
 
-            {/* ── Insights row: takeaway (1/3) + finance guidance (2/3) ─────────
-                A second grid below the bento. On desktop it's a 3-column row: the
-                plain-language takeaway occupies 1/3, and a budgeting-guidance card
-                fills the other 2/3. Beneath, a full-width tip strip. */}
+            {/* ── Insights row: takeaway + carry-over teaser ────────────────────
+                A single row below the bento. On desktop the plain-language
+                takeaway occupies 1/3 and the carry-over summary (which routes to
+                step 2) fills the other 2/3. When there's no carry-over to make,
+                the takeaway spans the full width. */}
             <motion.div
               className="relative z-[1] grid grid-cols-1 gap-2.5 px-2.5 pb-2.5 sm:gap-3 sm:px-3 sm:pb-3 lg:grid-cols-3"
               variants={bento}
               initial={animateIt ? 'hidden' : false}
               animate="show"
             >
-              {/* What this means — plain-language takeaway (1/3) */}
+              {/* What this means — plain-language takeaway */}
               {(() => {
                 const centavos = Math.round(recap.savingsRate * 100)
                 const annual = recap.netSaved * 12
@@ -795,7 +1204,7 @@ export default function MonthlyRecapModal({ recap, open, onClose }: {
                   body = <>You spent <b style={{ color: C.dangerInk }}>{formatCurrencyCompact(Math.abs(recap.netSaved))}</b> more than you earned. That happens some months — the aim is to even out over time, not to be perfect every month.</>
                 }
                 return (
-                  <Tile tone="mint" className="!items-start !gap-2.5">
+                  <Tile tone="mint" className={`!items-start !gap-2.5 ${hasCarryover ? '' : 'lg:col-span-3'}`}>
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ background: 'rgba(14,122,90,0.14)' }}>
                       <Sparkle size={16} weight="fill" color={C.gainInk} aria-hidden="true" />
                     </span>
@@ -807,9 +1216,57 @@ export default function MonthlyRecapModal({ recap, open, onClose }: {
                 )
               })()}
 
-              {/* Full-width tip strip — filled once research completes */}
-              <FinanceTips />
+              {/* Carry-over summary — routes to the dedicated carry-over step.
+                  Self-hides when the month had no budget or every category landed
+                  exactly on target. */}
+              {hasCarryover && (
+                <motion.div variants={tile} className="lg:col-span-2">
+                  <CarryoverSummary recap={recap} onOpen={() => goStep(2)} />
+                </motion.div>
+              )}
             </motion.div>
+            </motion.div>
+            ) : (
+            // ── Step 2 — the carry-over workspace ─────────────────────────────
+            <motion.div
+              key="carryover-step"
+              custom={dir}
+              variants={stepSlide}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              className="relative z-[1] p-2.5 sm:p-3"
+            >
+              {/* Back to the recap overview */}
+              <button
+                type="button"
+                onClick={() => goStep(1)}
+                className="mb-3 flex items-center gap-1.5 rounded-full py-1.5 pl-2 pr-3.5 text-[12px] font-bold transition-colors hover:opacity-80"
+                style={{ background: C.cream, color: C.bodyInk, border: '1px solid rgba(0,53,46,0.06)' }}
+              >
+                <ArrowLeft size={13} weight="bold" aria-hidden="true" />
+                Back to recap
+              </button>
+
+              <div className="rounded-3xl p-4 sm:p-5" style={{ background: C.cream, boxShadow: '0 2px 16px rgba(0,40,32,0.08)', border: '1px solid rgba(0,53,46,0.05)' }}>
+                {hasCarryover
+                  ? <CarryoverSection recap={recap} />
+                  : <p className="text-[13px] leading-relaxed" style={{ color: C.bodyInk }}>Nothing to carry over this month.</p>}
+              </div>
+
+              {/* Done — return to the overview to close out from the hero CTA */}
+              <motion.button
+                onClick={() => goStep(1)}
+                whileTap={{ scale: 0.98 }}
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
+                style={{ background: 'linear-gradient(135deg, #1f695d, #00352e)' }}
+              >
+                Done
+                <Check size={15} weight="bold" aria-hidden="true" />
+              </motion.button>
+            </motion.div>
+            )}
+            </AnimatePresence>
           </motion.div>
         </motion.div>
       )}

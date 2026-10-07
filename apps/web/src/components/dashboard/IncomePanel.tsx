@@ -3,13 +3,14 @@
 import { useMemo } from 'react'
 import { formatCurrencyCompact } from '@/lib/formatters'
 import { useStore } from '@/lib/store'
+import { useEffectiveBudgetLimits } from '@/lib/useEffectiveBudgetLimits'
 import { isEarn } from '@/types'
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function IncomePanel() {
   const transactions = useStore((s) => s.transactions)
-  const budgetLimits = useStore((s) => s.budgetLimits)
+  const budgetLimits = useEffectiveBudgetLimits()
 
   const { totalIncome, monthlyBudget } = useMemo(() => {
     const totalIncome = transactions

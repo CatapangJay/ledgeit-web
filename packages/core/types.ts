@@ -667,6 +667,81 @@ export interface BudgetAllocation {
   createdAt: string
 }
 
+// ─── Budget Carryover ───────────────────────────────────────────────────────
+//
+// At the end of a month, a budgeted category lands either UNDER its limit (a
+// leftover) or OVER it (an overage). From the end-of-month recap the user may
+// roll that balance into the NEXT month:
+//   • destination 'category' — adjusts only next month's EFFECTIVE limit for the
+//     category. A positive amount (leftover) raises it; a negative amount
+//     (overage) lowers it. The saved plan is never edited — the adjustment lives
+//     for one month only, layered on top of that month's plan limit.
+//   • destination 'wallet'   — moves the balance between day-to-day money and one
+//     of the user's wallets: a leftover (positive) deposits into the wallet; an
+//     overage (negative) withdraws from it to cover the overspend.
+//
+// Either way the movement is logged as a `transfer` transaction so it's tracked
+// in history but excluded from the destination month's spending/income totals.
+
+export type CarryoverDestination = 'category' | 'wallet'
+
+export interface BudgetCarryover {
+  id: string
+  categoryId: string    // CategoryId for presets, UUID for custom categories
+  /** 'YYYY-MM' of the month whose balance is carried (the recapped month). */
+  fromMonth: string
+  /** 'YYYY-MM' the amount lands in (always fromMonth + 1). */
+  toMonth: string
+  /** Signed: positive = leftover rolled forward, negative = overage pulled back. */
+  amount: number
+  destination: CarryoverDestination
+  /** Target wallet id when destination is 'wallet'. */
+  walletId?: string
+  /** Linked `transfer` ledger transaction for the movement, if any. */
+  transactionId?: string
+  createdAt: string
+}
+
+/**
+ * Apply this month's carryovers (those whose `toMonth` matches) on top of a set
+ * of base budget limits, producing the EFFECTIVE limits for that month. A
+ * category's limit is nudged by the sum of its carryovers into the month — up by
+ * leftovers rolled in, down by overages pulled back. Only carryovers routed to
+ * the category budget ('category' destination) affect limits; wallet deposits
+ * leave next month's budget untouched. Effective limits never go below zero.
+ *
+ * Pure: callers pass the carryovers already filtered to the relevant month (or
+ * the whole set — it filters by `toMonth` here) so this stays store-agnostic.
+ */
+export function applyCarryoversToLimits(
+  baseLimits: BudgetLimit[],
+  carryovers: BudgetCarryover[],
+  toMonth: string,
+): BudgetLimit[] {
+  const adjustments: Record<string, number> = {}
+  for (const c of carryovers) {
+    if (c.toMonth !== toMonth || c.destination !== 'category') continue
+    adjustments[c.categoryId] = (adjustments[c.categoryId] ?? 0) + c.amount
+  }
+  if (Object.keys(adjustments).length === 0) return baseLimits
+
+  const result = baseLimits.map((b) => {
+    const adj = adjustments[b.categoryId]
+    if (!adj) return b
+    return { ...b, limit: Math.max(0, b.limit + adj) }
+  })
+
+  // A carryover can target a category the base plan doesn't budget (e.g. a
+  // leftover rolled into a category that had no limit this month). Surface those
+  // as new limit rows so the extra budget is actually spendable, not dropped.
+  for (const [categoryId, adj] of Object.entries(adjustments)) {
+    if (result.some((b) => b.categoryId === categoryId)) continue
+    const limit = Math.max(0, adj)
+    if (limit > 0) result.push({ categoryId, limit, cycle: 'monthly' })
+  }
+  return result
+}
+
 // ─── Income Allocation ────────────────────────────────────────────────────────
 
 export interface IncomeAllocationItem {

@@ -50,10 +50,7 @@ export default function RootLayout({
       <body className="min-h-[100dvh] bg-ledge-bg text-ledge-data antialiased">
         <StoreBootstrap />
         <AppShell>{children}</AppShell>
-      {/* impeccable-live-start */
-<script src="http://localhost:8400/live.js"></script>
-/* impeccable-live-end */}
-</body>
+      </body>
     </html>
   );
 }

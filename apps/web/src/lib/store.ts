@@ -51,7 +51,13 @@ import {
   insertWalletMovement,
   deleteWalletMovement,
 } from '@/lib/db/wallets'
-import { CATEGORIES, typeForCategory, resolveWalletKind, spendAmount, netAmount } from '@/types'
+import {
+  fetchBudgetCarryovers,
+  insertBudgetCarryover,
+  deleteBudgetCarryover,
+} from '@/lib/db/budgetCarryovers'
+import { CATEGORIES, typeForCategory, resolveWalletKind, resolveCategory, spendAmount, netAmount } from '@/types'
+import type { BudgetCarryover, CarryoverDestination } from '@/types'
 
 // ─── Income source id → human-readable label ─────────────────────────────────
 // Mirrors the INCOME_SOURCES list in OnboardingBudgetSetup (kept here so the
@@ -82,6 +88,22 @@ function currentMonthFirstDay(): string {
 function currentMonthKey(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+// Local-time 'YYYY-MM' key for the calendar month `offset` months from a given
+// 'YYYY-MM' key. offset +1 = the month after. Used to resolve a carryover's
+// destination month (the month after the one being recapped).
+function monthKeyFrom(key: string, offset: number): string {
+  const [y, m] = key.split('-').map(Number)
+  const d = new Date(y, m - 1 + offset, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+// Local-time 'YYYY-MM-DD' for the first day of the calendar month `key`
+// ('YYYY-MM') refers to — the date stamped on a carryover's transfer so it lands
+// in the destination month.
+function firstDayOfMonthKey(key: string): string {
+  return `${key}-01`
 }
 
 // First day (local-time YYYY-MM-DD) of the *previous* month. This is the lower
@@ -176,6 +198,8 @@ interface StoreState {
   incomeAllocationsLoaded: boolean
   debts: Debt[]
   wallets: Wallet[]
+  /** End-of-month budget carryovers the user has rolled forward (all months). */
+  budgetCarryovers: BudgetCarryover[]
   /** 'YYYY-MM' of the last end-of-month recap the user acknowledged (null = none/unloaded). */
   lastRecapMonth: string | null
   /** True once loadLastRecapMonth has resolved at least once for the current user. */
@@ -274,6 +298,24 @@ interface StoreActions {
   removeWalletMovement: (walletId: string, movementId: string) => Promise<void>
   toggleWalletArchived: (walletId: string) => Promise<void>
   removeWallet: (walletId: string) => Promise<void>
+  // ── Budget carryovers ─────────────────────────────────────────────────────
+  loadBudgetCarryovers: (userId: string) => Promise<void>
+  /** Roll a category's end-of-month balance from `fromMonth` into the next month.
+   *  `amount` is signed (positive = leftover, negative = overage). destination
+   *  'category' adjusts next month's effective limit; 'wallet' deposits the
+   *  leftover into `walletId`. Logs a linked `transfer` so it's tracked but kept
+   *  out of the destination month's spending/income. Resolves true on success. */
+  applyCarryover: (payload: {
+    categoryId: string
+    categoryLabel: string
+    fromMonth: string
+    amount: number
+    destination: CarryoverDestination
+    walletId?: string
+  }) => Promise<boolean>
+  /** Undo a carryover: deletes the row and its linked transfer (and the wallet
+   *  movement, if it deposited into one). */
+  removeCarryover: (carryoverId: string) => Promise<void>
   // ── End-of-month recap ────────────────────────────────────────────────────
   loadLastRecapMonth: (userId: string) => Promise<void>
   /** Record that the user has seen the recap for the given 'YYYY-MM' month. */
@@ -299,6 +341,7 @@ export const useStore = create<AppStore>()((set, get) => ({
   incomeAllocationsLoaded: false,
   debts: [],
   wallets: [],
+  budgetCarryovers: [],
   lastRecapMonth: null,
   lastRecapMonthLoaded: false,
   fullHistoryLoaded: false,
@@ -316,6 +359,7 @@ export const useStore = create<AppStore>()((set, get) => ({
         incomeAllocations: [],
         debts: [],
         wallets: [],
+        budgetCarryovers: [],
         lastRecapMonth: null,
         lastRecapMonthLoaded: false,
         transactions: [],
@@ -1300,6 +1344,135 @@ export const useStore = create<AppStore>()((set, get) => ({
     } catch (err) {
       console.error('[store] removeWallet failed:', err)
       set({ wallets: prev })
+    }
+  },
+
+  // ─── Budget carryovers ──────────────────────────────────────────────────────
+  //
+  // At the end of a month, each budgeted category is either under its limit (a
+  // leftover) or over it (an overage). From the recap the user can roll that
+  // balance into the next month: either as an adjustment to that category's
+  // budget (one month only) or — for a leftover — as a deposit into a wallet.
+  // Both are logged as `transfer` transactions, so they're tracked in history
+  // but never count toward the destination month's spending/income.
+
+  async loadBudgetCarryovers(userId) {
+    try {
+      const budgetCarryovers = await fetchBudgetCarryovers(userId)
+      set({ budgetCarryovers })
+    } catch {
+      // Keep empty on error
+    }
+  },
+
+  async applyCarryover({ categoryId, categoryLabel, fromMonth, amount, destination, walletId }) {
+    const userId = get().userId
+    if (!userId) return false
+    // Nothing to roll forward.
+    if (amount === 0) return false
+    // One carryover per category per month — don't double-roll.
+    if (get().budgetCarryovers.some((c) => c.categoryId === categoryId && c.fromMonth === fromMonth)) {
+      return false
+    }
+
+    const toMonth = monthKeyFrom(fromMonth, 1)
+    const date = firstDayOfMonthKey(toMonth)
+    const transfersCategory = CATEGORIES.find((c) => c.id === 'transfers')!
+    const now = new Date().toISOString()
+
+    // The carryover's money movement is a `transfer` (excluded from spending/
+    // income analytics). Tagged with the originating expense category so it's
+    // identifiable in history without leaking into category spend.
+    const txId = crypto.randomUUID()
+    const absLabel = destination === 'wallet'
+      ? amount > 0
+        ? `${categoryLabel} leftover → wallet`
+        : `${categoryLabel} overage ← wallet`
+      : amount > 0
+        ? `${categoryLabel} leftover carried over`
+        : `${categoryLabel} overage carried over`
+    const tx: Transaction = {
+      id: txId,
+      raw: `${absLabel} ${Math.abs(amount)}`,
+      amount: Math.abs(amount),
+      merchant: absLabel,
+      category: destination === 'wallet' ? transfersCategory : resolveCategory(categoryId, get().customCategories),
+      date,
+      type: 'transfer',
+      paymentMethod: 'bank',
+      confidence: 1,
+      note: `Carried from ${fromMonth}`,
+      createdAt: now,
+    }
+
+    try {
+      // Persist the carryover row first (its unique constraint is the real guard
+      // against a duplicate roll-forward across sessions/devices).
+      const carryover = await insertBudgetCarryover(userId, {
+        categoryId,
+        fromMonth,
+        toMonth,
+        amount,
+        destination,
+        walletId: destination === 'wallet' ? walletId : undefined,
+        transactionId: txId,
+      })
+      set((state) => ({ budgetCarryovers: [carryover, ...state.budgetCarryovers] }))
+
+      if (destination === 'wallet' && walletId) {
+        // Move the balance between day-to-day money and the chosen wallet. A
+        // leftover (positive) deposits into the wallet; an overage (negative)
+        // withdraws from it to cover the overspend. The transfer we just built IS
+        // the money movement, so attach (don't create a second transfer).
+        get().addTransaction(tx)
+        await get().attachWalletMovement(walletId, {
+          type: amount > 0 ? 'deposit' : 'withdrawal',
+          amount: Math.abs(amount),
+          date,
+          note: amount > 0
+            ? `${categoryLabel} leftover from ${fromMonth}`
+            : `${categoryLabel} overage from ${fromMonth}`,
+          transactionId: txId,
+        })
+      } else {
+        // Budget adjustment: the transfer is purely a history record of the roll.
+        get().addTransaction(tx)
+      }
+      return true
+    } catch (err) {
+      console.error('[store] applyCarryover failed:', err)
+      return false
+    }
+  },
+
+  async removeCarryover(carryoverId) {
+    const carryover = get().budgetCarryovers.find((c) => c.id === carryoverId)
+    if (!carryover) return
+    const prev = get().budgetCarryovers
+
+    // Drop optimistically, then clean up the linked transfer. A wallet-destined
+    // carryover's transfer is tied to a 'linked' wallet movement; removing the
+    // movement here would need the movement id, so instead we delete the
+    // transfer and let the wallet movement be cleaned via its own path. To keep
+    // this simple and consistent, we remove the matching wallet movement first.
+    set((state) => ({ budgetCarryovers: state.budgetCarryovers.filter((c) => c.id !== carryoverId) }))
+
+    if (carryover.destination === 'wallet' && carryover.walletId && carryover.transactionId) {
+      const wallet = get().wallets.find((w) => w.id === carryover.walletId)
+      const movement = wallet?.movements.find((m) => m.transactionId === carryover.transactionId)
+      if (wallet && movement) {
+        // removeWalletMovement deletes a 'linked' movement without touching its
+        // transaction, so delete the transfer explicitly afterwards.
+        await get().removeWalletMovement(wallet.id, movement.id)
+      }
+    }
+    if (carryover.transactionId) get().deleteTransaction(carryover.transactionId)
+
+    try {
+      await deleteBudgetCarryover(carryoverId)
+    } catch (err) {
+      console.error('[store] removeCarryover failed:', err)
+      set({ budgetCarryovers: prev })
     }
   },
 

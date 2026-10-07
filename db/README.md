@@ -39,6 +39,7 @@ psql $DATABASE_URL -f db/seeds/dev_seed.sql
 |-----------------|-------------------------------------------------|
 | `transactions`  | User financial transactions (RLS enforced)      |
 | `budget_limits` | Per-category monthly budget limits (RLS enforced) |
+| `budget_carryovers` | End-of-month leftover/overage rolled into the next month (RLS enforced) |
 
 Row Level Security (RLS) is enabled on both tables. Users can only read and write their own rows — enforced by `auth.uid() = user_id` policies.
 

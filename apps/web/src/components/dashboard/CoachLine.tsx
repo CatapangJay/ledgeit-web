@@ -5,6 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { Sparkle, Flame, Circle, Gauge, PiggyBank } from '@phosphor-icons/react'
 import { getCoachMessage, type CoachIcon, type CoachTone } from '@/lib/coach'
 import { useStore } from '@/lib/store'
+import { useEffectiveBudgetLimits } from '@/lib/useEffectiveBudgetLimits'
 import { useActivePlanMeta } from '@/lib/activePlan'
 
 const ICONS: Record<CoachIcon, typeof Sparkle> = {
@@ -25,7 +26,7 @@ const TONE: Record<CoachTone, { fg: string; bg: string }> = {
 
 export default function CoachLine() {
   const transactions = useStore((s) => s.transactions)
-  const budgetLimits = useStore((s) => s.budgetLimits)
+  const budgetLimits = useEffectiveBudgetLimits()
   const hasSetup = useStore((s) => s.hasSetupBudget())
   const plan = useActivePlanMeta()
   const reduceMotion = useReducedMotion()

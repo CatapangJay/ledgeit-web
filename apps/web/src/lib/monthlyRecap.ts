@@ -46,6 +46,21 @@ export interface RecapBudgetStat {
   ratio: number
 }
 
+/**
+ * A budgeted category whose end-of-month balance can be rolled into the next
+ * month. `delta` is signed: positive when the category came in UNDER budget (a
+ * leftover available to carry forward) and negative when it went OVER (an
+ * overage that would reduce next month's budget). Only categories with a real
+ * limit this month appear — a carryover needs a budget to measure against.
+ */
+export interface RecapCarryoverCandidate {
+  category: Category
+  spent: number
+  limit: number
+  /** limit − spent. Positive = leftover, negative = overage. Never exactly 0 here. */
+  delta: number
+}
+
 export interface MonthlyRecap {
   /** 'YYYY-MM' key of the summarised month. */
   monthKey: string
@@ -85,6 +100,10 @@ export interface MonthlyRecap {
   budgetCategoriesOver: number
   /** Categories that went over their limit, worst overage (spent − limit) first. */
   overspentCategories: RecapBudgetStat[]
+  /** Budgeted categories with a non-zero end-of-month balance (leftover or
+   *  overage), largest magnitude first — the candidates for carrying forward.
+   *  Only present when the month had an active budget. */
+  carryoverCandidates: RecapCarryoverCandidate[]
   /** Net spend per 'YYYY-MM-DD' within the month, clamped to ≥0 — powers the calendar heatmap. */
   dailySpend: Record<string, number>
 }
@@ -167,6 +186,7 @@ export function computeMonthlyRecap(
   const activeLimits = budgetLimits.filter((b) => b.limit > 0)
   const hasBudget = activeLimits.length > 0
   const overspentCategories: RecapBudgetStat[] = []
+  const carryoverCandidates: RecapCarryoverCandidate[] = []
   let budgetCategoriesUnder = 0
   let budgetCategoriesOver = 0
   for (const b of activeLimits) {
@@ -183,8 +203,27 @@ export function computeMonthlyRecap(
     } else {
       budgetCategoriesUnder++
     }
+    // A category can be carried forward when it ended the month off its limit in
+    // either direction. Round the delta so sub-centavo float noise (from percent
+    // splits) doesn't surface a ₱0.00 "leftover". Exact-on-budget → no candidate.
+    const delta = Math.round((b.limit - spent) * 100) / 100
+    if (delta !== 0) {
+      carryoverCandidates.push({
+        category: resolveCategory(b.categoryId, customCategories),
+        spent,
+        limit: b.limit,
+        delta,
+      })
+    }
   }
   overspentCategories.sort((a, b) => (b.spent - b.limit) - (a.spent - a.limit))
+  // Overages lead the carryover list (they need attention first), then leftovers.
+  // Within each group, largest end-of-month balance first (by magnitude).
+  carryoverCandidates.sort((a, b) => {
+    const aOver = a.delta < 0, bOver = b.delta < 0
+    if (aOver !== bOver) return aOver ? -1 : 1
+    return Math.abs(b.delta) - Math.abs(a.delta)
+  })
 
   const dailySpend: Record<string, number> = {}
   for (const [date, spent] of Object.entries(spendByDay)) dailySpend[date] = Math.max(0, spent)
@@ -210,6 +249,7 @@ export function computeMonthlyRecap(
     budgetCategoriesUnder,
     budgetCategoriesOver,
     overspentCategories,
+    carryoverCandidates,
     dailySpend,
   }
 }

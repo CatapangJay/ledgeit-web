@@ -7,6 +7,7 @@ import { ArrowRight } from '@phosphor-icons/react'
 import { formatCurrencyCompact } from '@/lib/formatters'
 import { getIconComponent, getIconBg } from '@/lib/iconMap'
 import { useStore } from '@/lib/store'
+import { useEffectiveBudgetLimits } from '@/lib/useEffectiveBudgetLimits'
 import { CATEGORIES, isSpend, spendAmount } from '@/types'
 
 const TOP_N = 4
@@ -14,7 +15,7 @@ const TOP_N = 4
 export default function TopCategoryBars() {
   const router = useRouter()
   const transactions = useStore((s) => s.transactions)
-  const budgetLimits = useStore((s) => s.budgetLimits)
+  const budgetLimits = useEffectiveBudgetLimits()
 
   const categories = useMemo(() => {
     const now = new Date()

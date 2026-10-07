@@ -15,7 +15,7 @@ import BudgetAllocationSheet from '@/components/budget/BudgetAllocationSheet'
 import { useStore } from '@/lib/store'
 import { useDeferredMount } from '@/lib/useDeferredMount'
 import { formatCurrency, formatMonthLabel } from '@/lib/formatters'
-import { CATEGORIES, isSpend, isEarn, spendAmount } from '@/types'
+import { CATEGORIES, isSpend, isEarn, spendAmount, applyCarryoversToLimits } from '@/types'
 
 function getMonthBounds(offset: number): { start: string; end: string; label: string } {
   const now = new Date()
@@ -86,12 +86,16 @@ export default function InsightsPage() {
     loadBudgetLimitsForMonth(monthKey)
   }, [monthKey, loadBudgetLimitsForMonth])
 
+  const budgetCarryovers = useStore((s) => s.budgetCarryovers)
+
   // Current (and future) month reflects the live active plan; past months use
-  // their frozen snapshot (empty until one was captured).
-  const budgetLimits = useMemo(
-    () => (monthOffset < 0 ? (budgetLimitsByMonth[monthKey] ?? []) : liveBudgetLimits),
-    [monthOffset, monthKey, budgetLimitsByMonth, liveBudgetLimits]
-  )
+  // their frozen snapshot (empty until one was captured). Either way, any
+  // end-of-month carryovers that landed in the viewed month are layered on top
+  // so the budget shown matches what the user actually had to spend.
+  const budgetLimits = useMemo(() => {
+    const base = monthOffset < 0 ? (budgetLimitsByMonth[monthKey] ?? []) : liveBudgetLimits
+    return applyCarryoversToLimits(base, budgetCarryovers, monthKey)
+  }, [monthOffset, monthKey, budgetLimitsByMonth, liveBudgetLimits, budgetCarryovers])
 
   const monthTxns = useMemo(
     () => transactions.filter((t) => t.date >= start && t.date <= end),
