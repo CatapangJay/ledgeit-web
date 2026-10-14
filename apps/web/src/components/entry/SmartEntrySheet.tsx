@@ -6,7 +6,8 @@ import type { PanInfo } from 'framer-motion'
 import { X, CheckCircle, ArrowsOutSimple, ArrowsInSimple, Sparkle } from '@phosphor-icons/react'
 import { parseTransaction, parseDebtDirection, parseDebtPerson } from '@/lib/parser'
 import { categorize, getMerchantKey, buildHistoryOverrides } from '@/lib/categorizer'
-import { getMerchantSuggestions, resolveMerchant } from '@/lib/fuzzy'
+// Fuzzy merchant resolution is disabled for now — see handleChange.
+// import { getMerchantSuggestions, resolveMerchant } from '@/lib/fuzzy'
 import { useStore } from '@/lib/store'
 import { useIsDesktop } from '@/lib/useIsDesktop'
 import ParsePreview from './ParsePreview'
@@ -171,16 +172,17 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapState, sheetTopPx])
 
-  // Derive history merchants (name + frequency) from logged transactions
-  const historyMerchants = useMemo(() => {
-    const freq = new Map<string, number>()
-    for (const tx of transactions) {
-      if (tx.merchant && tx.merchant !== 'Unknown') {
-        freq.set(tx.merchant, (freq.get(tx.merchant) ?? 0) + 1)
-      }
-    }
-    return [...freq.entries()].map(([name, freq]) => ({ name, freq }))
-  }, [transactions])
+  // Derive history merchants (name + frequency) from logged transactions.
+  // Only feeds fuzzy merchant resolution, which is disabled for now.
+  // const historyMerchants = useMemo(() => {
+  //   const freq = new Map<string, number>()
+  //   for (const tx of transactions) {
+  //     if (tx.merchant && tx.merchant !== 'Unknown') {
+  //       freq.set(tx.merchant, (freq.get(tx.merchant) ?? 0) + 1)
+  //     }
+  //   }
+  //   return [...freq.entries()].map(([name, freq]) => ({ name, freq }))
+  // }, [transactions])
 
   // Category overrides = what the user has categorized in the past (learned from
   // their logged transactions), with any explicit in-session corrections layered
@@ -230,9 +232,14 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
       timerRef.current = setTimeout(() => {
         const draft = parseTransaction(val)
 
-        // ── Fuzzy merchant resolution ──────────────────────────────────────────
-        const suggestions = getMerchantSuggestions(draft.merchant, historyMerchants)
-        const resolved = resolveMerchant(draft.merchant, historyMerchants)
+        // ── Fuzzy merchant resolution — DISABLED for now ───────────────────────
+        // Auto-correcting the merchant name proved unreliable, so the name is
+        // kept exactly as parsed. Only the smart categorizer below still runs.
+        // Restore these two calls to re-enable resolution + suggestion chips.
+        // const suggestions = getMerchantSuggestions(draft.merchant, historyMerchants)
+        // const resolved = resolveMerchant(draft.merchant, historyMerchants)
+        const suggestions: MerchantSuggestion[] = []
+        const resolved: string | null = null
         const wasResolved = resolved && resolved !== draft.merchant
         const resolvedDraft = resolved
           ? { ...draft, merchant: resolved }
@@ -253,7 +260,7 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
         setIsAnalyzing(false)
       }, 400)
     },
-    [categoryOverrides, customCategories, historyMerchants],
+    [categoryOverrides, customCategories],
   )
 
   // Used by the disabled mode toggle — restore alongside it to re-enable quick entry.
@@ -511,6 +518,11 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
                   onMerchantChange={(name) =>
                     setParseResult((prev) =>
                       prev ? { ...prev, draft: { ...prev.draft, merchant: name } } : prev
+                    )
+                  }
+                  onAmountChange={(amount) =>
+                    setParseResult((prev) =>
+                      prev ? { ...prev, draft: { ...prev.draft, amount } } : prev
                     )
                   }
                   onCategoryChange={(cat) => {

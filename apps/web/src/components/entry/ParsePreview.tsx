@@ -6,6 +6,7 @@ import { X, CalendarBlank, CheckCircle, Circle, Wallet as WalletIcon, ArrowDownL
 import CategoryBadge from './CategoryBadge'
 import DatePickerSheet from '@/components/ui/DatePickerSheet'
 import { formatCurrency, formatDate } from '@/lib/formatters'
+import { parseAmountInput } from '@/lib/parser'
 import { getIconComponent } from '@/lib/iconMap'
 import { useStore } from '@/lib/store'
 import { CATEGORIES, PAYMENT_METHODS, resolvePaymentMethod } from '@/types'
@@ -100,6 +101,8 @@ interface Props {
   customCategories?: CustomCategory[]
   onCategoryChange?: (cat: Category) => void
   onMerchantChange?: (name: string) => void
+  /** Correct the parsed amount in place (tap the amount to edit). */
+  onAmountChange?: (amount: number) => void
   onDateChange?: (date: string) => void
   onPaymentMethodChange?: (method: PaymentMethodId) => void
   /** Flip this entry between a plain expense and income. */
@@ -140,7 +143,7 @@ const itemVariants = {
   },
 }
 
-export default function ParsePreview({ draft, category, confidence, customCategories = [], onCategoryChange, onMerchantChange, onDateChange, onPaymentMethodChange, onTypeChange, debtDirection, onDebtDirectionChange, debtDueDate, onDebtDueDateChange, selected, onToggleSelect, logged = false, wallets = [], walletId, onWalletChange }: Props) {
+export default function ParsePreview({ draft, category, confidence, customCategories = [], onCategoryChange, onMerchantChange, onAmountChange, onDateChange, onPaymentMethodChange, onTypeChange, debtDirection, onDebtDirectionChange, debtDueDate, onDebtDueDateChange, selected, onToggleSelect, logged = false, wallets = [], walletId, onWalletChange }: Props) {
   const hiddenCategories = useStore((s) => s.hiddenCategories)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [datePickerOpen, setDatePickerOpen] = useState(false)
@@ -150,6 +153,9 @@ export default function ParsePreview({ draft, category, confidence, customCatego
   const [editingMerchant, setEditingMerchant] = useState(false)
   const [merchantInput, setMerchantInput] = useState('')
   const merchantInputRef = useRef<HTMLInputElement>(null)
+  const [editingAmount, setEditingAmount] = useState(false)
+  const [amountInput, setAmountInput] = useState('')
+  const amountInputRef = useRef<HTMLInputElement>(null)
   const isIncome = draft.type === 'income'
   const isTransfer = draft.type === 'transfer'
   const isDebt = category.id === 'debts'
@@ -175,6 +181,20 @@ export default function ParsePreview({ draft, category, confidence, customCatego
     const trimmed = merchantInput.trim()
     if (trimmed) onMerchantChange?.(trimmed)
     setEditingMerchant(false)
+  }
+
+  function startEditAmount() {
+    if (!onAmountChange || logged) return
+    setAmountInput(draft.amount !== null ? String(draft.amount) : '')
+    setEditingAmount(true)
+    setTimeout(() => amountInputRef.current?.select(), 40)
+  }
+
+  // An unparseable or non-positive value is ignored, keeping the previous amount.
+  function commitAmount() {
+    const value = parseAmountInput(amountInput)
+    if (value !== null) onAmountChange?.(value)
+    setEditingAmount(false)
   }
 
   return (
@@ -203,8 +223,25 @@ export default function ParsePreview({ draft, category, confidence, customCatego
     >
       {/* Row 1: Amount + category pill + bulk checkbox */}
       <motion.div variants={itemVariants} className="flex items-center gap-2">
-        {/* Amount — shrinks font for large numbers */}
-        {(() => {
+        {/* Amount — shrinks font for large numbers; tap to correct it in place */}
+        {editingAmount ? (
+          <input
+            ref={amountInputRef}
+            value={amountInput}
+            onChange={(e) => setAmountInput(e.target.value)}
+            onBlur={commitAmount}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitAmount()
+              if (e.key === 'Escape') setEditingAmount(false)
+            }}
+            autoFocus
+            inputMode="decimal"
+            placeholder="0.00"
+            aria-label="Edit amount"
+            className="w-32 shrink-0 border-b bg-transparent font-mono text-2xl font-bold leading-tight tracking-tight outline-none"
+            style={{ borderColor: '#1f695d', color: '#191c1c', caretColor: '#1f695d' }}
+          />
+        ) : (() => {
           const formatted = draft.amount !== null ? formatCurrency(draft.amount) : null
           const sizeClass = !formatted
             ? 'text-2xl'
@@ -213,13 +250,18 @@ export default function ParsePreview({ draft, category, confidence, customCatego
               : formatted.length > 13
                 ? 'text-lg'
                 : 'text-2xl'
+          const editable = !!onAmountChange && !logged
           return (
-            <span
-              className={`font-mono ${sizeClass} font-bold tracking-tight leading-tight shrink-0 max-w-[48%] truncate`}
+            <button
+              type="button"
+              onClick={startEditAmount}
+              disabled={!editable}
+              aria-label={editable ? 'Tap to edit amount' : undefined}
+              className={`font-mono ${sizeClass} font-bold tracking-tight leading-tight shrink-0 max-w-[48%] truncate text-left ${editable ? 'cursor-pointer decoration-dotted underline-offset-4 hover:underline' : 'cursor-default'}`}
               style={{ color: draft.amount === null ? '#6e9990' : isIncome ? '#1f6950' : '#191c1c' }}
             >
-              {formatted ?? <span className="text-base">no amount</span>}
-            </span>
+              {formatted ?? <span className="text-base">{editable ? 'Add amount' : 'no amount'}</span>}
+            </button>
           )
         })()}
 

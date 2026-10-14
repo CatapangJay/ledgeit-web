@@ -65,6 +65,22 @@ export function parseAmount(text: string): number | null {
   return null
 }
 
+/**
+ * Parse a value typed into a dedicated amount field (e.g. editing the amount on
+ * a parsed entry). Unlike `parseAmount`, which scans free text and ignores lone
+ * single digits (they're usually day numbers), here the whole input IS the
+ * amount — so a bare "5" means 5. Shorthand ("1.5k") and arithmetic ("100+50")
+ * still work via `parseAmount`. Returns null for empty / non-positive input.
+ */
+export function parseAmountInput(text: string): number | null {
+  const plain = text.replace(/[₱$,\s]/g, '')
+  if (/^\d*\.?\d+$/.test(plain)) {
+    const value = parseFloat(plain)
+    return value > 0 ? value : null
+  }
+  return parseAmount(text)
+}
+
 // ─── Direction Detection ──────────────────────────────────────────────────────
 
 const INCOME_KEYWORDS = [

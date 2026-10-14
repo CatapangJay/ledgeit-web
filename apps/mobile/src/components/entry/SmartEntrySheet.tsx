@@ -9,8 +9,9 @@ import {
   categorize,
   getMerchantKey,
   buildHistoryOverrides,
-  getMerchantSuggestions,
-  resolveMerchant,
+  // Fuzzy merchant resolution is disabled for now — see handleChange.
+  // getMerchantSuggestions,
+  // resolveMerchant,
   CATEGORIES,
   type Category,
   type MerchantSuggestion,
@@ -97,15 +98,16 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
   }, [open]);
 
   // Derive history merchants (name + frequency) from logged transactions.
-  const historyMerchants = useMemo(() => {
-    const freq = new Map<string, number>();
-    for (const tx of transactions) {
-      if (tx.merchant && tx.merchant !== 'Unknown') {
-        freq.set(tx.merchant, (freq.get(tx.merchant) ?? 0) + 1);
-      }
-    }
-    return [...freq.entries()].map(([name, f]) => ({ name, freq: f }));
-  }, [transactions]);
+  // Only feeds fuzzy merchant resolution, which is disabled for now.
+  // const historyMerchants = useMemo(() => {
+  //   const freq = new Map<string, number>();
+  //   for (const tx of transactions) {
+  //     if (tx.merchant && tx.merchant !== 'Unknown') {
+  //       freq.set(tx.merchant, (freq.get(tx.merchant) ?? 0) + 1);
+  //     }
+  //   }
+  //   return [...freq.entries()].map(([name, f]) => ({ name, freq: f }));
+  // }, [transactions]);
 
   // Category overrides = learned-from-history + explicit in-session corrections.
   const categoryOverrides = useMemo(
@@ -133,9 +135,13 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
         // the text wins, otherwise the entry falls back to `initialDate`.
         const draft = parseTransaction(val, initialDate);
 
-        // Fuzzy merchant resolution.
-        const suggestions = getMerchantSuggestions(draft.merchant, historyMerchants);
-        const resolved = resolveMerchant(draft.merchant, historyMerchants);
+        // Fuzzy merchant resolution — DISABLED for now. Auto-correcting the
+        // merchant name proved unreliable, so it's kept exactly as parsed; only
+        // the smart categorizer below still runs. Restore these to re-enable.
+        // const suggestions = getMerchantSuggestions(draft.merchant, historyMerchants);
+        // const resolved = resolveMerchant(draft.merchant, historyMerchants);
+        const suggestions: MerchantSuggestion[] = [];
+        const resolved: string | null = null;
         const wasResolved = resolved && resolved !== draft.merchant;
         const resolvedDraft = resolved ? { ...draft, merchant: resolved } : draft;
 
@@ -149,7 +155,7 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
         setIsAnalyzing(false);
       }, 400);
     },
-    [categoryOverrides, customCategories, historyMerchants, initialDate],
+    [categoryOverrides, customCategories, initialDate],
   );
 
   const handleLog = useCallback(() => {
@@ -310,6 +316,9 @@ export default function SmartEntrySheet({ open, onClose, initialDate }: Props) {
                   customCategories={customCategories}
                   onMerchantChange={(name) =>
                     setParseResult((prev) => (prev ? { ...prev, draft: { ...prev.draft, merchant: name } } : prev))
+                  }
+                  onAmountChange={(amount) =>
+                    setParseResult((prev) => (prev ? { ...prev, draft: { ...prev.draft, amount } } : prev))
                   }
                   onCategoryChange={(cat) => {
                     const newType = cat.id === 'income' ? 'income' : cat.id === 'transfers' ? 'transfer' : 'expense';

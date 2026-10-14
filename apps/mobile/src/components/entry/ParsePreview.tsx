@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { View, Text, Pressable, TextInput } from 'react-native';
 import { X, CalendarBlank, CheckCircle, CircleIcon as Circle, Wallet as WalletIcon, ArrowDownLeft, ArrowUpRight } from 'phosphor-react-native';
 import {
-  CATEGORIES, PAYMENT_METHODS, resolvePaymentMethod, formatCurrency, formatDate,
+  CATEGORIES, PAYMENT_METHODS, resolvePaymentMethod, formatCurrency, formatDate, parseAmountInput,
   type Category, type TransactionDraft, type CustomCategory, type PaymentMethodId,
   type DebtDirection, type Wallet,
 } from '@ledgeit/core';
@@ -18,6 +18,8 @@ interface Props {
   customCategories?: CustomCategory[];
   onCategoryChange?: (cat: Category) => void;
   onMerchantChange?: (name: string) => void;
+  /** Correct the parsed amount in place (tap the amount to edit). */
+  onAmountChange?: (amount: number) => void;
   onDateChange?: (date: string) => void;
   onPaymentMethodChange?: (method: PaymentMethodId) => void;
   /** Debt entries only: current lent-out vs borrowed direction. */
@@ -97,7 +99,7 @@ function InlineCategoryPicker({
  */
 export default function ParsePreview({
   draft, category, confidence, customCategories = [], onCategoryChange, onMerchantChange,
-  onDateChange, onPaymentMethodChange, debtDirection, onDebtDirectionChange, debtDueDate,
+  onAmountChange, onDateChange, onPaymentMethodChange, debtDirection, onDebtDirectionChange, debtDueDate,
   onDebtDueDateChange, selected, onToggleSelect, logged = false, wallets = [], walletId, onWalletChange,
   onTypeChange,
 }: Props) {
@@ -110,6 +112,8 @@ export default function ParsePreview({
   const [walletPickerOpen, setWalletPickerOpen] = useState(false);
   const [editingMerchant, setEditingMerchant] = useState(false);
   const [merchantInput, setMerchantInput] = useState('');
+  const [editingAmount, setEditingAmount] = useState(false);
+  const [amountInput, setAmountInput] = useState('');
 
   const isIncome = draft.type === 'income';
   const isTransfer = draft.type === 'transfer';
@@ -134,6 +138,19 @@ export default function ParsePreview({
     setEditingMerchant(false);
   }
 
+  function startEditAmount() {
+    if (!onAmountChange || logged) return;
+    setAmountInput(draft.amount !== null ? String(draft.amount) : '');
+    setEditingAmount(true);
+  }
+
+  // An unparseable or non-positive value is ignored, keeping the previous amount.
+  function commitAmount() {
+    const value = parseAmountInput(amountInput);
+    if (value !== null) onAmountChange?.(value);
+    setEditingAmount(false);
+  }
+
   const MethodIcon = getIconComponent(method.icon);
   const formatted = draft.amount !== null ? formatCurrency(draft.amount) : null;
 
@@ -151,16 +168,39 @@ export default function ParsePreview({
     >
       {/* Row 1: Amount + category pill + bulk checkbox */}
       <View className="flex-row items-center gap-2">
-        <Text
-          className="font-mono font-bold tracking-tight shrink-0 max-w-[48%]"
-          numberOfLines={1}
-          style={{
-            fontSize: !formatted ? 24 : formatted.length > 16 ? 16 : formatted.length > 13 ? 18 : 24,
-            color: draft.amount === null ? '#6e9990' : isIncome ? '#1f6950' : '#191c1c',
-          }}
-        >
-          {formatted ?? 'no amount'}
-        </Text>
+        {/* Amount — tap to correct it in place */}
+        {editingAmount ? (
+          <TextInput
+            value={amountInput}
+            onChangeText={setAmountInput}
+            onBlur={commitAmount}
+            onSubmitEditing={commitAmount}
+            autoFocus
+            selectTextOnFocus
+            keyboardType="decimal-pad"
+            placeholder="0.00"
+            placeholderTextColor="#6e9990"
+            className="w-32 shrink-0 border-b font-mono font-bold"
+            style={{ fontSize: 24, borderColor: '#1f695d', color: '#191c1c', paddingVertical: 0 }}
+          />
+        ) : (
+          <Pressable
+            onPress={startEditAmount}
+            disabled={!onAmountChange || logged}
+            className="shrink-0 max-w-[48%]"
+          >
+            <Text
+              className="font-mono font-bold tracking-tight"
+              numberOfLines={1}
+              style={{
+                fontSize: !formatted ? 24 : formatted.length > 16 ? 16 : formatted.length > 13 ? 18 : 24,
+                color: draft.amount === null ? '#6e9990' : isIncome ? '#1f6950' : '#191c1c',
+              }}
+            >
+              {formatted ?? (onAmountChange && !logged ? 'Add amount' : 'no amount')}
+            </Text>
+          </Pressable>
+        )}
 
         <View className="flex-1 min-w-0">
           {onCategoryChange && !logged ? (
