@@ -6,8 +6,10 @@ import { CaretLeft, CaretRight, Sliders, ArrowsDownUp } from '@phosphor-icons/re
 import MetricStrip from '@/components/insights/MetricStrip'
 import BudgetBar from '@/components/insights/BudgetBar'
 import CategoryBreakdownList from '@/components/insights/CategoryBreakdownList'
+import { CarryoverBadges, CarryoverAction } from '@/components/insights/CategoryCarryover'
 import SpendDonut from '@/components/insights/SpendDonut'
 import WalletInsightsCard from '@/components/insights/WalletInsightsCard'
+import TagTotalsCard from '@/components/insights/TagTotalsCard'
 import MonthTrendChart from '@/components/dashboard/MonthTrendChart'
 // import RecurringPaymentsCard from '@/components/dashboard/RecurringPaymentsCard' // temporarily disabled — see usage below
 import BiggestExpenseCard from '@/components/dashboard/BiggestExpenseCard'
@@ -16,6 +18,7 @@ import { useStore } from '@/lib/store'
 import { useDeferredMount } from '@/lib/useDeferredMount'
 import { formatCurrency, formatMonthLabel } from '@/lib/formatters'
 import { CATEGORIES, isSpend, isEarn, spendAmount, applyCarryoversToLimits } from '@/types'
+import type { BudgetCarryover } from '@/types'
 
 function getMonthBounds(offset: number): { start: string; end: string; label: string } {
   const now = new Date()
@@ -87,6 +90,18 @@ export default function InsightsPage() {
   }, [monthKey, loadBudgetLimitsForMonth])
 
   const budgetCarryovers = useStore((s) => s.budgetCarryovers)
+  const wallets = useStore((s) => s.wallets)
+
+  // Carryovers out of the viewed month (one per category) and into it.
+  const { outgoingByCat, incomingByCat } = useMemo(() => {
+    const outgoingByCat: Record<string, BudgetCarryover> = {}
+    const incomingByCat: Record<string, BudgetCarryover[]> = {}
+    for (const c of budgetCarryovers) {
+      if (c.fromMonth === monthKey) outgoingByCat[c.categoryId] = c
+      if (c.toMonth === monthKey && c.destination === 'category') (incomingByCat[c.categoryId] ??= []).push(c)
+    }
+    return { outgoingByCat, incomingByCat }
+  }, [budgetCarryovers, monthKey])
 
   // Current (and future) month reflects the live active plan; past months use
   // their frozen snapshot (empty until one was captured). Either way, any
@@ -328,6 +343,11 @@ export default function InsightsPage() {
             <WalletInsightsCard start={start} end={end} />
           </div>
 
+          {/* All-time spend per tag (self-hides when nothing is tagged) */}
+          <div className="mt-4">
+            <TagTotalsCard />
+          </div>
+
           {/* <RecurringPaymentsCard /> */}
           <div className="mt-4">
             <BiggestExpenseCard start={start} end={end} />
@@ -360,19 +380,38 @@ export default function InsightsPage() {
           </div>
 
           {/* Budget bars — click a category to expand its breakdown for the month */}
-          {visibleCategories.map(({ cat, spent, limit, hasLimit }) => (
-            <BudgetBar
-              key={cat.id}
-              category={cat}
-              spent={spent}
-              limit={limit}
-              hasLimit={hasLimit}
-              expanded={expandedCategory === cat.id}
-              onToggle={toggleCategory}
-            >
-              <CategoryBreakdownList transactions={txnsByCategory[cat.id] ?? []} />
-            </BudgetBar>
-          ))}
+          {visibleCategories.map(({ cat, spent, limit, hasLimit }) => {
+            const outgoing = outgoingByCat[cat.id]
+            const leftover = hasLimit ? limit - spent : 0
+            // Past months can move a leftover into a wallet; last month can also
+            // carry it into the current month's budget.
+            const showAction = monthOffset < 0 && (outgoing || leftover > 0)
+            return (
+              <BudgetBar
+                key={cat.id}
+                category={cat}
+                spent={spent}
+                limit={limit}
+                hasLimit={hasLimit}
+                expanded={expandedCategory === cat.id}
+                onToggle={toggleCategory}
+                badges={<CarryoverBadges outgoing={outgoing} incoming={incomingByCat[cat.id] ?? []} wallets={wallets} />}
+              >
+                {showAction && (
+                  <CarryoverAction
+                    key={`${monthKey}-${cat.id}`}
+                    categoryId={cat.id}
+                    categoryLabel={cat.label}
+                    fromMonth={monthKey}
+                    leftover={Math.round(leftover * 100) / 100}
+                    allowBudget={monthOffset === -1}
+                    applied={outgoing}
+                  />
+                )}
+                <CategoryBreakdownList transactions={txnsByCategory[cat.id] ?? []} />
+              </BudgetBar>
+            )
+          })}
 
           {/* Empty state */}
           {Object.keys(categorySpend).length === 0 && (

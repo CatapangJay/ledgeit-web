@@ -87,11 +87,13 @@ export default function DashboardPage() {
   const markRecapSeen = useStore((s) => s.markRecapSeen)
   // The recap covers LAST month — use the budget that applied then, not today's.
   const { limits: prevMonthLimits, loaded: prevMonthLimitsLoaded } = usePreviousMonthLimits()
+  // Carryovers that landed in last month adjust its budget; their transfers aren't activity.
+  const budgetCarryovers = useStore((s) => s.budgetCarryovers)
 
   const recap = useMemo(() => {
     const key = previousMonthKey(new Date())
-    return computeMonthlyRecap(key, transactions, prevMonthLimits, customCategories)
-  }, [transactions, prevMonthLimits, customCategories])
+    return computeMonthlyRecap(key, transactions, prevMonthLimits, customCategories, budgetCarryovers)
+  }, [transactions, prevMonthLimits, customCategories, budgetCarryovers])
 
   // Eligible once we know both whether the recap was already seen AND that the
   // budget/onboarding state has resolved (a first-time user gets onboarding, not

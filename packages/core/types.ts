@@ -344,6 +344,11 @@ export interface Transaction {
    * spend by ₱500 and raises net by ₱500. See `spendAmount` / `netAmount`.
    */
   isReimbursement?: boolean
+  /**
+   * Free-form labels that group entries across categories and months, e.g.
+   * "Oct Vacation" or "Wedding". Matched case-insensitively; see core/tags.ts.
+   */
+  tags?: string[]
   note?: string
   createdAt: string         // ISO 8601 datetime
 }

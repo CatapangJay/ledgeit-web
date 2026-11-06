@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
-import { ArrowsClockwise, ArrowUUpLeft, CaretLeft, CaretRight, Trash, X } from 'phosphor-react-native';
+import { ArrowsClockwise, ArrowUUpLeft, CaretLeft, CaretRight, Trash, Wallet as WalletIcon, X } from 'phosphor-react-native';
 import {
   CATEGORIES,
   PAYMENT_METHODS,
@@ -13,6 +13,7 @@ import {
   type Transaction,
 } from '@ledgeit/core';
 import { getIconComponent } from '@/lib/iconMap';
+import { useStore } from '@/lib/store';
 
 interface Props {
   /** The transaction to edit, or null when the sheet is closed. */
@@ -52,6 +53,16 @@ export default function TransactionEditSheet({ tx, customCategories = [], hidden
   const [isReimbursement, setIsReimbursement] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [seededId, setSeededId] = useState<string | null>(null);
+  // null = untouched (follow the live wallet link).
+  const [walletChoice, setWalletChoice] = useState<string | undefined | null>(null);
+  const wallets = useStore((s) => s.wallets);
+  const setTransactionWallet = useStore((s) => s.setTransactionWallet);
+
+  // The wallet this entry is currently paid from / saved into, if any.
+  const linkedWalletId = tx
+    ? wallets.find((w) => w.movements.some((m) => m.source === 'linked' && m.transactionId === tx.id))?.id
+    : undefined;
+  const walletId = walletChoice === null ? linkedWalletId : walletChoice;
 
   const open = tx !== null;
 
@@ -73,6 +84,7 @@ export default function TransactionEditSheet({ tx, customCategories = [], hidden
     setPaymentMethod(tx.paymentMethod);
     setIsRecurring(tx.isRecurring ?? false);
     setIsReimbursement(tx.isReimbursement ?? false);
+    setWalletChoice(null);
     setConfirmDelete(false);
   }
   if (!tx && seededId !== null) setSeededId(null);
@@ -91,9 +103,18 @@ export default function TransactionEditSheet({ tx, customCategories = [], hidden
   const amountNum = parseFloat(amount.replace(/[^0-9.]/g, '')) || 0;
   const canSave = !isDebt && amountNum > 0;
 
+  const resolvedType = typeForCategory(category.id);
+  const isIncomeType = resolvedType === 'income';
+  // Wallet link mirrors Smart Entry: plain expense/income only. Transfers
+  // (wallet deposits, carryovers) manage their own wallet movement.
+  const canLinkWallet = tx?.type !== 'transfer' && (resolvedType === 'expense' || isIncomeType);
+  // Active wallets, plus the currently linked one even if it's been archived.
+  const walletOptions = wallets.filter((w) => !w.isArchived || w.id === linkedWalletId);
+  const selectedWallet = walletOptions.find((w) => w.id === walletId);
+
   function handleSave() {
     if (!tx || !canSave) return;
-    const type = typeForCategory(category.id);
+    const type = resolvedType;
     onSave(tx.id, {
       merchant: merchant.trim() || 'Unknown',
       amount: amountNum,
@@ -105,6 +126,9 @@ export default function TransactionEditSheet({ tx, customCategories = [], hidden
       isReimbursement: type === 'expense' ? isReimbursement : false,
       type,
     });
+    if (tx.type !== 'transfer') {
+      setTransactionWallet(tx.id, canLinkWallet ? walletId : undefined);
+    }
     onClose();
   }
 
@@ -195,27 +219,72 @@ export default function TransactionEditSheet({ tx, customCategories = [], hidden
               </Pressable>
             </View>
 
-            {/* Payment method chips */}
+            {/* Payment method — same picker as Smart Entry */}
             <Text className="mb-1.5 text-[11px] font-bold uppercase tracking-widest" style={{ color: '#6e9990' }}>
               Method
             </Text>
-            <View className="mb-4 flex-row flex-wrap gap-1.5">
+            <View className="mb-4 flex-row flex-wrap rounded-2xl p-2" style={{ backgroundColor: '#f0f4f2', borderWidth: 1, borderColor: '#e7edeb' }}>
               {PAYMENT_METHODS.map((m) => {
+                const Icon = getIconComponent(m.icon);
                 const active = paymentMethod === m.id;
                 return (
-                  <Pressable
-                    key={m.id}
-                    onPress={() => setPaymentMethod(m.id)}
-                    className="rounded-full px-3.5 py-1.5"
-                    style={{ backgroundColor: active ? '#00352e' : '#f0f4f2' }}
-                  >
-                    <Text className="text-[12px] font-semibold" style={{ color: active ? '#ffffff' : '#3f4946' }}>
-                      {m.short}
-                    </Text>
-                  </Pressable>
+                  <View key={m.id} style={{ width: `${100 / 3}%` }} className="p-0.5">
+                    <Pressable
+                      onPress={() => setPaymentMethod(m.id)}
+                      className="flex-row items-center justify-center gap-1.5 rounded-xl py-2"
+                      style={{ backgroundColor: active ? '#1f695d' : '#ffffff' }}
+                    >
+                      <Icon size={13} weight={active ? 'fill' : 'regular'} color={active ? '#ffffff' : '#3f4946'} />
+                      <Text className="text-[11px] font-semibold" style={{ color: active ? '#ffffff' : '#3f4946' }}>{m.short}</Text>
+                    </Pressable>
+                  </View>
                 );
               })}
             </View>
+
+            {/* Wallet — pay this expense FROM a wallet, or save income INTO one */}
+            {canLinkWallet && walletOptions.length > 0 && (
+              <>
+                <Text className="mb-1.5 text-[11px] font-bold uppercase tracking-widest" style={{ color: '#6e9990' }}>
+                  {isIncomeType ? 'Into wallet' : 'From wallet'}
+                </Text>
+                <View className="flex-row flex-wrap rounded-2xl p-2" style={{ backgroundColor: '#f0f4f2', borderWidth: 1, borderColor: '#e7edeb' }}>
+                  <View style={{ width: '50%' }} className="p-0.5">
+                    <Pressable
+                      onPress={() => setWalletChoice(undefined)}
+                      className="flex-row items-center justify-center gap-1.5 rounded-xl py-2"
+                      style={{ backgroundColor: walletId === undefined ? '#1f695d' : '#ffffff' }}
+                    >
+                      <WalletIcon size={13} weight="regular" color={walletId === undefined ? '#ffffff' : '#3f4946'} />
+                      <Text className="text-[11px] font-semibold" style={{ color: walletId === undefined ? '#ffffff' : '#3f4946' }}>None</Text>
+                    </Pressable>
+                  </View>
+                  {walletOptions.map((w) => {
+                    const Icon = getIconComponent(w.icon);
+                    const active = w.id === walletId;
+                    return (
+                      <View key={w.id} style={{ width: '50%' }} className="p-0.5">
+                        <Pressable
+                          onPress={() => setWalletChoice(w.id)}
+                          className="flex-row items-center justify-center gap-1.5 rounded-xl px-2 py-2"
+                          style={{ backgroundColor: active ? '#1f695d' : '#ffffff' }}
+                        >
+                          <Icon size={13} weight={active ? 'fill' : 'regular'} color={active ? '#ffffff' : '#3f4946'} />
+                          <Text className="text-[11px] font-semibold" numberOfLines={1} style={{ color: active ? '#ffffff' : '#3f4946' }}>{w.name}</Text>
+                        </Pressable>
+                      </View>
+                    );
+                  })}
+                </View>
+                <Text className="mb-4 mt-1.5 text-[11px] leading-relaxed" style={{ color: '#6e9990' }}>
+                  {selectedWallet
+                    ? isIncomeType
+                      ? `Adds to ${selectedWallet.name}'s balance.`
+                      : `Comes out of ${selectedWallet.name}'s balance.`
+                    : 'Not linked to a wallet.'}
+                </Text>
+              </>
+            )}
 
             {/* Category grid */}
             <Text className="mb-1.5 text-[11px] font-bold uppercase tracking-widest" style={{ color: '#6e9990' }}>

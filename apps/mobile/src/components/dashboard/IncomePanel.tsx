@@ -2,10 +2,11 @@ import { useMemo } from 'react';
 import { View, Text } from 'react-native';
 import { formatCurrencyCompact, isEarn } from '@ledgeit/core';
 import { useStore } from '@/lib/store';
+import { useEffectiveBudgetLimits } from '@/lib/useEffectiveBudgetLimits';
 
 export default function IncomePanel() {
   const transactions = useStore((s) => s.transactions);
-  const budgetLimits = useStore((s) => s.budgetLimits);
+  const budgetLimits = useEffectiveBudgetLimits();
 
   const { totalIncome, monthlyBudget } = useMemo(() => {
     const totalIncome = transactions.filter((t) => isEarn(t)).reduce((s, t) => s + t.amount, 0);

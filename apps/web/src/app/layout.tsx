@@ -45,6 +45,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${plusJakartaSans.variable} ${geistMono.variable}`}
     >
       <body className="min-h-[100dvh] bg-ledge-bg text-ledge-data antialiased">

@@ -3,10 +3,12 @@
 import { createElement, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, CalendarBlank, Trash, ArrowsClockwise, ArrowUUpLeft } from '@phosphor-icons/react'
+import { X, CalendarBlank, Trash, ArrowsClockwise, ArrowUUpLeft, Wallet as WalletIcon } from '@phosphor-icons/react'
 import DatePickerSheet from '@/components/ui/DatePickerSheet'
+import TagInput from '@/components/ledger/TagInput'
 import { getIconComponent } from '@/lib/iconMap'
 import { formatDate } from '@/lib/formatters'
+import { useStore } from '@/lib/store'
 import { CATEGORIES, PAYMENT_METHODS, typeForCategory } from '@/types'
 import type { Transaction, Category, CustomCategory, PaymentMethodId } from '@/types'
 
@@ -15,12 +17,18 @@ function Glyph({ name, size = 14, weight = 'regular' }: { name: string; size?: n
   return createElement(getIconComponent(name), { size, weight, 'aria-hidden': true })
 }
 
+function sameTags(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((t, i) => t === b[i])
+}
+
 interface Props {
   /** The transaction to edit, or null when the sheet is closed. */
   tx: Transaction | null
   customCategories?: CustomCategory[]
   /** Preset category ids the user has hidden — excluded from the picker. */
   hiddenCategories?: string[]
+  /** Existing tags offered as suggestions, most recent first. */
+  tagSuggestions?: string[]
   onClose: () => void
   onSave: (id: string, patch: Partial<Transaction>) => void
   onDelete: (id: string) => void
@@ -28,13 +36,13 @@ interface Props {
 
 /**
  * Modal editor for an already-logged transaction: amount, merchant, category,
- * date, and payment method. Mirrors DatePickerSheet's portal + centered-card
+ * date, payment method, and tags. Mirrors DatePickerSheet's portal + centered-card
  * pattern so it's never clipped by the ledger's scroll container.
  *
  * Debt-linked transactions (category "debts") are read-only here — editing them
  * would desync the Debt record, so the user is pointed to the Debts page.
  */
-export default function TransactionEditSheet({ tx, customCategories = [], hiddenCategories = [], onClose, onSave, onDelete }: Props) {
+export default function TransactionEditSheet({ tx, customCategories = [], hiddenCategories = [], tagSuggestions = [], onClose, onSave, onDelete }: Props) {
   const open = tx !== null
   const [merchant, setMerchant] = useState('')
   const [amount, setAmount] = useState('')
@@ -43,8 +51,19 @@ export default function TransactionEditSheet({ tx, customCategories = [], hidden
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodId>('cash')
   const [isRecurring, setIsRecurring] = useState(false)
   const [isReimbursement, setIsReimbursement] = useState(false)
+  const [tags, setTags] = useState<string[]>([])
   const [datePickerOpen, setDatePickerOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  // null = untouched (follow the live link, which may load after the sheet opens).
+  const [walletChoice, setWalletChoice] = useState<string | undefined | null>(null)
+  const wallets = useStore((s) => s.wallets)
+  const setTransactionWallet = useStore((s) => s.setTransactionWallet)
+
+  // The wallet this entry is currently paid from / saved into, if any.
+  const linkedWalletId = tx
+    ? wallets.find((w) => w.movements.some((m) => m.source === 'linked' && m.transactionId === tx.id))?.id
+    : undefined
+  const walletId = walletChoice === null ? linkedWalletId : walletChoice
 
   // Seed local form state from the transaction whenever a different one opens.
   // Done during render (React's "adjust state while rendering" pattern) rather
@@ -59,6 +78,8 @@ export default function TransactionEditSheet({ tx, customCategories = [], hidden
     setPaymentMethod(tx.paymentMethod)
     setIsRecurring(tx.isRecurring ?? false)
     setIsReimbursement(tx.isReimbursement ?? false)
+    setTags(tx.tags ?? [])
+    setWalletChoice(null)
     setConfirmDelete(false)
   }
   if (!tx && seededId !== null) setSeededId(null)
@@ -92,6 +113,12 @@ export default function TransactionEditSheet({ tx, customCategories = [], hidden
   const resolvedType = typeForCategory(category.id)
   // A reimbursement only makes sense on a plain expense category (not debts).
   const canReimburse = resolvedType === 'expense' && category.id !== 'debts'
+  // Wallet link mirrors Smart Entry: plain expense/income only. Transfers
+  // (wallet deposits, carryovers) manage their own wallet movement.
+  const canLinkWallet = tx.type !== 'transfer' && (resolvedType === 'expense' || resolvedType === 'income')
+  // Active wallets, plus the currently linked one even if it's been archived.
+  const walletOptions = wallets.filter((w) => !w.isArchived || w.id === linkedWalletId)
+  const isIncomeType = resolvedType === 'income'
 
   function handleSave() {
     if (!tx || !canSave) return
@@ -104,8 +131,14 @@ export default function TransactionEditSheet({ tx, customCategories = [], hidden
       isRecurring,
       // Force off when the resulting type isn't a plain expense.
       isReimbursement: canReimburse ? isReimbursement : false,
+      // Only write tags when edited, so saving other fields never overwrites
+      // tags added elsewhere since this copy was loaded.
+      ...(sameTags(tags, tx.tags ?? []) ? {} : { tags }),
       type: resolvedType,
     })
+    if (tx.type !== 'transfer') {
+      setTransactionWallet(tx.id, canLinkWallet ? walletId : undefined)
+    }
     onClose()
   }
 
@@ -194,33 +227,87 @@ export default function TransactionEditSheet({ tx, customCategories = [], hidden
                     style={{ background: '#ffffff', color: '#191c1c', border: '1px solid #e7edeb' }}
                   />
 
-                  {/* Date + payment method row */}
-                  <div className="mb-4 grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-widest" style={{ color: '#6e9990' }}>Date</label>
-                      <button
-                        type="button"
-                        onClick={() => setDatePickerOpen(true)}
-                        className="flex w-full items-center gap-1.5 rounded-xl px-3 py-3 text-left text-[13px] font-semibold"
-                        style={{ background: '#ffffff', color: '#191c1c', border: '1px solid #e7edeb' }}
-                      >
-                        <CalendarBlank size={13} weight="regular" style={{ color: '#6e9990' }} aria-hidden="true" />
-                        {formatDate(date)}
-                      </button>
-                    </div>
-                    <div>
-                      <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-widest" style={{ color: '#6e9990' }}>Method</label>
-                      <select
-                        value={paymentMethod}
-                        onChange={(e) => setPaymentMethod(e.target.value as PaymentMethodId)}
-                        className="w-full rounded-xl px-3 py-3 text-[13px] font-semibold outline-none"
-                        style={{ background: '#ffffff', color: '#191c1c', border: '1px solid #e7edeb' }}
-                      >
-                        {PAYMENT_METHODS.map((m) => (
-                          <option key={m.id} value={m.id}>{m.short}</option>
-                        ))}
-                      </select>
-                    </div>
+                  {/* Date */}
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-widest" style={{ color: '#6e9990' }}>Date</label>
+                  <button
+                    type="button"
+                    onClick={() => setDatePickerOpen(true)}
+                    className="mb-4 flex w-full items-center gap-1.5 rounded-xl px-3 py-3 text-left text-[13px] font-semibold"
+                    style={{ background: '#ffffff', color: '#191c1c', border: '1px solid #e7edeb' }}
+                  >
+                    <CalendarBlank size={13} weight="regular" style={{ color: '#6e9990' }} aria-hidden="true" />
+                    {formatDate(date)}
+                  </button>
+
+                  {/* Payment method — same picker as Smart Entry */}
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-widest" style={{ color: '#6e9990' }}>Method</label>
+                  <div className="mb-4 grid grid-cols-3 gap-1.5 rounded-2xl p-2" style={{ background: '#f0f4f2', border: '1px solid #e7edeb' }}>
+                    {PAYMENT_METHODS.map((m) => {
+                      const active = m.id === paymentMethod
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          aria-pressed={active}
+                          onClick={() => setPaymentMethod(m.id as PaymentMethodId)}
+                          className="flex items-center justify-center gap-1.5 rounded-xl py-2 text-[11px] font-semibold transition-colors"
+                          style={active ? { background: '#1f695d', color: '#ffffff' } : { background: '#ffffff', color: '#3f4946' }}
+                        >
+                          <Glyph name={m.icon} size={13} weight={active ? 'fill' : 'regular'} />
+                          {m.short}
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {/* Wallet — pay this expense FROM a wallet, or save income INTO one */}
+                  {canLinkWallet && walletOptions.length > 0 && (
+                    <>
+                      <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-widest" style={{ color: '#6e9990' }}>
+                        {isIncomeType ? 'Into wallet' : 'From wallet'}
+                      </label>
+                      <div className="grid grid-cols-2 gap-1.5 rounded-2xl p-2" style={{ background: '#f0f4f2', border: '1px solid #e7edeb' }}>
+                        <button
+                          type="button"
+                          aria-pressed={walletId === undefined}
+                          onClick={() => setWalletChoice(undefined)}
+                          className="flex items-center justify-center gap-1.5 rounded-xl py-2 text-[11px] font-semibold transition-colors"
+                          style={walletId === undefined ? { background: '#1f695d', color: '#ffffff' } : { background: '#ffffff', color: '#3f4946' }}
+                        >
+                          <WalletIcon size={13} weight="regular" aria-hidden="true" />
+                          None
+                        </button>
+                        {walletOptions.map((w) => {
+                          const active = w.id === walletId
+                          return (
+                            <button
+                              key={w.id}
+                              type="button"
+                              aria-pressed={active}
+                              onClick={() => setWalletChoice(w.id)}
+                              className="flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-[11px] font-semibold transition-colors"
+                              style={active ? { background: '#1f695d', color: '#ffffff' } : { background: '#ffffff', color: '#3f4946' }}
+                            >
+                              <Glyph name={w.icon} size={13} weight={active ? 'fill' : 'regular'} />
+                              <span className="truncate">{w.name}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <p className="mb-4 mt-1.5 text-[11px] leading-relaxed" style={{ color: '#6e9990' }}>
+                        {walletId
+                          ? isIncomeType
+                            ? `Adds to ${walletOptions.find((w) => w.id === walletId)?.name ?? 'the wallet'}'s balance.`
+                            : `Comes out of ${walletOptions.find((w) => w.id === walletId)?.name ?? 'the wallet'}'s balance.`
+                          : 'Not linked to a wallet.'}
+                      </p>
+                    </>
+                  )}
+
+                  {/* Tags — group entries across categories/months (e.g. a trip) */}
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-widest" style={{ color: '#6e9990' }}>Tags</label>
+                  <div className="mb-4">
+                    <TagInput value={tags} onChange={setTags} suggestions={tagSuggestions} />
                   </div>
 
                   {/* Category grid */}

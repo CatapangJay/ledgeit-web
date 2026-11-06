@@ -19,6 +19,7 @@ import {
   type TransactionDraft,
 } from '@ledgeit/core';
 import { useStore } from '@/lib/store';
+import { newId } from '@/lib/id';
 import ParsePreview from './ParsePreview';
 
 interface Props {
@@ -42,12 +43,6 @@ interface ParseResult {
   draft: TransactionDraft;
   category: Category;
   confidence: number;
-}
-
-let entrySeq = 0;
-function newId(): string {
-  entrySeq += 1;
-  return `entry-${Date.now().toString(36)}-${entrySeq}`;
 }
 
 /**

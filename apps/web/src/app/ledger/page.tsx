@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState, useMemo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MagnifyingGlass, X, SlidersHorizontal, CaretDown, ListChecks, Tag, CalendarBlank, Trash } from '@phosphor-icons/react'
+import { MagnifyingGlass, X, SlidersHorizontal, CaretDown, ListChecks, Tag, CalendarBlank, Trash, Hash } from '@phosphor-icons/react'
 import FilterChips from '@/components/ledger/FilterChips'
 import DateFilterBar from '@/components/ledger/DateFilterBar'
 import DateGroup from '@/components/ledger/DateGroup'
@@ -13,10 +13,12 @@ import CategoryBreakdownBar from '@/components/ledger/CategoryBreakdownBar'
 import CategoryPickerSheet from '@/components/ledger/CategoryPickerSheet'
 import WalletStrip from '@/components/ledger/WalletStrip'
 import ListSkeleton from '@/components/ledger/ListSkeleton'
+import TagInput from '@/components/ledger/TagInput'
 import DatePickerSheet from '@/components/ui/DatePickerSheet'
 import { useStore } from '@/lib/store'
 import { useDeferredMount } from '@/lib/useDeferredMount'
-import { formatCurrency } from '@/lib/formatters'
+import { formatCurrency, formatDate } from '@/lib/formatters'
+import { hasTag, normalizeTag, normalizeTags, recentTags, summarizeTags, tagKey, MAX_TAGS_PER_TRANSACTION } from '@/lib/tags'
 import { PAYMENT_METHODS, CATEGORIES, spendAmount } from '@/types'
 import type { FilterValue } from '@/components/ledger/FilterChips'
 import type { DatePeriod } from '@/components/ledger/DateFilterBar'
@@ -83,6 +85,8 @@ function LedgerContent() {
   const linkedDate = rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : null
   // Optional category deep-link from the insights breakdown (?category=<id>).
   const linkedCategory = searchParams.get('category')
+  // Optional tag deep-link from the insights Tags card (?tag=<label>).
+  const linkedTag = searchParams.get('tag')
 
   const [filter, setFilter] = useState<FilterValue>('all')
   // Default to the current month so the initial view matches the bounded initial
@@ -92,6 +96,8 @@ function LedgerContent() {
   const [customDate, setCustomDate] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [methodFilter, setMethodFilter] = useState<PaymentMethodId | 'all'>('all')
+  // Show only entries carrying this tag (case-insensitive), or null for any.
+  const [tagFilter, setTagFilter] = useState<string | null>(null)
   // Whether the filter controls (date, category, method) are expanded. Search
   // stays outside so it's always reachable. Collapsed by default to keep the
   // list the focus; auto-expands below when arriving with an active filter.
@@ -104,6 +110,12 @@ function LedgerContent() {
   const [bulkPickerOpen, setBulkPickerOpen] = useState(false)
   const [bulkDatePickerOpen, setBulkDatePickerOpen] = useState(false)
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
+  const [bulkTagOpen, setBulkTagOpen] = useState(false)
+  const [bulkTags, setBulkTags] = useState<string[]>([])
+  // Text typed in the bulk tag field but not yet committed with Enter.
+  const [bulkTagDraft, setBulkTagDraft] = useState('')
+  // Entries the last bulk tag couldn't fully apply to (already at the tag cap).
+  const [bulkTagSkipped, setBulkTagSkipped] = useState(0)
   const [bulkError, setBulkError] = useState(false)
 
   // Seed the custom-day filter when arriving via a heatmap deep-link.
@@ -134,6 +146,16 @@ function LedgerContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linkedCategory])
 
+  // Seed the tag filter when arriving via an insights deep-link. Tags usually
+  // span months (a trip, a project), so widen the period to all time.
+  useEffect(() => {
+    if (!linkedTag) return
+    const tag = normalizeTag(linkedTag)
+    if (tag) selectTag(tag)
+    router.replace('/ledger')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkedTag])
+
   const transactions = useStore((s) => s.transactions)
   const ensureFullHistory = useStore((s) => s.ensureFullHistory)
   const deleteTransaction = useStore((s) => s.deleteTransaction)
@@ -141,6 +163,8 @@ function LedgerContent() {
   const bulkChangeCategory = useStore((s) => s.bulkChangeCategory)
   const bulkChangeDate = useStore((s) => s.bulkChangeDate)
   const bulkDelete = useStore((s) => s.bulkDelete)
+  const bulkAddTags = useStore((s) => s.bulkAddTags)
+  const fullHistoryLoaded = useStore((s) => s.fullHistoryLoaded)
   const customCategories = useStore((s) => s.customCategories)
   const hiddenCategories = useStore((s) => s.hiddenCategories)
 
@@ -155,13 +179,16 @@ function LedgerContent() {
   }, [filtersOpen, search, period, ensureFullHistory])
 
   const customChips = customCategories.map((c) => ({ value: c.id, label: c.name }))
+  // Every tag in use, most recent first — feeds the tag chips + autocomplete.
+  const allTags = useMemo(() => recentTags(transactions), [transactions])
 
   const range = useMemo(() => periodRange(period, customDate), [period, customDate])
   const query = search.trim().toLowerCase()
-  const hasActiveFilters = filter !== 'all' || period !== 'all' || query !== '' || methodFilter !== 'all'
+  const hasActiveFilters = filter !== 'all' || period !== 'all' || query !== '' || methodFilter !== 'all' || tagFilter !== null
   // Count of active controls inside the collapsible panel (search excluded — it
   // has its own always-visible field). Surfaced as a badge on the toggle.
-  const activePanelFilters = (filter !== 'all' ? 1 : 0) + (period !== 'all' ? 1 : 0) + (methodFilter !== 'all' ? 1 : 0)
+  const activePanelFilters =
+    (filter !== 'all' ? 1 : 0) + (period !== 'all' ? 1 : 0) + (methodFilter !== 'all' ? 1 : 0) + (tagFilter !== null ? 1 : 0)
 
   function clearAll() {
     setFilter('all')
@@ -169,6 +196,19 @@ function LedgerContent() {
     setCustomDate(null)
     setSearch('')
     setMethodFilter('all')
+    setTagFilter(null)
+  }
+
+  /** Filter by a tag (or clear with null). Tags usually span months — a trip,
+   *  a project — so picking one widens the period to all time; the total in
+   *  the banner then matches the Insights Tags card. */
+  function selectTag(tag: string | null) {
+    setTagFilter(tag)
+    if (tag !== null) {
+      setPeriod('all')
+      setCustomDate(null)
+      setFiltersOpen(true) // reveal the panel so the active tag filter is visible
+    }
   }
 
   function handlePeriodChange(next: DatePeriod) {
@@ -192,20 +232,29 @@ function LedgerContent() {
       if (range && (t.date < range.start || t.date > range.end)) return false
       // Payment method
       if (methodFilter !== 'all' && t.paymentMethod !== methodFilter) return false
-      // Free-text search across merchant, category, and raw note
+      // Tag
+      if (tagFilter !== null && !hasTag(t, tagFilter)) return false
+      // Free-text search across merchant, category, raw note, and tags
       if (query) {
-        const haystack = `${t.merchant} ${t.category.label} ${t.raw}`.toLowerCase()
+        const haystack = `${t.merchant} ${t.category.label} ${t.raw} ${(t.tags ?? []).join(' ')}`.toLowerCase()
         if (!haystack.includes(query)) return false
       }
       return true
     })
-  }, [transactions, filter, range, query, methodFilter])
+  }, [transactions, filter, range, query, methodFilter, tagFilter])
 
   // Net spend across the filtered set — reimbursements subtract (spendAmount).
   const totalAmount = useMemo(
     () => filtered.reduce((s, t) => s + spendAmount(t), 0),
     [filtered]
   )
+
+  // Totals for the active tag across the filtered set (null when no tag filter).
+  const tagSummary = useMemo(() => {
+    if (tagFilter === null) return null
+    const key = tagKey(tagFilter)
+    return summarizeTags(filtered).find((s) => tagKey(s.tag) === key) ?? null
+  }, [filtered, tagFilter])
 
   const groups = groupByDate(filtered)
 
@@ -236,6 +285,10 @@ function LedgerContent() {
     setBulkPickerOpen(false)
     setBulkDatePickerOpen(false)
     setBulkDeleteConfirm(false)
+    setBulkTagOpen(false)
+    setBulkTags([])
+    setBulkTagDraft('')
+    setBulkTagSkipped(0)
     setBulkError(false)
   }
 
@@ -282,6 +335,27 @@ function LedgerContent() {
     const ok = await bulkChangeDate(ids, date)
     if (ok) exitSelectMode()
     else setBulkError(true)
+  }
+
+  function closeBulkTag() {
+    setBulkTagOpen(false)
+    setBulkTags([])
+    setBulkTagDraft('')
+  }
+
+  async function handleBulkTag() {
+    const ids = visibleSelectedIds
+    const tags = normalizeTags([...bulkTags, bulkTagDraft])
+    setBulkTagOpen(false)
+    setBulkTags([])
+    setBulkTagDraft('')
+    setBulkError(false)
+    setBulkTagSkipped(0)
+    const { ok, skipped } = await bulkAddTags(ids, tags)
+    if (!ok) setBulkError(true)
+    // Keep select mode open so the note about full entries stays visible.
+    else if (skipped > 0) setBulkTagSkipped(skipped)
+    else exitSelectMode()
   }
 
   async function handleBulkDelete() {
@@ -373,6 +447,15 @@ function LedgerContent() {
                   Date
                 </button>
                 <button
+                  onClick={() => setBulkTagOpen(true)}
+                  disabled={selectedCount === 0}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold disabled:opacity-40"
+                  style={{ background: '#e7edeb', color: '#1f695d' }}
+                >
+                  <Hash size={13} weight="bold" aria-hidden="true" />
+                  Tag
+                </button>
+                <button
                   onClick={() => setBulkDeleteConfirm(true)}
                   disabled={selectedCount === 0}
                   className="flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold disabled:opacity-40"
@@ -383,6 +466,13 @@ function LedgerContent() {
                 </button>
               </div>
             </div>
+            {bulkTagSkipped > 0 && (
+              <p className="mb-3 rounded-xl px-3 py-2 text-[12px] font-semibold" style={{ background: '#f0f4f2', color: '#3f4946' }}>
+                {bulkTagSkipped} {bulkTagSkipped === 1 ? 'entry already has' : 'entries already have'} the
+                maximum of {MAX_TAGS_PER_TRANSACTION} tags, so not every new tag fit. Remove a tag from{' '}
+                {bulkTagSkipped === 1 ? 'it' : 'them'} first.
+              </p>
+            )}
             {bulkError && (
               <p className="mb-3 rounded-xl px-3 py-2 text-[12px] font-semibold" style={{ background: '#fbeaea', color: '#ba1a1a' }}>
                 Couldn’t update those transactions. Check your connection and try again.
@@ -518,6 +608,38 @@ function LedgerContent() {
                 )
               })}
             </div>
+
+            {/* Tag chips — only once the user has tagged something */}
+            {allTags.length > 0 && (
+              <div
+                className="mb-3 flex gap-2 overflow-x-auto pb-1 scrollbar-hide"
+                style={{ msOverflowStyle: 'none', scrollbarWidth: 'none' }}
+                role="group"
+                aria-label="Filter by tag"
+              >
+                {[null, ...allTags].map((tag) => {
+                  const active = tag === null
+                    ? tagFilter === null
+                    : tagFilter !== null && tagKey(tag) === tagKey(tagFilter)
+                  return (
+                    <button
+                      key={tag ?? '__any'}
+                      onClick={() => selectTag(tag)}
+                      aria-pressed={active}
+                      className="flex shrink-0 items-center gap-1 rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-colors"
+                      style={
+                        active
+                          ? { background: '#1f695d', color: '#ffffff' }
+                          : { background: '#f0f4f2', color: '#3f4946' }
+                      }
+                    >
+                      {tag !== null && <Hash size={11} weight="bold" aria-hidden="true" />}
+                      {tag ?? 'Any tag'}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -526,6 +648,49 @@ function LedgerContent() {
         <ListSkeleton />
       ) : (
         <>
+      {/* Tag totals — the point of tagging: what did "Oct Vacation" cost? */}
+      {tagFilter !== null && (
+        <div
+          className="mb-3 rounded-2xl px-4 py-3.5"
+          style={{ background: '#ffffff', boxShadow: '0 2px 12px rgba(0,53,46,0.06)' }}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="flex min-w-0 items-center gap-1 text-[12px] font-bold" style={{ color: '#1f695d' }}>
+              <Hash size={12} weight="bold" aria-hidden="true" />
+              <span className="truncate">{tagSummary?.tag ?? tagFilter}</span>
+            </span>
+            <button
+              onClick={() => setTagFilter(null)}
+              aria-label="Clear tag filter"
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full"
+              style={{ background: '#f0f4f2' }}
+            >
+              <X size={10} weight="bold" style={{ color: '#6e9990' }} aria-hidden="true" />
+            </button>
+          </div>
+          <p className="mt-1 font-mono text-xl font-bold" style={{ color: '#00352e', opacity: fullHistoryLoaded ? 1 : 0.5 }}>
+            {formatCurrency(tagSummary?.spent ?? 0)}
+            <span className="ml-1.5 font-sans text-[11px] font-semibold" style={{ color: '#6e9990' }}>spent</span>
+          </p>
+          <p className="mt-0.5 text-[11px]" style={{ color: '#6e9990' }}>
+            {!fullHistoryLoaded ? (
+              'Loading full history…'
+            ) : tagSummary ? (
+              <>
+                {tagSummary.count} {tagSummary.count === 1 ? 'entry' : 'entries'}
+                {' · '}
+                {tagSummary.firstDate === tagSummary.lastDate
+                  ? formatDate(tagSummary.firstDate)
+                  : `${formatDate(tagSummary.firstDate)} – ${formatDate(tagSummary.lastDate)}`}
+                {tagSummary.earned > 0 && <> · +{formatCurrency(tagSummary.earned)} income</>}
+              </>
+            ) : (
+              'No entries with this tag match the current filters.'
+            )}
+          </p>
+        </div>
+      )}
+
       {/* Category breakdown bar */}
       <CategoryBreakdownBar transactions={filtered} />
 
@@ -535,7 +700,7 @@ function LedgerContent() {
           <EmptyFiltered key="empty" hasActiveFilters={hasActiveFilters} />
         ) : (
           <motion.div
-            key={`${filter}-${period}-${customDate ?? ''}`}
+            key={`${filter}-${period}-${customDate ?? ''}-${tagFilter ?? ''}`}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -581,6 +746,7 @@ function LedgerContent() {
         tx={editingTx}
         customCategories={customCategories}
         hiddenCategories={hiddenCategories}
+        tagSuggestions={allTags}
         onClose={() => setEditingTx(null)}
         onSave={updateTransaction}
         onDelete={deleteTransaction}
@@ -602,6 +768,67 @@ function LedgerContent() {
         onSelect={handleBulkDate}
         onClose={() => setBulkDatePickerOpen(false)}
       />
+
+      {/* Bulk tag dialog */}
+      <AnimatePresence>
+        {bulkTagOpen && (
+          <>
+            <motion.div
+              className="fixed inset-0 z-[70]"
+              style={{ background: 'rgba(0,53,46,0.28)', backdropFilter: 'blur(4px)' }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.16 }}
+              onClick={closeBulkTag}
+              aria-hidden="true"
+            />
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Tag selected transactions"
+              className="fixed left-1/2 top-1/2 z-[71] w-[min(24rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-3xl p-5"
+              style={{ background: '#ffffff', boxShadow: '0 24px 80px rgba(0,53,46,0.24)' }}
+              initial={{ opacity: 0, scale: 0.94, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 8 }}
+              transition={{ type: 'spring', stiffness: 340, damping: 30 }}
+            >
+              <div className="mb-3 flex items-center gap-2.5">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full" style={{ background: 'rgba(31,105,80,0.12)' }}>
+                  <Hash size={17} weight="bold" style={{ color: '#1f695d' }} aria-hidden="true" />
+                </div>
+                <h3 className="text-sm font-bold" style={{ color: '#00352e' }}>
+                  Tag {selectedCount} {selectedCount === 1 ? 'transaction' : 'transactions'}
+                </h3>
+              </div>
+              <p className="mb-3 text-[13px] leading-relaxed" style={{ color: '#3f4946' }}>
+                Added alongside any tags they already have.
+              </p>
+              <div className="mb-4">
+                <TagInput value={bulkTags} onChange={setBulkTags} suggestions={allTags} autoFocus onDraftChange={setBulkTagDraft} />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={closeBulkTag}
+                  className="flex-1 rounded-xl py-2.5 text-[13px] font-semibold"
+                  style={{ background: '#f0f4f2', color: '#3f4946' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleBulkTag}
+                  disabled={bulkTags.length === 0 && normalizeTag(bulkTagDraft) === ''}
+                  className="flex-1 rounded-xl py-2.5 text-[13px] font-bold text-white disabled:opacity-40"
+                  style={{ background: 'linear-gradient(135deg, #1f695d 0%, #00352e 100%)' }}
+                >
+                  Add {bulkTags.length > 1 ? 'tags' : 'tag'}
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Bulk delete confirmation */}
       <AnimatePresence>

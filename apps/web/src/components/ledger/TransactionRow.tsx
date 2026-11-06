@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useMotionValue, motion, animate } from 'framer-motion'
-import { Trash, CalendarBlank, Check } from '@phosphor-icons/react'
+import { Trash, CalendarBlank, Check, Hash } from '@phosphor-icons/react'
 import { PHOSPHOR_ICON_MAP, CUSTOM_COLOR_OPTIONS } from '@/lib/iconMap'
 import { formatCurrency, formatDate } from '@/lib/formatters'
 import DatePickerSheet from '@/components/ui/DatePickerSheet'
@@ -198,6 +198,21 @@ export default function TransactionRow({ tx, onDelete, onDateChange, onEdit, sel
               </span>
             )}
           </div>
+          {/* Tags — own line so they don't crowd the category/date meta. */}
+          {tx.tags && tx.tags.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {tx.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                  style={{ background: '#f0f4f2', color: '#3f4946' }}
+                >
+                  <Hash size={9} weight="bold" aria-hidden="true" />
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </motion.div>
 

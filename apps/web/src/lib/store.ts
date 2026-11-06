@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Transaction, BudgetLimit, BudgetAllocation, BudgetAllocationItem, CustomCategory, IncomeAllocation, IncomeAllocationItem, Debt, DebtDirection, Category, Wallet, WalletKind, WalletMovementType } from '@/types'
+import type { Transaction, BudgetLimit, BudgetAllocation, BudgetAllocationItem, CustomCategory, IncomeAllocation, IncomeAllocationItem, Debt, DebtDirection, Category, Wallet, WalletKind, WalletMovement, WalletMovementType } from '@/types'
 import {
   fetchTransactions,
   insertTransaction,
@@ -7,6 +7,7 @@ import {
   patchTransaction,
   bulkSetCategory,
   bulkSetDate,
+  bulkAppendTags,
   bulkDeleteTransactions,
 } from '@/lib/db/transactions'
 import { fetchBudgetLimits, replaceBudgetLimits, fetchSnapshottedMonths } from '@/lib/db/budgetLimits'
@@ -58,6 +59,7 @@ import {
 } from '@/lib/db/budgetCarryovers'
 import { CATEGORIES, typeForCategory, resolveWalletKind, resolveCategory, spendAmount, netAmount } from '@/types'
 import type { BudgetCarryover, CarryoverDestination } from '@/types'
+import { normalizeTags, hasTag } from '@/lib/tags'
 
 // ─── Income source id → human-readable label ─────────────────────────────────
 // Mirrors the INCOME_SOURCES list in OnboardingBudgetSetup (kept here so the
@@ -265,6 +267,10 @@ interface StoreActions {
   bulkChangeCategory: (ids: string[], category: Category) => Promise<boolean>
   /** Set the date on many transactions at once. Resolves true on success. */
   bulkChangeDate: (ids: string[], date: string) => Promise<boolean>
+  /** Add tags to many transactions at once (debt-linked ones are skipped).
+   *  `skipped` counts rows already at the per-entry tag cap that couldn't take
+   *  every new tag. `ok` is false if the DB write failed (changes rolled back). */
+  bulkAddTags: (ids: string[], tags: string[]) => Promise<{ ok: boolean; skipped: number }>
   /** Delete many transactions at once (debt-linked ones are skipped). Resolves true on success. */
   bulkDelete: (ids: string[]) => Promise<boolean>
   /** Persist a user-corrected category for a merchant/keyword. */
@@ -296,6 +302,11 @@ interface StoreActions {
   attachWalletMovement: (walletId: string, payload: { type: WalletMovementType; amount: number; date: string; note?: string; transactionId: string }) => Promise<void>
   /** Delete a single wallet movement and its linked ledger transfer. */
   removeWalletMovement: (walletId: string, movementId: string) => Promise<void>
+  /** Re-sync an expense/income entry's linked wallet movement after an edit:
+   *  moves it to `walletId` (or unlinks it when undefined) and mirrors the
+   *  entry's current amount/date/type. Entries that are no longer expense/income
+   *  are unlinked; carryover transfers are left alone. */
+  setTransactionWallet: (transactionId: string, walletId: string | undefined) => Promise<void>
   toggleWalletArchived: (walletId: string) => Promise<void>
   removeWallet: (walletId: string) => Promise<void>
   // ── Budget carryovers ─────────────────────────────────────────────────────
@@ -870,6 +881,52 @@ export const useStore = create<AppStore>()((set, get) => ({
     }
   },
 
+  async bulkAddTags(ids, tags) {
+    const clean = normalizeTags(tags)
+    if (ids.length === 0 || clean.length === 0) return { ok: true, skipped: 0 }
+    const prev = get().transactions
+    const idSet = new Set(ids)
+    // Debt-linked entries are managed on the Debts page — leave them alone,
+    // matching the other bulk actions.
+    const targets = prev.filter((t) => idSet.has(t.id) && t.category.id !== 'debts')
+    // Same merge the server applies (add_transaction_tags), for the optimistic view.
+    const merged = new Map<string, string[]>()
+    let skipped = 0
+    for (const t of targets) {
+      const missing = clean.filter((tag) => !hasTag(t, tag))
+      if (missing.length === 0) continue
+      const next = normalizeTags([...(t.tags ?? []), ...missing])
+      if (next.length - (t.tags?.length ?? 0) < missing.length) skipped++
+      if (next.length > (t.tags?.length ?? 0)) merged.set(t.id, next)
+    }
+    if (merged.size === 0) return { ok: true, skipped }
+    const targetIds = Array.from(merged.keys())
+
+    // Optimistic: append the tags to the selected rows.
+    set((state) => ({
+      transactions: state.transactions.map((t) => {
+        const next = merged.get(t.id)
+        return next ? { ...t, tags: next } : t
+      }),
+    }))
+    try {
+      await bulkAppendTags(targetIds, clean)
+      return { ok: true, skipped }
+    } catch (err) {
+      console.error('[store] bulkAddTags failed:', err)
+      // The RPC is atomic, so nothing landed — undo only the tags we added,
+      // keeping any other edits made while the request was in flight.
+      set((state) => ({
+        transactions: state.transactions.map((t) => {
+          if (!merged.has(t.id)) return t
+          const before = prev.find((p) => p.id === t.id)
+          return { ...t, tags: before?.tags ?? [] }
+        }),
+      }))
+      return { ok: false, skipped: 0 }
+    }
+  },
+
   async bulkDelete(ids) {
     if (ids.length === 0) return true
     const prev = get().transactions
@@ -1284,6 +1341,13 @@ export const useStore = create<AppStore>()((set, get) => ({
     if (!wallet) return
     const movement = wallet.movements.find((m) => m.id === movementId)
     if (!movement) return
+    // A movement created by a budget carryover can't be removed on its own — that
+    // would orphan the carryover row and its transfer (and block re-carrying).
+    // Undo the whole carryover instead; it calls back here once its row is gone.
+    const carryover = movement.transactionId
+      ? get().budgetCarryovers.find((c) => c.destination === 'wallet' && c.transactionId === movement.transactionId)
+      : undefined
+    if (carryover) return get().removeCarryover(carryover.id)
     const prev = get().wallets
 
     // Drop the movement optimistically. Only 'manual' movements own their linked
@@ -1307,6 +1371,44 @@ export const useStore = create<AppStore>()((set, get) => ({
     }
   },
 
+  async setTransactionWallet(transactionId, walletId) {
+    const tx = get().transactions.find((t) => t.id === transactionId)
+    if (!tx) return
+    // Carryover transfers own their wallet movement — managed via removeCarryover.
+    if (get().budgetCarryovers.some((c) => c.transactionId === transactionId)) return
+    // Only plain expense/income can be paid from / saved into a wallet; if the
+    // edit turned the entry into anything else, drop any existing link.
+    if (tx.type !== 'expense' && tx.type !== 'income') walletId = undefined
+    const type: WalletMovementType = tx.type === 'income' ? 'deposit' : 'withdrawal'
+
+    let current: { walletId: string; movement: WalletMovement } | null = null
+    for (const w of get().wallets) {
+      const m = w.movements.find((mv) => mv.source === 'linked' && mv.transactionId === transactionId)
+      if (m) { current = { walletId: w.id, movement: m }; break }
+    }
+
+    // Already in sync — nothing to do.
+    if (
+      current &&
+      current.walletId === walletId &&
+      current.movement.type === type &&
+      current.movement.amount === tx.amount &&
+      current.movement.date === tx.date
+    ) return
+    if (!current && !walletId) return
+
+    if (current) await get().removeWalletMovement(current.walletId, current.movement.id)
+    if (walletId) {
+      await get().attachWalletMovement(walletId, {
+        type,
+        amount: tx.amount,
+        date: tx.date,
+        note: current?.movement.note,
+        transactionId,
+      })
+    }
+  },
+
   async toggleWalletArchived(walletId) {
     const wallet = get().wallets.find((w) => w.id === walletId)
     if (!wallet) return
@@ -1327,6 +1429,11 @@ export const useStore = create<AppStore>()((set, get) => ({
   async removeWallet(walletId) {
     const wallet = get().wallets.find((w) => w.id === walletId)
     if (!wallet) return
+    // Undo carryovers routed through this wallet first, so their rows and
+    // transfers don't outlive it.
+    for (const c of get().budgetCarryovers.filter((c) => c.walletId === walletId)) {
+      await get().removeCarryover(c.id)
+    }
     const prev = get().wallets
 
     // Remove optimistically, then clean up only the app-owned transfers (manual

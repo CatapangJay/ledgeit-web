@@ -18,6 +18,8 @@ interface Props {
   onToggle?: (categoryId: string) => void
   /** Breakdown content revealed when expanded. */
   children?: ReactNode
+  /** Always-visible indicators below the bar (e.g. carryover / wallet moves). */
+  badges?: ReactNode
 }
 
 function getBarColor(ratio: number): string {
@@ -32,7 +34,7 @@ function getLabelColor(ratio: number): string {
   return '#1f6950'
 }
 
-export default function BudgetBar({ category, spent, limit, hasLimit = false, expanded = false, onToggle, children }: Props) {
+export default function BudgetBar({ category, spent, limit, hasLimit = false, expanded = false, onToggle, children, badges }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const isInView = useInView(ref, { once: true, amount: 0.4 })
   // Clamp at 0 so a net-negative category (refunds exceed spend) shows an empty
@@ -116,6 +118,8 @@ export default function BudgetBar({ category, spent, limit, hasLimit = false, ex
           <span className="text-[11px] font-semibold" style={{ color: getLabelColor(ratio) }}>{pct}%</span>
         </div>
       </div>
+
+      {badges}
 
       {/* Expandable breakdown */}
       <AnimatePresence initial={false}>

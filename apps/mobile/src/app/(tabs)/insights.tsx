@@ -1,15 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
 import { CaretLeft, CaretRight, CaretRight as CaretRightSmall, Sliders } from 'phosphor-react-native';
-import { CATEGORIES, formatCurrency, formatMonthLabel, isSpend, spendAmount } from '@ledgeit/core';
+import { CATEGORIES, applyCarryoversToLimits, formatCurrency, formatMonthLabel, isSpend, spendAmount, type BudgetCarryover } from '@ledgeit/core';
 import MetricStrip from '@/components/insights/MetricStrip';
 import BudgetBar from '@/components/insights/BudgetBar';
 import SpendDonut from '@/components/insights/SpendDonut';
 import CategoryBreakdownList from '@/components/insights/CategoryBreakdownList';
+import { CarryoverAction, CarryoverBadges } from '@/components/insights/CategoryCarryover';
 import WalletInsightsCard from '@/components/insights/WalletInsightsCard';
 import MonthTrendChart from '@/components/dashboard/MonthTrendChart';
 import WeeklyTrendChart from '@/components/dashboard/WeeklyTrendChart';
-import RecurringPaymentsCard from '@/components/dashboard/RecurringPaymentsCard';
 import BiggestExpenseCard from '@/components/dashboard/BiggestExpenseCard';
 import BudgetAllocationSheet from '@/components/budget/BudgetAllocationSheet';
 import { Skeleton, SkeletonCard } from '@/components/ui/Skeleton';
@@ -35,7 +35,11 @@ export default function InsightsScreen() {
   // Defer the charts/metrics so the header + month switcher paint instantly.
   const contentReady = useDeferredMount();
   const transactions = useStore((s) => s.transactions);
-  const budgetLimits = useStore((s) => s.budgetLimits);
+  const budgetLimitsByMonth = useStore((s) => s.budgetLimitsByMonth);
+  const liveBudgetLimits = useStore((s) => s.budgetLimits);
+  const loadBudgetLimitsForMonth = useStore((s) => s.loadBudgetLimitsForMonth);
+  const budgetCarryovers = useStore((s) => s.budgetCarryovers);
+  const wallets = useStore((s) => s.wallets);
   const budgetAllocations = useStore((s) => s.budgetAllocations);
   const customCategories = useStore((s) => s.customCategories);
   const hiddenCategories = useStore((s) => s.hiddenCategories);
@@ -45,6 +49,35 @@ export default function InsightsScreen() {
   const toggleCategory = (id: string) => setExpandedCategory((prev) => (prev === id ? null : id));
 
   const { start, end, label } = useMemo(() => getMonthBounds(monthOffset), [monthOffset]);
+
+  // 'YYYY-MM' of the viewed month, shared by transactions and budget snapshots.
+  const monthKey = start.slice(0, 7);
+
+  // Historical months show the budget that applied then (a per-month snapshot),
+  // not today's active plan. The current/future month is served live.
+  useEffect(() => {
+    loadBudgetLimitsForMonth(monthKey);
+  }, [monthKey, loadBudgetLimitsForMonth]);
+
+  // Current (and future) month reflects the live active plan; past months use
+  // their frozen snapshot. Either way, carryovers that landed in the viewed
+  // month are layered on top so the budget matches what the user had to spend.
+  const budgetLimits = useMemo(() => {
+    const base = monthOffset < 0 ? (budgetLimitsByMonth[monthKey] ?? []) : liveBudgetLimits;
+    return applyCarryoversToLimits(base, budgetCarryovers, monthKey);
+  }, [monthOffset, monthKey, budgetLimitsByMonth, liveBudgetLimits, budgetCarryovers]);
+
+  // Carryovers leaving the viewed month (to a wallet or next month's budget) and
+  // those landing in its budget, keyed by category for the Budget Flow rows.
+  const { outgoingByCat, incomingByCat } = useMemo(() => {
+    const outgoing: Record<string, BudgetCarryover> = {};
+    const incoming: Record<string, BudgetCarryover[]> = {};
+    for (const c of budgetCarryovers) {
+      if (c.fromMonth === monthKey) outgoing[c.categoryId] = c;
+      if (c.toMonth === monthKey && c.destination === 'category') (incoming[c.categoryId] ??= []).push(c);
+    }
+    return { outgoingByCat: outgoing, incomingByCat: incoming };
+  }, [budgetCarryovers, monthKey]);
 
   const monthTxns = useMemo(() => transactions.filter((t) => t.date >= start && t.date <= end), [transactions, start, end]);
 
@@ -178,6 +211,10 @@ export default function InsightsScreen() {
           <WalletInsightsCard start={start} end={end} />
         </View>
 
+        <View className="mt-4">
+          <BiggestExpenseCard start={start} end={end} />
+        </View>
+
         {/* Budget Flow */}
         <View className="mt-6 pb-2">
           <Text className="text-[12px] font-bold uppercase tracking-[1.4px]" style={{ color: '#00352e' }}>
@@ -189,15 +226,31 @@ export default function InsightsScreen() {
           const limit = budgetLimits.find((b) => b.categoryId === cat.id)?.limit ?? 0;
           const spent = categorySpend[cat.id] ?? 0;
           if (limit === 0 && spent === 0) return null;
+          const outgoing = outgoingByCat[cat.id];
+          const incoming = incomingByCat[cat.id] ?? [];
+          const leftover = limit > 0 ? Math.round((limit - spent) * 100) / 100 : 0;
           return (
             <BudgetBar
               key={cat.id}
               category={cat}
               spent={spent}
               limit={limit}
+              hasLimit={limit > 0}
               expanded={expandedCategory === cat.id}
               onToggle={toggleCategory}
+              badges={<CarryoverBadges outgoing={outgoing} incoming={incoming} wallets={wallets} />}
             >
+              {monthOffset < 0 && (outgoing || leftover > 0) && (
+                <CarryoverAction
+                  key={`${monthKey}-${cat.id}`}
+                  categoryId={cat.id}
+                  categoryLabel={cat.label}
+                  fromMonth={monthKey}
+                  leftover={leftover}
+                  allowBudget={monthOffset === -1}
+                  applied={outgoing}
+                />
+              )}
               <CategoryBreakdownList transactions={txnsByCategory[cat.id] ?? []} />
             </BudgetBar>
           );
@@ -217,11 +270,6 @@ export default function InsightsScreen() {
         {/* Spending patterns */}
         <View className="mt-4">
           <WeeklyTrendChart />
-        </View>
-
-        <View className="mt-4 flex-row gap-3">
-          <RecurringPaymentsCard />
-          <BiggestExpenseCard />
         </View>
           </>
         )}

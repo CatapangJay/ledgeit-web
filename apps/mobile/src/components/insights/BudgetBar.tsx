@@ -14,11 +14,16 @@ interface Props {
   category: Category;
   spent: number;
   limit: number;
+  /** Whether `limit` is a real user-set budget; only then is "remaining" shown.
+   *  Defaults to `limit > 0`. */
+  hasLimit?: boolean;
   /** When set, the bar becomes an accordion toggle showing `children` when open. */
   expanded?: boolean;
   onToggle?: (categoryId: string) => void;
   /** Breakdown content revealed when expanded. */
   children?: ReactNode;
+  /** Always-visible indicators under the header (e.g. carryover pills). */
+  badges?: ReactNode;
 }
 
 function getBarColor(ratio: number): string {
@@ -33,13 +38,15 @@ function getLabelColor(ratio: number): string {
   return '#1f6950';
 }
 
-export default function BudgetBar({ category, spent, limit, expanded = false, onToggle, children }: Props) {
-  const hasLimit = limit > 0;
+export default function BudgetBar({ category, spent, limit, hasLimit = limit > 0, expanded = false, onToggle, children, badges }: Props) {
   // A reimbursement-heavy category can net negative; clamp the bar ratio at 0 so
   // the fill never inverts (the label still shows the real signed amount).
   const ratio = hasLimit ? Math.min(Math.max(spent, 0) / limit, 1) : 0;
   const pct = Math.round(ratio * 100);
   const clickable = !!onToggle;
+  // Remaining budget; negative when overspent, surfaced as "over".
+  const remaining = limit - spent;
+  const overspent = remaining < 0;
 
   const width = useSharedValue(0);
   useEffect(() => {
@@ -101,7 +108,16 @@ export default function BudgetBar({ category, spent, limit, expanded = false, on
             <Animated.View className="h-full rounded-full" style={[barStyle, { backgroundColor: getBarColor(ratio) }]} />
           )}
         </View>
+
+        {/* Remaining budget, only meaningful against a real user-set limit */}
+        {hasLimit && (
+          <Text className="text-[11px] font-medium" style={{ color: overspent ? '#ba1a1a' : '#6e9990' }}>
+            {overspent ? `${formatCurrency(Math.abs(remaining))} over` : `${formatCurrency(remaining)} left`}
+          </Text>
+        )}
       </Header>
+
+      {badges}
 
       {/* Expandable breakdown */}
       {expanded && (

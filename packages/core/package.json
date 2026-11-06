@@ -12,6 +12,7 @@
     "./formatters": "./formatters.ts",
     "./coach": "./coach.ts",
     "./budgetTemplates": "./budgetTemplates.ts",
-    "./money": "./money.ts"
+    "./money": "./money.ts",
+    "./tags": "./tags.ts"
   }
 }

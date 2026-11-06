@@ -6,6 +6,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-na
 import { CATEGORIES, formatCurrencyCompact, isSpend, spendAmount } from '@ledgeit/core';
 import { getIconComponent, getIconBg } from '@/lib/iconMap';
 import { useStore } from '@/lib/store';
+import { useEffectiveBudgetLimits } from '@/lib/useEffectiveBudgetLimits';
 
 const TOP_N = 4;
 
@@ -21,7 +22,7 @@ function AnimatedBarFill({ pct, color, delay = 0 }: { pct: number; color: string
 export default function TopCategoryBars() {
   const router = useRouter();
   const transactions = useStore((s) => s.transactions);
-  const budgetLimits = useStore((s) => s.budgetLimits);
+  const budgetLimits = useEffectiveBudgetLimits();
 
   const categories = useMemo(() => {
     const now = new Date();

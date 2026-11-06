@@ -1,5 +1,5 @@
-import type { Transaction, BudgetLimit, Category, CustomCategory } from '@/types'
-import { isSpend, isEarn, spendAmount, resolveCategory } from '@/types'
+import type { Transaction, BudgetLimit, BudgetCarryover, Category, CustomCategory } from '@/types'
+import { isSpend, isEarn, spendAmount, resolveCategory, applyCarryoversToLimits } from '@/types'
 
 // ─── Month-key helpers ──────────────────────────────────────────────────────
 //
@@ -111,16 +111,26 @@ export interface MonthlyRecap {
 /**
  * Compute the end-of-month recap for the calendar month identified by `key`
  * ('YYYY-MM'). Pure: derives everything from the passed transactions, budget
- * limits, and custom categories — no store or clock access.
+ * limits, custom categories, and carryovers — no store or clock access.
+ *
+ * `budgetLimits` are the month's BASE limits (its plan snapshot). Any carryovers
+ * that landed IN this month are layered on top, so a chained roll-forward is
+ * measured against the budget the user actually had (matching Insights). The
+ * carryovers' own transfer entries are bookkeeping, not activity, so they don't
+ * count toward transactionCount / daysLogged / isEmpty.
  */
 export function computeMonthlyRecap(
   key: string,
   transactions: Transaction[],
   budgetLimits: BudgetLimit[],
   customCategories: CustomCategory[] = [],
+  carryovers: BudgetCarryover[] = [],
 ): MonthlyRecap {
   const label = monthKeyLabel(key)
   const monthTxns = transactions.filter((t) => t.date.startsWith(key))
+  const carryoverTxIds = new Set(carryovers.map((c) => c.transactionId).filter(Boolean))
+  const activityTxns = monthTxns.filter((t) => !carryoverTxIds.has(t.id))
+  const effectiveLimits = applyCarryoversToLimits(budgetLimits, carryovers, key)
 
   const totalIncome = monthTxns
     .filter((t) => isEarn(t))
@@ -155,8 +165,8 @@ export function computeMonthlyRecap(
     .reduce<Transaction | null>((max, t) => (!max || t.amount > max.amount ? t : max), null)
 
   // ── Habit stats ──
-  const transactionCount = monthTxns.length
-  const daysLogged = new Set(monthTxns.map((t) => t.date)).size
+  const transactionCount = activityTxns.length
+  const daysLogged = new Set(activityTxns.map((t) => t.date)).size
   const avgDailySpend = totalSpent > 0 ? totalSpent / daysInMonthKey(key) : 0
 
   const spendByDay = monthTxns
@@ -183,7 +193,7 @@ export function computeMonthlyRecap(
   for (let i = 0; i < weeklySpend.length; i++) weeklySpend[i] = Math.max(0, weeklySpend[i])
 
   // ── Budget adherence ──
-  const activeLimits = budgetLimits.filter((b) => b.limit > 0)
+  const activeLimits = effectiveLimits.filter((b) => b.limit > 0)
   const hasBudget = activeLimits.length > 0
   const overspentCategories: RecapBudgetStat[] = []
   const carryoverCandidates: RecapCarryoverCandidate[] = []

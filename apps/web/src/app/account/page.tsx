@@ -56,9 +56,11 @@ export default function AccountPage() {
   // dashboard at the start of a new month). Uses last month's frozen budget, not
   // today's active plan.
   const { limits: prevMonthLimits } = usePreviousMonthLimits()
+  // Carryovers that landed in last month adjust its budget; their transfers aren't activity.
+  const budgetCarryovers = useStore((s) => s.budgetCarryovers)
   const recap = useMemo(
-    () => computeMonthlyRecap(previousMonthKey(new Date()), transactions, prevMonthLimits, customCategories),
-    [transactions, prevMonthLimits, customCategories]
+    () => computeMonthlyRecap(previousMonthKey(new Date()), transactions, prevMonthLimits, customCategories, budgetCarryovers),
+    [transactions, prevMonthLimits, customCategories, budgetCarryovers]
   )
 
   useEffect(() => {

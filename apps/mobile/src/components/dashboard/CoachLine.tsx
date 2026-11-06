@@ -4,6 +4,7 @@ import { Sparkle, Flame, CircleIcon as Circle, Gauge, PiggyBank, type Icon } fro
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { getCoachMessage, type CoachIcon, type CoachTone } from '@ledgeit/core';
 import { useStore } from '@/lib/store';
+import { useEffectiveBudgetLimits } from '@/lib/useEffectiveBudgetLimits';
 
 const ICONS: Record<CoachIcon, Icon> = {
   sparkle: Sparkle,
@@ -23,7 +24,7 @@ const TONE: Record<CoachTone, { fg: string; bg: string }> = {
 
 export default function CoachLine() {
   const transactions = useStore((s) => s.transactions);
-  const budgetLimits = useStore((s) => s.budgetLimits);
+  const budgetLimits = useEffectiveBudgetLimits();
   const hasSetup = useStore((s) => s.hasSetupBudget());
   const budgetAllocations = useStore((s) => s.budgetAllocations);
   const activePlan = budgetAllocations.find((a) => a.isActive) ?? null;

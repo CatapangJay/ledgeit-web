@@ -4,6 +4,7 @@ import { CaretRight, SlidersHorizontal } from 'phosphor-react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { CATEGORIES, formatCurrency, formatCurrencyCompact, isSpend, isEarn, spendAmount } from '@ledgeit/core';
 import { useStore } from '@/lib/store';
+import { useEffectiveBudgetLimits } from '@/lib/useEffectiveBudgetLimits';
 
 interface Props {
   /** Opens the budget plan manager (wired once BudgetAllocationSheet is ported). */
@@ -48,7 +49,7 @@ const TOP_N = 3;
 
 export default function MonthOverview({ onManageBudget }: Props) {
   const transactions = useStore((s) => s.transactions);
-  const budgetLimits = useStore((s) => s.budgetLimits);
+  const budgetLimits = useEffectiveBudgetLimits();
   const budgetAllocations = useStore((s) => s.budgetAllocations);
   const activePlan = budgetAllocations.find((a) => a.isActive) ?? null;
 

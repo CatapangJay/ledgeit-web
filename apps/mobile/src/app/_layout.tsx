@@ -17,6 +17,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { initCloud } from '@/lib/sync/cloud';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -32,6 +33,10 @@ export default function RootLayout() {
     GeistMono_700Bold,
   });
   const fontsLoaded = jakartaLoaded && geistMonoLoaded;
+
+  useEffect(() => {
+    initCloud();
+  }, []);
 
   useEffect(() => {
     if (fontsLoaded) {
@@ -50,6 +55,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="wallets" />
           <Stack.Screen name="debts" />
+          <Stack.Screen name="cloud-sync" />
           <Stack.Screen name="history" options={{ headerShown: true, title: 'History' }} />
         </Stack>
       </SafeAreaProvider>

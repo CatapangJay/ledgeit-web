@@ -1,10 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, View, Text, Pressable } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { Bell, Sparkle, UserCircle } from 'phosphor-react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { useDeferredMount } from '@/lib/useDeferredMount';
+import { useStore } from '@/lib/store';
+import { computeMonthlyRecap, previousMonthKey } from '@/lib/monthlyRecap';
+import { usePreviousMonthLimits } from '@/lib/usePreviousMonthLimits';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 
 import BalanceMetric from '@/components/dashboard/BalanceMetric';
@@ -23,6 +26,7 @@ import WalletSummaryCard from '@/components/dashboard/WalletSummaryCard';
 import RecurringPaymentsCard from '@/components/dashboard/RecurringPaymentsCard';
 import SmartEntrySheet from '@/components/entry/SmartEntrySheet';
 import OnboardingBudgetSetup from '@/components/budget/OnboardingBudgetSetup';
+import MonthlyRecapModal from '@/components/dashboard/MonthlyRecapModal';
 
 function getGreeting(): string {
   const h = new Date().getHours();
@@ -44,6 +48,54 @@ export default function DashboardScreen() {
   // Paint the header + hero immediately; mount the heavy card stack one frame
   // later (after the nav transition) so navigation feels instant.
   const contentReady = useDeferredMount();
+  // True once the user closes the recap this session — keeps it shut even if the
+  // seen-marker write is still in flight or rolls back on error.
+  const [recapDismissed, setRecapDismissed] = useState(false);
+  // Gates the recap behind a short beat so the dashboard paints first and the
+  // modal arrives as an event rather than blocking the screen on load.
+  const [recapSettled, setRecapSettled] = useState(false);
+
+  // ── End-of-month recap ──────────────────────────────────────────────────────
+  // Celebrate the month that just ended, once, on the first dashboard visit of
+  // the new month. Mirrors apps/web/src/app/dashboard/page.tsx; the mock store is
+  // always loaded, so web's *Loaded flags drop out.
+  const transactions = useStore((s) => s.transactions);
+  const customCategories = useStore((s) => s.customCategories);
+  const lastRecapMonth = useStore((s) => s.lastRecapMonth);
+  const markRecapSeen = useStore((s) => s.markRecapSeen);
+  // OnboardingBudgetSetup shows whenever no plan exists — a first-time user gets
+  // onboarding, not a recap stacked over it.
+  const hasBudget = useStore((s) => s.budgetAllocations.length > 0);
+  // The recap covers LAST month — use the budget that applied then, not today's.
+  const { limits: prevMonthLimits, loaded: prevMonthLimitsLoaded } = usePreviousMonthLimits();
+  // Carryovers that landed in last month adjust its budget; their transfers aren't activity.
+  const budgetCarryovers = useStore((s) => s.budgetCarryovers);
+
+  const recap = useMemo(
+    () => computeMonthlyRecap(previousMonthKey(new Date()), transactions, prevMonthLimits, customCategories, budgetCarryovers),
+    [transactions, prevMonthLimits, customCategories, budgetCarryovers],
+  );
+
+  const recapEligible =
+    hasBudget &&
+    prevMonthLimitsLoaded &&
+    !recapDismissed &&
+    lastRecapMonth !== recap.monthKey &&
+    !recap.isEmpty;
+
+  // Let the screen settle for a beat, then present the recap.
+  useEffect(() => {
+    if (!recapEligible) return;
+    const t = setTimeout(() => setRecapSettled(true), 900);
+    return () => clearTimeout(t);
+  }, [recapEligible]);
+
+  const recapOpen = recapEligible && recapSettled;
+
+  const closeRecap = () => {
+    setRecapDismissed(true);
+    markRecapSeen(recap.monthKey);
+  };
 
   return (
     <View className="flex-1 bg-ledge-bg">
@@ -170,6 +222,7 @@ export default function DashboardScreen() {
       </ScrollView>
 
       <SmartEntrySheet open={sheetOpen} onClose={() => setSheetOpen(false)} initialDate={entryDate} />
+      <MonthlyRecapModal recap={recap} open={recapOpen} onClose={closeRecap} />
       <OnboardingBudgetSetup />
     </View>
   );

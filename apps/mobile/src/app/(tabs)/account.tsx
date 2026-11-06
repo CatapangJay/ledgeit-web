@@ -1,11 +1,25 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ScrollView, View, Text, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SlidersHorizontal, Tag, Wallet, HandCoins, ClockCounterClockwise, CaretRight } from 'phosphor-react-native';
+import { SlidersHorizontal, Tag, Wallet, HandCoins, ClockCounterClockwise, CaretRight, Confetti, Cloud } from 'phosphor-react-native';
 import { debtOutstanding, walletBalance, formatCurrency } from '@ledgeit/core';
 import { useStore } from '@/lib/store';
 import BudgetAllocationSheet from '@/components/budget/BudgetAllocationSheet';
 import CategoryManagerSheet from '@/components/budget/CategoryManagerSheet';
+import MonthlyRecapModal from '@/components/dashboard/MonthlyRecapModal';
+import { computeMonthlyRecap, previousMonthKey } from '@/lib/monthlyRecap';
+import { usePreviousMonthLimits } from '@/lib/usePreviousMonthLimits';
+import { useCloud, type CloudStatus } from '@/lib/sync/cloud';
+
+const CLOUD_SUBTITLE: Record<CloudStatus, string> = {
+  unconfigured: 'Saved on this device',
+  loading: 'Checking…',
+  'signed-out': 'Sign in — Premium syncs to web & mobile',
+  free: 'Free · Saved on this device only',
+  syncing: 'Premium · Syncing…',
+  synced: 'Premium · Synced',
+  error: 'Premium · Sync pending',
+};
 
 interface RowProps {
   icon: React.ReactNode;
@@ -42,6 +56,7 @@ export default function AccountScreen() {
   const router = useRouter();
   const [budgetSheetOpen, setBudgetSheetOpen] = useState(false);
   const [categorySheetOpen, setCategorySheetOpen] = useState(false);
+  const [recapOpen, setRecapOpen] = useState(false);
 
   const budgetAllocations = useStore((s) => s.budgetAllocations);
   const activePlan = budgetAllocations.find((a) => a.isActive) ?? null;
@@ -52,6 +67,18 @@ export default function AccountScreen() {
   const totalStashed = activeWallets.reduce((s, w) => s + walletBalance(w), 0);
   const customCategories = useStore((s) => s.customCategories);
   const hiddenCategories = useStore((s) => s.hiddenCategories);
+  const transactions = useStore((s) => s.transactions);
+  const cloudStatus = useCloud((s) => s.status);
+
+  // Last month's recap — re-openable here any time (it auto-shows once on the
+  // dashboard at the start of each month).
+  const { limits: prevMonthLimits } = usePreviousMonthLimits();
+  // Carryovers that landed in last month adjust its budget; their transfers aren't activity.
+  const budgetCarryovers = useStore((s) => s.budgetCarryovers);
+  const recap = useMemo(
+    () => computeMonthlyRecap(previousMonthKey(new Date()), transactions, prevMonthLimits, customCategories, budgetCarryovers),
+    [transactions, prevMonthLimits, customCategories, budgetCarryovers],
+  );
 
   return (
     <View className="flex-1" style={{ backgroundColor: '#f8faf9' }}>
@@ -67,6 +94,15 @@ export default function AccountScreen() {
         </View>
 
         <View className="gap-3">
+          {/* Cloud sync (premium) */}
+          <SettingsRow
+            icon={<Cloud size={16} weight="bold" color="#1f695d" />}
+            iconBg="#e7edeb"
+            title="Cloud Sync"
+            subtitle={CLOUD_SUBTITLE[cloudStatus]}
+            onPress={() => router.push('/cloud-sync')}
+          />
+
           {/* Budget plans */}
           <SettingsRow
             icon={<SlidersHorizontal size={16} weight="bold" color="#1f695d" />}
@@ -89,6 +125,15 @@ export default function AccountScreen() {
                   : 'Hide or restore categories'
             }
             onPress={() => setCategorySheetOpen(true)}
+          />
+
+          {/* Monthly recap — re-open last month's summary */}
+          <SettingsRow
+            icon={<Confetti size={16} weight="bold" color="#1f695d" />}
+            iconBg="#e7edeb"
+            title="Monthly Recap"
+            subtitle={recap.isEmpty ? 'No activity last month yet' : `Revisit your ${recap.label} summary`}
+            onPress={() => setRecapOpen(true)}
           />
 
           {/* Wallets */}
@@ -126,6 +171,7 @@ export default function AccountScreen() {
 
       <BudgetAllocationSheet open={budgetSheetOpen} onClose={() => setBudgetSheetOpen(false)} />
       <CategoryManagerSheet open={categorySheetOpen} onClose={() => setCategorySheetOpen(false)} />
+      <MonthlyRecapModal recap={recap} open={recapOpen} onClose={() => setRecapOpen(false)} />
     </View>
   );
 }

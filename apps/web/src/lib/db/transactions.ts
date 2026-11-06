@@ -16,6 +16,7 @@ interface TransactionRow {
   confidence: number
   is_recurring: boolean
   is_reimbursement: boolean
+  tags: string[] | null
   date: string
   created_at: string
 }
@@ -39,6 +40,8 @@ function rowToTransaction(row: TransactionRow, customCats: CustomCategory[] = []
     isRecurring: row.is_recurring,
     // Legacy rows (before reimbursements existed) may lack the column → false.
     isReimbursement: row.is_reimbursement ?? false,
+    // Legacy rows (before tags existed) may lack the column → no tags.
+    tags: row.tags ?? [],
     note: row.notes ?? undefined,
     createdAt: row.created_at,
   }
@@ -98,6 +101,9 @@ export async function insertTransaction(tx: Transaction): Promise<void> {
     confidence: tx.confidence,
     is_recurring: tx.isRecurring ?? false,
     is_reimbursement: tx.isReimbursement ?? false,
+    // Only sent when present, so untagged inserts keep working on a DB that
+    // hasn't run migration 0018 yet (the column defaults to '{}').
+    ...(tx.tags && tx.tags.length > 0 ? { tags: tx.tags } : {}),
     date: tx.date,
     created_at: tx.createdAt,
   })
@@ -143,6 +149,18 @@ export async function bulkSetDate(ids: string[], date: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
+/**
+ * Append tags to many transactions in one atomic request. Runs server-side
+ * (add_transaction_tags, migration 0018) so it merges with whatever tags each
+ * row has in the DB rather than overwriting them from a possibly stale local copy.
+ */
+export async function bulkAppendTags(ids: string[], tags: string[]): Promise<void> {
+  if (ids.length === 0 || tags.length === 0) return
+  const supabase = createClient()
+  const { error } = await supabase.rpc('add_transaction_tags', { p_ids: ids, p_tags: tags })
+  if (error) throw new Error(error.message)
+}
+
 /** Delete many transactions in one request. */
 export async function bulkDeleteTransactions(ids: string[]): Promise<void> {
   if (ids.length === 0) return
@@ -171,6 +189,7 @@ export async function patchTransaction(
   if (patch.raw !== undefined) dbPatch.raw = patch.raw
   if (patch.isRecurring !== undefined) dbPatch.is_recurring = patch.isRecurring
   if (patch.isReimbursement !== undefined) dbPatch.is_reimbursement = patch.isReimbursement
+  if (patch.tags !== undefined) dbPatch.tags = patch.tags
 
   if (Object.keys(dbPatch).length === 0) return
 

@@ -1,4 +1,5 @@
 import { CATEGORIES, resolveCategory, resolveWalletKind, type Transaction, type BudgetLimit, type BudgetAllocation, type CustomCategory, type Debt, type Wallet } from '@ledgeit/core';
+import { newId } from '@/lib/id';
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
 // Placeholder dataset for UI development before the real data layer (SQLite +
@@ -24,10 +25,8 @@ function cat(id: string) {
   return resolveCategory(id);
 }
 
-let seq = 0;
 function nextId(): string {
-  seq += 1;
-  return `mock-${seq}`;
+  return newId();
 }
 
 function makeTx(partial: {
@@ -116,7 +115,7 @@ export const mockBudgetLimits: BudgetLimit[] = [
 
 export const mockBudgetAllocations: BudgetAllocation[] = [
   {
-    id: 'mock-plan-1',
+    id: nextId(),
     name: 'Regular Month',
     isActive: true,
     items: mockBudgetLimits.map((b) => ({ categoryId: b.categoryId, limit: b.limit })),
@@ -128,7 +127,7 @@ export const mockCustomCategories: CustomCategory[] = [];
 
 export const mockDebts: Debt[] = [
   {
-    id: 'mock-debt-1',
+    id: nextId(),
     personName: 'Marco',
     direction: 'owed_to_me',
     principal: 3000,
@@ -139,7 +138,7 @@ export const mockDebts: Debt[] = [
     createdAt: `${isoDate(daysAgo(20))}T09:00:00.000Z`,
   },
   {
-    id: 'mock-debt-2',
+    id: nextId(),
     personName: 'Ate Rowena',
     direction: 'i_owe',
     principal: 5000,
@@ -147,7 +146,7 @@ export const mockDebts: Debt[] = [
     isSettled: false,
     dueDate: isoDate(daysAgo(-1)),
     repayments: [
-      { id: 'mock-repay-1', amount: 1500, interest: 0, date: isoDate(daysAgo(6)), createdAt: `${isoDate(daysAgo(6))}T09:00:00.000Z` },
+      { id: nextId(), amount: 1500, interest: 0, date: isoDate(daysAgo(6)), createdAt: `${isoDate(daysAgo(6))}T09:00:00.000Z` },
     ],
     createdAt: `${isoDate(daysAgo(25))}T09:00:00.000Z`,
   },
@@ -203,34 +202,34 @@ function makeWallet(partial: {
 
 export const mockWallets: Wallet[] = [
   makeWallet({
-    id: 'mock-wallet-1',
+    id: nextId(),
     name: 'Emergency Fund',
     kind: 'emergency',
     target: 50000,
     movements: [
-      walletMovement({ id: 'mock-wm-1', type: 'deposit', amount: 20000, date: daysAgo(40) }),
-      walletMovement({ id: 'mock-wm-2', type: 'deposit', amount: 8000, date: daysAgo(10) }),
+      walletMovement({ id: nextId(), type: 'deposit', amount: 20000, date: daysAgo(40) }),
+      walletMovement({ id: nextId(), type: 'deposit', amount: 8000, date: daysAgo(10) }),
     ],
   }),
   makeWallet({
-    id: 'mock-wallet-2',
+    id: nextId(),
     name: 'MP2 Savings',
     kind: 'investment',
     target: 100000,
     movements: [
-      walletMovement({ id: 'mock-wm-3', type: 'deposit', amount: 15000, date: daysAgo(35) }),
-      walletMovement({ id: 'mock-wm-4', type: 'deposit', amount: 5000, date: daysAgo(5) }),
+      walletMovement({ id: nextId(), type: 'deposit', amount: 15000, date: daysAgo(35) }),
+      walletMovement({ id: nextId(), type: 'deposit', amount: 5000, date: daysAgo(5) }),
     ],
   }),
   makeWallet({
-    id: 'mock-wallet-3',
+    id: nextId(),
     name: 'Japan Trip',
     kind: 'goal',
     target: 80000,
     note: 'Cherry blossom season',
     movements: [
-      walletMovement({ id: 'mock-wm-5', type: 'deposit', amount: 12000, date: daysAgo(30) }),
-      walletMovement({ id: 'mock-wm-6', type: 'withdrawal', amount: 2000, date: daysAgo(3), note: 'Visa fee' }),
+      walletMovement({ id: nextId(), type: 'deposit', amount: 12000, date: daysAgo(30) }),
+      walletMovement({ id: nextId(), type: 'withdrawal', amount: 2000, date: daysAgo(3), note: 'Visa fee' }),
     ],
   }),
 ];
